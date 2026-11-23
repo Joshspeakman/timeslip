@@ -99,13 +99,16 @@ What it took, beyond the card:
   libm (xboxrecomp `src/math/recomp_math.h`): glibc, Apple's libm and Windows'
   CRTs round some sin, cos, tan, atan2, log2 and exp2 results differently, and
   two systems playing each other must compute the same game. It turned out
-  not to be what was dropping matches, but it removes a whole class of drift.
+  not to be what was dropping matches, and no match has been seen to drift
+  without it: it is kept as a precaution.
 - Nothing else in the game. What broke every first attempt was the test rig:
   the Windows copy's stderr was a PowerShell pipe, which stalled the game's
-  logging and stretched its match load from about 3 s to 15 s, past what
-  TS2's load handshake waits for (about 18 s, then "Lost Server"). The
-  toolkit's `docs/technical/system-link.md` has the details; send a test
-  copy's stderr straight to a file.
+  logging and stretched its match load from about 3 s to 15 s, more than
+  TS2's load handshake tolerates between consoles (loads about 12-14 s apart
+  dropped, "Lost Server"; about 1.5 s apart held; the exact limit is not
+  measured). The toolkit's `docs/technical/system-link.md` has the details;
+  send a test copy's stderr straight to a file. The same limit would drop a
+  player whose machine really loads that much slower than the others.
 
 A match's load handshake, as seen on the card: at START the host sends one
 211-byte frame; each side, once its level is loaded, sends 74-byte frames
