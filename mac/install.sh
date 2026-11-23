@@ -82,7 +82,21 @@ for kv in "TS2DataPath:$DATA" "TS2Branch:$(git -C "$HERE" rev-parse --abbrev-ref
 done
 
 echo "== signing"
-codesign --force --deep --sign - "$A" 2>/dev/null
+# A stable identity when this Mac has one (~/Games/TimeSplitters2Native/make-signing-identity.sh makes
+# "Josh Local Code Signing"): the firewall's Allow and the Local Network permission follow the signing
+# identity, so with it they survive rebuilds; ad hoc, every build is new to macOS and it asks again.
+ID=${TS2_SIGN_ID:-Josh Local Code Signing}
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "\"$ID\""; then
+    if codesign --force --deep --sign "$ID" "$A" 2>"$STAGE/sign.log"; then
+        echo "   signed as $ID"
+    else
+        echo "   could not sign as $ID ($(tail -1 "$STAGE/sign.log")); signing ad hoc" >&2
+        codesign --force --deep --sign - "$A" 2>/dev/null
+    fi
+else
+    codesign --force --deep --sign - "$A" 2>/dev/null
+    echo "   signed ad hoc (no \"$ID\" identity: the firewall will ask again after each rebuild)"
+fi
 codesign --verify --strict "$A"
 
 echo "== installing"
