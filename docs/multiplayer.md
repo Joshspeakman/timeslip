@@ -83,6 +83,13 @@ The USA release, `netplay` b7aa63c (toolkit bbcbb1c), PC hosting:
 | --- | --- | --- |
 | Windows 11 (zig build, Direct3D 11) | Mac, M1 Pro, Metal, over the LAN | held the 5 minutes run: 3,636 frames out, 3,327 in, none dropped; both in the lobby, then "1st=" with the other on radar to the end |
 | Windows 11 | Linux (WSL Ubuntu 26.04, clang, Vulkan on llvmpipe) | held to the end of the run, about 1,280 frames each way, the joiner walking and firing |
+| Linux (WSL, llvmpipe held to 4 threads) | Windows 11 | held to the end of the run, about 800 frames each way |
+
+A Linux host in WSL drawing on llvmpipe with every core starved its own
+System Link thread, so its welcome came seconds late and Join Game found
+nothing; `LP_NUM_THREADS=4` fixed that, and so does any real GPU. The
+toolkit now also holds a joiner's first frames until it is welcomed (xboxrecomp
+`src/kernel/xbox_net_udp.c`), so a slow welcome no longer loses the search.
 
 What it took, beyond the card:
 
