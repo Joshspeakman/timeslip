@@ -265,23 +265,29 @@ def main() -> int:
     if args.no_build:
         return 0
 
-    if os.name == "nt":
+    # Visual Studio is multi-configuration: one build/ folder, the executable
+    # in build/<config>/. Everything else (Ninja on Linux and macOS, and on
+    # Windows when CMAKE_GENERATOR=Ninja, as with clang or zig, the way
+    # Linux builds) is single-configuration, so each configuration gets a
+    # folder of its own: the executable lands in build/<config>/ either way,
+    # and the game paths in src/main.c hold on all of them.
+    generator = os.environ.get("CMAKE_GENERATOR", "")
+    multi_config = os.name == "nt" and (not generator or generator.startswith("Visual Studio"))
+    exe_name = "split2_recomp" + (".exe" if os.name == "nt" else "")
+    if multi_config:
         build = BUILD
-        exe = BUILD / args.config / "split2_recomp.exe"
+        exe = BUILD / args.config / exe_name
     else:
-        # Ninja is single-configuration, so each configuration gets a folder
-        # of its own: the executable lands in build/<config>/ as Visual
-        # Studio's does, and the game paths in src/main.c hold on both.
         build = BUILD / args.config
-        exe = build / "split2_recomp"
+        exe = build / exe_name
 
     if not (build / "CMakeCache.txt").is_file():
         configure = ["cmake", "-S", ROOT, "-B", build]
-        if os.name != "nt":
-            if not os.environ.get("CMAKE_GENERATOR"):
+        if not multi_config:
+            if not generator:
                 configure += ["-G", "Ninja"]
             configure += [f"-DCMAKE_BUILD_TYPE={args.config}"]
-        elif not os.environ.get("CMAKE_GENERATOR"):
+        elif not generator:
             configure += ["-A", "x64"]
         if not run(configure):
             return fail("cmake configure failed")
