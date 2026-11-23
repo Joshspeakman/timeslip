@@ -82,6 +82,7 @@ The USA release, `netplay` b7aa63c (toolkit bbcbb1c), PC hosting:
 | Host | Joiner | Match |
 | --- | --- | --- |
 | Windows 11 (zig build, Direct3D 11) | Mac, M1 Pro, Metal, over the LAN | held the 5 minutes run: 3,636 frames out, 3,327 in, none dropped; both in the lobby, then "1st=" with the other on radar to the end |
+| Windows 11 | Mac, the same, both players walking, turning and firing (netplay edb2854) | held to the end: 3,037 frames out, 2,786 in, none dropped, 8-12 ms round trip; each saw the other's dot move on the radar and its own view move |
 | Windows 11 | Linux (WSL Ubuntu 26.04, clang, Vulkan on llvmpipe) | held to the end of the run, about 1,280 frames each way, the joiner walking and firing |
 | Linux (WSL, llvmpipe held to 4 threads) | Windows 11 | held to the end of the run, about 800 frames each way |
 
