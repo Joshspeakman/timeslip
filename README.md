@@ -77,7 +77,8 @@ the shortcut `icon.png` from the release folder as its icon.
   itself runs at 60.
 - Fullscreen and variable refresh rate (G-SYNC, FreeSync).
 - Controllers and keyboard, both rebindable.
-- System Link on Windows, over a LAN or the internet. Not on macOS or Linux yet.
+- System Link on Windows, over a LAN or the internet; on macOS between copies on one Mac
+  (between machines: not checked yet). Not on Linux yet.
 
 ## Controls
 
@@ -126,8 +127,8 @@ kept](#where-things-are-kept)).
 
 ## System Link
 
-Windows only for now. On macOS and Linux the network card is not emulated
-yet, and the game finds no System Link games.
+Windows, and macOS between copies on one Mac so far (see
+[docs/multiplayer.md](docs/multiplayer.md)). On Linux it is not checked yet.
 
 One player hosts a session and everyone else joins it. Up to 16 copies can be
 in one session. In the launcher's System Link tab:

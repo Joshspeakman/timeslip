@@ -1,8 +1,9 @@
 # Multiplayer: System Link for TimeSplitters 2
 
 Status (13 October 2026): System Link works on Windows, between copies of
-this build on one PC, on a LAN and over the internet. It does not work on
-macOS yet. Split-screen multiplayer works on both. The USA release has been
+this build on one PC, on a LAN and over the internet. Since 23 November 2026
+it works on macOS too, between two copies on one Mac (Apple Silicon, the USA
+release). Split-screen multiplayer works on both. The USA release has been
 checked on one PC only (23 November 2026; see the end of this file).
 
 TimeSplitters 2 has System Link (LAN play between consoles) and no Xbox Live,
@@ -75,8 +76,15 @@ frame size.
 
 ## Not done or not checked
 
-- macOS. The toolkit's network card is Windows-only: on POSIX the register
-  page is plain memory and the game finds no games. This is toolkit work.
+- macOS between machines. On one Mac (23 November 2026, an M1 Pro, the USA
+  release, `netplay` 51d36f3) the card works through the toolkit's POSIX path
+  (the signal handler and the arm64 decoder; xboxrecomp
+  `docs/technical/system-link.md`): two copies, host and join on 127.0.0.1
+  with the scripts below, both on the Metal renderer, loaded the same
+  Deathmatch on Mexican Mission at 60 fps; over the run the host sent 916
+  frames and took 840, none refused or dropped. Mac to PC and Linux are
+  not checked yet. A Mac that hosts for other machines needs macOS's firewall
+  to allow the game's incoming connections (it asks the first time).
 - The USA release over the internet, with added delay or loss, and for
   longer than a minute of match. On one PC (23 November 2026) it works:
   selecting System Link made one unresolved indirect call, to `0x0009D4F0`
