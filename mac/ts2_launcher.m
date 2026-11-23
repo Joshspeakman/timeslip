@@ -13,7 +13,9 @@
  * art the window writes the title in plain type.
  * Updates: install.sh gives the app an updater (Contents/MacOS/update) that rebuilds it from the branch it follows.
  * Development: TS2_LAUNCHER_SHOT=<png> renders the window to an image (TS2_LAUNCHER_HOVER=<code> lights an item,
- * TS2_LAUNCHER_PANEL=<0|1> opens Graphics Options or Controls, TS2_LAUNCHER_CARD=<0|1> picks a renderer). */
+ * TS2_LAUNCHER_PANEL=<0|1> opens Graphics Options or Controls, TS2_LAUNCHER_CARD=<0|1> picks a renderer);
+ * TS2_DATA_PATH=<dir> uses another data folder (a test copy of the game: it saves into its folder); TS2_LAUNCHER_PLAY=1
+ * presses Play at once. */
 #import <Cocoa/Cocoa.h>
 #include <unistd.h>
 
@@ -488,6 +490,7 @@ static NSString *const kbm_json =
                           @"interp": @0, @"fps": @NO, @"scheme": @"kbm", @"mouse": @80}];
     NSDictionary *infoPlist = NSBundle.mainBundle.infoDictionary;
     self.dataPath = [(infoPlist[@"TS2DataPath"] ?: @"~/Games/TimeSplitters2Native") stringByExpandingTildeInPath];
+    if (getenv("TS2_DATA_PATH")) self.dataPath = @(getenv("TS2_DATA_PATH"));   /* development: another game folder (a test copy) */
     NSArray *artDirs = @[[self.dataPath stringByAppendingPathComponent:@"art"], [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"art"] ?: @""];
 
     TSLaunchView *v = [[TSLaunchView alloc] initWithFrame:NSMakeRect(0, 0, W, H)]; self.view = v;
@@ -574,13 +577,13 @@ static NSString *const kbm_json =
         [[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:@(shot) atomically:YES];
         exit(0);
     }
+    if (getenv("TS2_LAUNCHER_PLAY")) { [self play]; return; }    /* development: Play at once, no window to take the focus */
     NSWindow *w = [[NSWindow alloc] initWithContentRect:v.frame styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskFullSizeContentView
                                                 backing:NSBackingStoreBuffered defer:NO];
     w.releasedWhenClosed = NO; w.titlebarAppearsTransparent = YES; w.titleVisibility = NSWindowTitleHidden; w.movableByWindowBackground = YES;
     w.title = @"TimeSplitters 2"; w.backgroundColor = NSColor.blackColor; w.contentView = v;
     self.window = w; [w center]; [w makeKeyAndOrderFront:nil]; [w makeFirstResponder:v];
     [NSApp activateIgnoringOtherApps:YES];
-    if (getenv("TS2_LAUNCHER_PLAY")) dispatch_async(dispatch_get_main_queue(), ^{ [ws play]; });   /* development: Play at once */
 }
 - (void)setupUpdates
 {
