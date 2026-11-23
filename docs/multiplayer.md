@@ -2,9 +2,10 @@
 
 Status (13 October 2026): System Link works on Windows, between copies of
 this build on one PC, on a LAN and over the internet. Since 23 November 2026
-it works on macOS too, between two copies on one Mac (Apple Silicon, the USA
-release). Split-screen multiplayer works on both. The USA release has been
-checked on one PC only (23 November 2026; see the end of this file).
+it works on macOS and Linux too, and between them: a Mac and a Windows PC on
+one LAN, and a Windows PC and Linux (x86-64, in WSL on the same PC), each
+held a Deathmatch (the USA release; see "Between systems" below). Split-screen
+multiplayer works on all of them.
 
 TimeSplitters 2 has System Link (LAN play between consoles) and no Xbox Live,
 so there is no online service to replace. The toolkit emulates the console's
@@ -74,19 +75,52 @@ In a match TS2 sends about 11 frames a second each way. The largest frame
 seen during the join was 298 bytes. Match traffic has not been measured for
 frame size.
 
+## Between systems (23 November 2026)
+
+The USA release, `netplay` b7aa63c (toolkit bbcbb1c), PC hosting:
+
+| Host | Joiner | Match |
+| --- | --- | --- |
+| Windows 11 (zig build, Direct3D 11) | Mac, M1 Pro, Metal, over the LAN | held the 5 minutes run: 3,636 frames out, 3,327 in, none dropped; both in the lobby, then "1st=" with the other on radar to the end |
+| Windows 11 | Linux (WSL Ubuntu 26.04, clang, Vulkan on llvmpipe) | held to the end of the run, about 1,280 frames each way, the joiner walking and firing |
+
+What it took, beyond the card:
+
+- A second USA seed, `0x000D0DD0`, called on the joiner's match load (the
+  first, `0x0009D4F0`, opens the menu; see "Not done" for the history).
+- The x87 transcendentals from the toolkit's `src/math` instead of the host's
+  libm (xboxrecomp `src/math/recomp_math.h`): glibc, Apple's libm and Windows'
+  CRTs round some sin, cos, tan, atan2, log2 and exp2 results differently, and
+  two systems playing each other must compute the same game. It turned out
+  not to be what was dropping matches, but it removes a whole class of drift.
+- Nothing else in the game. What broke every first attempt was the test rig:
+  the Windows copy's stderr was a PowerShell pipe, which stalled the game's
+  logging and stretched its match load from about 3 s to 15 s, past what
+  TS2's load handshake waits for (about 18 s, then "Lost Server"). The
+  toolkit's `docs/technical/system-link.md` has the details; send a test
+  copy's stderr straight to a file.
+
+A match's load handshake, as seen on the card: at START the host sends one
+211-byte frame; each side, once its level is loaded, sends 74-byte frames
+and then one each of 82, 98, 157 and 266 bytes; then both send a 76-byte
+frame about every 100 ms for the rest of the match.
+
 ## Not done or not checked
 
-- macOS between machines. On one Mac (23 November 2026, an M1 Pro, the USA
+- A Mac hosting a PC (it needs macOS's firewall to allow the game's incoming
+  connections, which asks the person at the Mac the first time), Linux
+  hosting a Mac, and Linux on real hardware rather than WSL.
+- More than two systems in one session, and Mac against Linux. On one Mac
+  (23 November 2026, an M1 Pro, the USA
   release, `netplay` 51d36f3) the card works through the toolkit's POSIX path
   (the signal handler and the arm64 decoder; xboxrecomp
   `docs/technical/system-link.md`): two copies, host and join on 127.0.0.1
   with the scripts below, both on the Metal renderer, loaded the same
   Deathmatch on Mexican Mission at 60 fps; over the run the host sent 916
-  frames and took 840, none refused or dropped. Mac to PC and Linux are
-  not checked yet. A Mac that hosts for other machines needs macOS's firewall
-  to allow the game's incoming connections (it asks the first time).
-- The USA release over the internet, with added delay or loss, and for
-  longer than a minute of match. On one PC (23 November 2026) it works:
+  frames and took 840, none refused or dropped. Mac to PC and Linux to PC
+  are above ("Between systems").
+- The USA release over the internet, and with added delay or loss. On one
+  PC (23 November 2026) it works:
   selecting System Link made one unresolved indirect call, to `0x0009D4F0`
   (PAL's `0x0009D530`, 0x40 lower), which left a blank screen; with it seeded
   in `config/us/seeds.json`, two copies (one on Vulkan, one on Direct3D 11,
