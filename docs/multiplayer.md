@@ -1,8 +1,9 @@
 # Multiplayer: System Link for TimeSplitters 2
 
-Status (13 October 2026; USA 23 November 2026): System Link works on Windows, between copies of
+Status (13 October 2026): System Link works on Windows, between copies of
 this build on one PC, on a LAN and over the internet. It does not work on
-macOS yet. Split-screen multiplayer works on both.
+macOS yet. Split-screen multiplayer works on both. The USA release has been
+checked on one PC only (23 November 2026; see the end of this file).
 
 TimeSplitters 2 has System Link (LAN play between consoles) and no Xbox Live,
 so there is no online service to replace. The toolkit emulates the console's
