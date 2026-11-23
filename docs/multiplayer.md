@@ -1,6 +1,6 @@
 # Multiplayer: System Link for TimeSplitters 2
 
-Status (13 October 2026): System Link works on Windows, between copies of
+Status (13 October 2026; USA 23 November 2026): System Link works on Windows, between copies of
 this build on one PC, on a LAN and over the internet. It does not work on
 macOS yet. Split-screen multiplayer works on both.
 
@@ -76,9 +76,19 @@ frame size.
 
 - macOS. The toolkit's network card is Windows-only: on POSIX the register
   page is plain memory and the game finds no games. This is toolkit work.
-- The USA release. Nobody has opened System Link in it yet. Expect the USA
-  counterpart of `0x0009D530` to be missing from `config/us/seeds.json`.
-  Find it with `tools.seed_from_log` from a run that selects System Link.
+- The USA release over the internet, with added delay or loss, and for
+  longer than a minute of match. On one PC (23 November 2026) it works:
+  selecting System Link made one unresolved indirect call, to `0x0009D4F0`
+  (PAL's `0x0009D530`, 0x40 lower), which left a blank screen; with it seeded
+  in `config/us/seeds.json`, two copies (one on Vulkan, one on Direct3D 11,
+  built with zig and Ninja) hosted and joined a Deathmatch on Mexican Mission
+  and held it to the end of the run, the joiner walking and firing, about 11
+  frames a second each way, none dropped. Host's script (fresh profile):
+  `12000:start,16000:start,20000:start,24000:start,28000:a,34000:down,38000:a,42000:down,44000:down,47000:a`
+  (Arcade, System Link), then `51000:a,55000:a,60000:a,65000:a,70000:a,75000:a`
+  (Start Game, Deathmatch, the first map, GO, a character, the game's name)
+  and `125000:start`; the joiner's the same to `47000:a`, then
+  `51000:down,88000:a,94000:a,100000:a,106000:a,112000:a`.
 - Playing against xemu or a real console. It needs the player's own
   `XboxLANKey` in `keys.ini`. Two recompiled builds agree on an all-zero key,
   which is why they play each other without one. Untested.
