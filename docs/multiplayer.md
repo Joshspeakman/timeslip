@@ -83,7 +83,7 @@ frame size.
   (PAL's `0x0009D530`, 0x40 lower), which left a blank screen; with it seeded
   in `config/us/seeds.json`, two copies (one on Vulkan, one on Direct3D 11,
   built with zig and Ninja) hosted and joined a Deathmatch on Mexican Mission
-  and held it to the end of the run, the joiner walking and firing, about 11
+  and held it to the end of the run, the joiner walking and firing, 10 to 11
   frames a second each way, none dropped. Host's script (fresh profile):
   `12000:start,16000:start,20000:start,24000:start,28000:a,34000:down,38000:a,42000:down,44000:down,47000:a`
   (Arcade, System Link), then `51000:a,55000:a,60000:a,65000:a,70000:a,75000:a`
