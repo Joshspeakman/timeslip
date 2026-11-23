@@ -44,6 +44,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <math.h>
 #ifdef __APPLE__
 #include <malloc/malloc.h>            /* malloc_zone_pressure_relief */
@@ -690,11 +691,82 @@ int main(int argc, char **argv)
     return title_main(argc, argv);
 }
 #else
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+/* RECOMP_NET_PROBE=1: the network System Link will use, opened once by this
+ * very program and nothing else run: UDP and TCP on port 27610 on every
+ * interface, and a few UDP packets to the local network's broadcast address.
+ * macOS asks its two questions about that (the firewall: accept incoming
+ * connections; Local Network: talk to devices nearby) the first time a
+ * program does it, and remembers the answer for the program's signing
+ * identity. Run from the app so the questions name it; it stays up
+ * RECOMP_NET_PROBE_SECS (default 120) so they can be answered, then says
+ * what got through. Nothing of the game runs. */
+static int net_probe(void)
+{
+    const char *s = getenv("RECOMP_NET_PROBE_SECS");
+    int secs = s && atoi(s) > 0 ? atoi(s) : 120, one = 1, sent = 0, heard = 0;
+    struct sockaddr_in any = { 0 };
+    struct ifaddrs *ifs = NULL, *i;
+    int u = socket(AF_INET, SOCK_DGRAM, 0), t = socket(AF_INET, SOCK_STREAM, 0);
+
+    any.sin_family = AF_INET;
+    any.sin_port = htons(27610);
+    any.sin_addr.s_addr = htonl(INADDR_ANY);
+    setsockopt(u, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+    setsockopt(u, SOL_SOCKET, SO_BROADCAST, &one, sizeof one);
+    setsockopt(t, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+    if (bind(u, (struct sockaddr *)&any, sizeof any) != 0)
+        perror("[NETPROBE] UDP bind 27610");
+    if (bind(t, (struct sockaddr *)&any, sizeof any) != 0 || listen(t, 4) != 0)
+        perror("[NETPROBE] TCP listen 27610");
+    else
+        fprintf(stderr, "[NETPROBE] listening on UDP and TCP 27610\n");
+    if (getifaddrs(&ifs) == 0) {
+        for (i = ifs; i; i = i->ifa_next) {
+            if (!i->ifa_addr || i->ifa_addr->sa_family != AF_INET || !(i->ifa_flags & IFF_BROADCAST) ||
+                (i->ifa_flags & IFF_LOOPBACK) || !i->ifa_broadaddr)
+                continue;
+            struct sockaddr_in to = *(struct sockaddr_in *)i->ifa_broadaddr;
+            char addr[INET_ADDRSTRLEN];
+            to.sin_port = htons(27610);
+            inet_ntop(AF_INET, &to.sin_addr, addr, sizeof addr);
+            for (int k = 0; k < 3; k++) {
+                if (sendto(u, "TS2PROBE", 8, 0, (struct sockaddr *)&to, sizeof to) == 8)
+                    sent++;
+                else
+                    fprintf(stderr, "[NETPROBE] send to %s (%s): %s\n", addr, i->ifa_name, strerror(errno));
+            }
+            fprintf(stderr, "[NETPROBE] broadcast on %s to %s\n", i->ifa_name, addr);
+        }
+        freeifaddrs(ifs);
+    }
+    fflush(stderr);
+    for (int left = secs; left > 0; left--) {   /* incoming: our own broadcasts come back if allowed */
+        struct timeval tv = { 1, 0 };
+        char b[64];
+        setsockopt(u, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+        if (recv(u, b, sizeof b, 0) > 0)
+            heard++;
+    }
+    fprintf(stderr, "[NETPROBE] done: %d packets sent to the local network, %d heard back\n", sent, heard);
+    close(u);
+    close(t);
+    return sent > 0 ? 0 : 1;
+}
+
 /* The title runs on its own thread; this, the process's main thread, runs
  * the host loop that every window needs on macOS (src/host). */
 int main(int argc, char **argv)
 {
     static const host_loop loop = { recomp_host_loop_run, recomp_host_loop_quit };
+    if (getenv("RECOMP_NET_PROBE"))
+        return net_probe();
     return host_main_posix(argc, argv, title_main, &loop);
 }
 #endif
