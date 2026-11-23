@@ -39,5 +39,10 @@
   "start": "0x0009D4F0",
   "observed": true,
   "note": "Indirect-call target observed at runtime; decodes as a function body."
+ },
+ {
+  "start": "0x000D0DD0",
+  "observed": true,
+  "note": "Indirect-call target observed at runtime; decodes as a function body."
  }
 ]
