@@ -449,14 +449,7 @@ static int title_main(int argc, char **argv)
      * build, or another release, computes a different game. */
     {
         extern void recomp_lockstep_set_build_id(const char *id);
-        extern void recomp_lockstep_add_setting(const char *name, const char *value);
-        extern const char *recomp_config_lookup(const char *env_name, const char *key);
-        const char *menus = recomp_config_lookup("RECOMP_TS2_MENUS", "ts2_menus");
-
         recomp_lockstep_set_build_id(TS2_BUILD_ID " " TS2_REGION_NAME);
-        /* The 4:3 front end places its panels differently, in the game's
-         * own draw calls: the same on every machine in a session. */
-        recomp_lockstep_add_setting("ts2_menus", menus && *menus ? menus : "wide");
     }
 
     /* Unbuffered output for immediate visibility during debugging, and so a
@@ -639,6 +632,16 @@ static int title_main(int argc, char **argv)
      * nothing unless RECOMP_LOCKSTEP_NET is set. */
     {
         extern void recomp_lockstep_start(void);
+        extern void recomp_lockstep_add_setting(const char *name, const char *value);
+        extern const char *recomp_config_lookup(const char *env_name, const char *key);
+        /* Read only now: the first settings lookup decides which file is
+         * read, and before the XBE is mapped the title is not known, so an
+         * earlier one read default.conf instead of this game's. */
+        const char *menus = recomp_config_lookup("RECOMP_TS2_MENUS", "ts2_menus");
+
+        /* The 4:3 front end places its panels differently, in the game's
+         * own draw calls: the same on every machine in a session. */
+        recomp_lockstep_add_setting("ts2_menus", menus && *menus ? menus : "wide");
         recomp_lockstep_start();
     }
 

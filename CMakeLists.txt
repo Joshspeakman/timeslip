@@ -125,5 +125,8 @@ endif()
 
 # The settings window: video options, input bindings, then starts the game.
 if(COMMAND recomp_add_launcher)
-    recomp_add_launcher(${PROJECT_NAME}_launcher ${PROJECT_NAME}.exe)
+    # COOP: the System Link tab also hosts and joins online co-op, which TS2's
+    # build supports (its frame clock is hooked for lockstep,
+    # src/recomp_manual.c).
+    recomp_add_launcher(${PROJECT_NAME}_launcher ${PROJECT_NAME}.exe COOP)
 endif()
