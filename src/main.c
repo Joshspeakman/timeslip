@@ -449,7 +449,14 @@ static int title_main(int argc, char **argv)
      * build, or another release, computes a different game. */
     {
         extern void recomp_lockstep_set_build_id(const char *id);
+        extern void recomp_lockstep_add_setting(const char *name, const char *value);
+        extern const char *recomp_config_lookup(const char *env_name, const char *key);
+        const char *menus = recomp_config_lookup("RECOMP_TS2_MENUS", "ts2_menus");
+
         recomp_lockstep_set_build_id(TS2_BUILD_ID " " TS2_REGION_NAME);
+        /* The 4:3 front end places its panels differently, in the game's
+         * own draw calls: the same on every machine in a session. */
+        recomp_lockstep_add_setting("ts2_menus", menus && *menus ? menus : "wide");
     }
 
     /* Unbuffered output for immediate visibility during debugging, and so a
@@ -625,6 +632,15 @@ static int title_main(int argc, char **argv)
      * silently inert, and the one diagnostic that tells a hang from slowness
      * does nothing while appearing to be set. */
     xbox_WatchdogStart();
+
+    /* Online co-op (xboxrecomp src/kernel/recomp_lockstep.h): a joiner meets
+     * its host here -- the session's clock, the host's saves, the settings
+     * that change the game checked -- before the game reads anything. Does
+     * nothing unless RECOMP_LOCKSTEP_NET is set. */
+    {
+        extern void recomp_lockstep_start(void);
+        recomp_lockstep_start();
+    }
 
     /* Step 7: Call the recompiled entry point */
     printf("\nStarting game...\n");
