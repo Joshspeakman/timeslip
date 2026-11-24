@@ -67,10 +67,6 @@ iconutil -c icns "$IS" -o "$A/Contents/Resources/AppIcon.icns"
 echo "== the art"
 mkdir -p "$A/Contents/Resources/art"
 if [ -d "$DATA/art" ]; then cp "$DATA"/art/* "$A/Contents/Resources/art/"; else echo "install: note: no art yet (mac/make_art.sh)" >&2; fi
-# Timeslip's own mark, which the launcher shows over its teal glow (the game's art stays the player's own).
-# art/logo.png (2335 px wide), not the 700 px logo-launcher.png: the mark is drawn 500 pt wide, 1000+ px on Retina
-cp "$HERE/art/logo.png" "$A/Contents/Resources/timeslip_logo.png"
-
 PB=/usr/libexec/PlistBuddy; P="$A/Contents/Info.plist"
 $PB -c "Set :CFBundleExecutable TimeSplitters 2" "$P"
 $PB -c "Add :CFBundleIconFile string AppIcon" "$P" 2>/dev/null || $PB -c "Set :CFBundleIconFile AppIcon" "$P"

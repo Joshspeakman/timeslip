@@ -1,5 +1,5 @@
 /* TimeSplitters 2 launcher, in the manner of the other native ports' launch windows (Homeworld's, Ghost Recon's):
- * the game's logo over its own Oblask Dam, a card for each renderer (native Metal, or Vulkan through MoltenVK), a
+ * the game's logo over its own Oblask Dam with the project's name, TIMESLIP, as its subtitle, a card for each renderer (native Metal, or Vulkan through MoltenVK), a
  * row of tiles (Graphics Options, Controls, Saves, Updates) and Quit / Play. Then the recompiled game
  * (Contents/MacOS/timeslip) starts in this process, so the app in the Dock is the game.
  *
@@ -8,11 +8,9 @@
  * RECOMP_ANISO, RECOMP_FPS_CAP, RECOMP_FRAME_INTERP, RECOMP_FPS_OVERLAY, RECOMP_FULLSCREEN, and for Keyboard & Mouse
  * a bindings file (RECOMP_INPUT_CONFIG) with mouse look (RECOMP_MOUSE_LOOK, RECOMP_MOUSE_SENSITIVITY).
  *
- * Look: Timeslip's, as the shared launcher has it (src/launcher_theme_timeslip.h's teal and orange, and Timeslip's
- * own mark, art/logo.png, which install.sh puts in Resources/timeslip_logo.png). The game's art is the player's own:
- * <data>/art (or a copy in the app's Resources/art), made from their disc by mac/make_art.sh, gives the backdrop and
- * the renderer cards (and the game's logo, drawn only when the app has no mark). Nothing from the game is in this
- * repository and nothing is downloaded; without the art the window writes the title in plain type.
+ * Art: <data>/art (or a copy in the app's Resources/art), made from the player's own disc by mac/make_art.sh: the
+ * title screen's logo textures and frames the game drew. Nothing from the game is in this repository; without the
+ * art the window writes the title in plain type.
  * Updates: install.sh gives the app an updater (Contents/MacOS/update) that rebuilds it from the branch it follows.
  * Development: TS2_LAUNCHER_SHOT=<png> renders the window to an image (TS2_LAUNCHER_HOVER=<code> lights an item,
  * TS2_LAUNCHER_PANEL=<0|1> opens Graphics Options or Controls, TS2_LAUNCHER_CARD=<0|1> picks a renderer);
@@ -21,14 +19,11 @@
 #import <Cocoa/Cocoa.h>
 #include <unistd.h>
 
-/* Timeslip's palette (src/launcher_theme_timeslip.h, the shared launcher's): a deep teal and an orange */
-static NSColor *rgb(uint32_t c, CGFloat a) { return [NSColor colorWithSRGBRed:((c >> 16) & 255) / 255.0 green:((c >> 8) & 255) / 255.0 blue:(c & 255) / 255.0 alpha:a]; }
-static NSColor *accent(void) { return rgb(0xF39A2C, 1); }       /* THEME_ACCENT: the orange */
-static NSColor *accent_dim(void) { return rgb(0x7A4A14, 1); }   /* THEME_ACCENT_DIM */
-static NSColor *text_c(void) { return rgb(0xEEF4F6, 1); }       /* THEME_TEXT */
-static NSColor *dim(void) { return rgb(0x8FA6AF, 1); }          /* THEME_TEXT_DIM */
-static NSColor *ink(CGFloat a) { return rgb(0x07141A, a); }     /* THEME_SLAB: near-black teal */
-static NSColor *teal_glow(CGFloat a) { return rgb(0x1E6A78, a); } /* THEME_GLOW: the teal at the logo's heart */
+static NSColor *accent(void) { return [NSColor colorWithSRGBRed:0.47 green:0.70 blue:1.00 alpha:1]; }       /* the logo's blue 2 */
+static NSColor *accent_dim(void) { return [NSColor colorWithSRGBRed:0.22 green:0.35 blue:0.62 alpha:1]; }
+static NSColor *text_c(void) { return [NSColor colorWithSRGBRed:0.92 green:0.94 blue:0.98 alpha:1]; }      /* its silver */
+static NSColor *dim(void) { return [NSColor colorWithSRGBRed:0.60 green:0.67 blue:0.78 alpha:1]; }
+static NSColor *ink(CGFloat a) { return [NSColor colorWithSRGBRed:0.015 green:0.03 blue:0.07 alpha:a]; }
 static NSFont *heading(CGFloat size) { return [NSFont fontWithName:@"AvenirNext-Bold" size:size] ?: [NSFont systemFontOfSize:size weight:NSFontWeightBold]; }
 static NSFont *heavy(CGFloat size) { return [NSFont fontWithName:@"AvenirNext-Heavy" size:size] ?: heading(size); }
 static NSFont *body(CGFloat size, BOOL bold)
@@ -58,7 +53,7 @@ enum { W = 960, H = 660 };
 @interface TSLaunchView : NSView
 @property NSArray<TSRow *> *tiles; @property NSArray<TSPanel *> *panels;
 @property NSInteger card, hover, pressed, focus, open, rowFocus;   /* focus: -1 the cards, else a tile; open: a panel, or -1 */
-@property NSImage *backdrop, *logo, *glow; @property BOOL ownMark; @property NSArray<NSImage *> *shots; @property NSString *hint;
+@property NSImage *backdrop, *logo, *glow; @property NSArray<NSImage *> *shots; @property NSString *hint;
 @property (copy) void (^onPlay)(void); @property (copy) void (^onQuit)(void); @property (copy) void (^onChange)(void);
 @end
 
@@ -332,23 +327,16 @@ static NSRect fit_rect(NSImage *img, NSRect r)
     }
     NSGradient *vig = [[NSGradient alloc] initWithColorsAndLocations:[NSColor colorWithWhite:0 alpha:0], 0.0, [NSColor colorWithWhite:0 alpha:0.55], 1.0, nil];
     [vig drawInRect:b relativeCenterPosition:NSMakePoint(0, 0.25)];
-    /* the logo over a glow: Timeslip's mark over the teal (as the shared launcher draws it), or the game's own
-     * logo from the disc over its own glow when the app has no mark */
+    /* the logo, its own glow beneath it; the project's name under it as its subtitle */
     if (self.logo.size.width > 16) {
-        NSRect lr = fit_rect(self.logo, NSMakeRect(230, 26, 500, 150));
-        NSShadow *halo = [NSShadow new]; halo.shadowOffset = NSZeroSize;
-        if (self.ownMark) {
-            NSGradient *g = [[NSGradient alloc] initWithColorsAndLocations:teal_glow(0.75), 0.0, teal_glow(0.28), 0.5, teal_glow(0), 1.0, nil];
-            [g drawInRect:NSInsetRect(lr, -90, -60) relativeCenterPosition:NSZeroPoint];
-            halo.shadowColor = [NSColor colorWithWhite:0 alpha:0.7]; halo.shadowBlurRadius = 14;
-        } else {
-            if (self.glow.size.width > 16) [self.glow drawInRect:NSInsetRect(lr, -2, -2) fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:0.85 respectFlipped:YES hints:nil];
-            halo.shadowColor = [accent() colorWithAlphaComponent:0.45]; halo.shadowBlurRadius = 24;
-        }
+        NSRect lr = fit_rect(self.logo, NSMakeRect(230, 16, 500, 132));
+        if (self.glow.size.width > 16) [self.glow drawInRect:NSInsetRect(lr, -2, -2) fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:0.85 respectFlipped:YES hints:nil];
+        NSShadow *halo = [NSShadow new]; halo.shadowColor = [accent() colorWithAlphaComponent:0.45]; halo.shadowOffset = NSZeroSize; halo.shadowBlurRadius = 24;
         [NSGraphicsContext saveGraphicsState]; [halo set];
         [self.logo drawInRect:lr fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1 respectFlipped:YES hints:@{NSImageHintInterpolation: @(NSImageInterpolationHigh)}];
         [NSGraphicsContext restoreGraphicsState];
-    } else draw_text(@"TIMESPLITTERS 2", heavy(60), text_c(), NSMakeRect(0, 70, W, 80), NSTextAlignmentCenter, sh, 8);
+    } else draw_text(@"TIMESPLITTERS 2", heavy(60), text_c(), NSMakeRect(0, 62, W, 80), NSTextAlignmentCenter, sh, 8);
+    draw_text(@"TIMESLIP", heavy(22), text_c(), NSMakeRect(0, 150, W, 30), NSTextAlignmentCenter, sh, 14);
     draw_text(@"NATIVE FOR APPLE SILICON  ·  RECOMPILED FROM YOUR XBOX DISC", heading(11.5), accent(), NSMakeRect(0, 184, W, 18), NSTextAlignmentCenter, sh, 4);
     draw_text(@"CHOOSE YOUR RENDERER", heading(10.5), dim(), NSMakeRect(60, 226, 400, 16), NSTextAlignmentLeft, sh, 3.5);
     draw_text(@"1990 · SIBERIA · OBLASK DAM", heading(10.5), dim(), NSMakeRect(W - 460, 226, 400, 16), NSTextAlignmentRight, sh, 3.5);
@@ -510,11 +498,7 @@ static NSString *const kbm_json =
     v.hover = v.pressed = HIT_NONE; v.focus = -1; v.open = -1;
     v.card = [[d stringForKey:@"renderer"] isEqual:@"metal"] ? 0 : 1;
     v.backdrop = image_at(artDirs, @"backdrop.jpg");
-    NSString *mark = [NSBundle.mainBundle pathForResource:@"timeslip_logo" ofType:@"png"];   /* install.sh: art/logo.png */
-    if (getenv("TS2_LAUNCHER_MARK")) mark = @(getenv("TS2_LAUNCHER_MARK"));                 /* development, outside a bundle */
-    v.logo = mark ? [[NSImage alloc] initWithContentsOfFile:mark] : nil;
-    v.ownMark = v.logo.size.width > 16;
-    if (!v.ownMark) { v.logo = image_at(artDirs, @"logo.png"); v.glow = image_at(artDirs, @"glow.png"); }
+    v.logo = image_at(artDirs, @"logo.png"); v.glow = image_at(artDirs, @"glow.png");
     NSImage *none = [NSImage new];
     v.shots = @[image_at(artDirs, @"card_metal.jpg") ?: none, image_at(artDirs, @"card_vulkan.jpg") ?: none];
     v.hint = @"←/→ choose a renderer · ↑/↓ settings · Return plays · Esc quits";
