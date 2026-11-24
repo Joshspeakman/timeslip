@@ -29,6 +29,16 @@ extern void sub_00032D90_gen(void);
  * path): the call whose field of view the fov setting replaces. */
 void sub_00032D90(void) { ts2_camera_setup(sub_00032D90_gen, 0x00035A16u); }
 
+/* build_projection is sub_000E6A00 (PAL 0x000E6E30), wrapped so every
+ * projection but the in-game camera's is widened as that one is. 0x00032DF6
+ * is camera_setup's call of it, which is widened already. The others, logged
+ * (RECOMP_TS2_CAMLOG) over both recordings: 0x00095CF7 (front_end_scene's
+ * camera, sub_00095CA0), 0x000A4C8B (the front end's), 0x0008F651 (the
+ * character select's model, aspect 1) and 0x00058574 (from a level's start:
+ * the hands and weapon). */
+extern void sub_000E6A00_gen(void);
+void sub_000E6A00(void) { ts2_build_projection(sub_000E6A00_gen, 0x00032DF6u); }
+
 /* front_end_scene is sub_0009F180 (PAL 0x0009F1C0): it builds its camera
  * through sub_00095CA0 (PAL 0x00095CE0), which calls build_projection. */
 extern void sub_0009F180_gen(void);
@@ -233,6 +243,15 @@ const Ts2UiPlace k_ts2_ui_places[] = {
      * site: left to the width guess it stayed in the 4:3 layout, beside
      * the bars, while the number went to the corner. */
     { 0x000BE5CF, TS2_UI_SIDE },
+    /* The row of bullets beside each ammo number once some are spent,
+     * drawn from these sites rather than the full row's: left to the width
+     * guess they stayed beside the guns while the number went to the corner
+     * (an Arcade match after the first shots, 24 Nov 2026). */
+    { 0x000BEE89, TS2_UI_SIDE },   { 0x000BEFF0, TS2_UI_SIDE },
+    { 0x000BDF40, TS2_UI_SIDE },
+    /* The whole-screen tint while the player burns: the guess spans it, but
+     * a 4:3 frame of it puts a seam down both old borders. */
+    { 0x000C1488, TS2_UI_STRETCH },
     { 0x000BC2AC, TS2_UI_CENTRE }, { 0x00058610, TS2_UI_CENTRE },
     { 0x000C92DF, TS2_UI_STRETCH },
     /* Sprites the game places in the world and projects to the screen
@@ -241,6 +260,17 @@ const Ts2UiPlace k_ts2_ui_places[] = {
      * squeezing them would pull them off it. */
     { 0x001BFE0F, TS2_UI_STRETCH }, { 0x001BE7AE, TS2_UI_STRETCH },
     { 0x001BE7E4, TS2_UI_STRETCH }, { 0x001BE947, TS2_UI_STRETCH },
+    /* The same for falling snow and its haze (001B479B: Siberia's fly-by had
+     * its flakes squeezed toward the middle whenever few were on screen, and
+     * spread when many were), and for the rest of that sprite code's sites,
+     * none of them reached from UI code: the guess spanned them in every
+     * frame of both recordings, so pinning them only stops a frame with a
+     * narrow batch being squeezed off the 3D (24 Nov 2026). */
+    { 0x001B479B, TS2_UI_STRETCH },
+    { 0x001BDCB6, TS2_UI_STRETCH }, { 0x001BECBB, TS2_UI_STRETCH },
+    { 0x001BF25F, TS2_UI_STRETCH }, { 0x001BF3D4, TS2_UI_STRETCH },
+    { 0x001C0104, TS2_UI_STRETCH }, { 0x001C06AC, TS2_UI_STRETCH },
+    { 0x001C1750, TS2_UI_STRETCH }, { 0x001C7EFF, TS2_UI_STRETCH },
     /* The handheld's map. It is drawn at the start of the frame into a
      * corner of the back buffer (x 128 on, scissored to 128..309 by
      * 0..181), copied out of it with CopyRects into the 128x128 texture the

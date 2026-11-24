@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <stddef.h>   /* ptrdiff_t: not in stdlib.h off MSVC */
 #include <stdlib.h>   /* getenv, exit: the spin verdict below */
+#include <math.h>     /* fabsf: the camera log */
 #include <string.h>   /* strcmp: RECOMP_ICALL_FATAL */
 
 /* One diagnostic report, one piece.
@@ -467,6 +468,8 @@ extern float xbox_D3D8ClaimHorPlus(void);
 /* recompose src/hle/hle_settings.h */
 extern int hle_fov(void);
 extern void  xbox_D3D8SetWideFrames(int wide);
+/* recompose src/kernel/recomp_lockstep.h: the frame, for the logs below */
+extern uint32_t recomp_lockstep_tick(void);
 
 #define TS2_MEMF(a) (*(volatile float *)((uintptr_t)(uint32_t)(a) + g_xbox_mem_offset))
 #define TS2_MEM32_EARLY(a) (*(volatile uint32_t *)((uintptr_t)(uint32_t)(a) + g_xbox_mem_offset))
@@ -510,8 +513,88 @@ static void ts2_camera_setup(void (*camera_setup)(void), uint32_t player_caller)
     if (fov > 0 && player_caller && TS2_MEM32_EARLY(g_esp) == player_caller &&
         TS2_MEMF(g_esp + 0x10) == TS2_FOV_DEFAULT)
         TS2_MEMF(g_esp + 0x10) = (float)fov;
+    /* Read before the call, which may pop them (for the log below). */
+    uint32_t log_caller = TS2_MEM32_EARLY(g_esp);
+    float log_arg = TS2_MEMF(g_esp + 0x0C), log_fovy = TS2_MEMF(g_esp + 0x10);
     camera_setup();
     g_ts2_frame_camera = 1;                /* see ts2_present below */
+    /* RECOMP_TS2_CAMLOG=1: the aspect each camera ends up with -- the
+     * horizontal half-width the game keeps over the vertical one -- each
+     * time it changes for a caller, with the frame. 16:9 on screen wants
+     * 1.78, 4:3 1.33. */
+    {
+        static int on = -1, n, lines;
+        static struct { uint32_t caller; float aspect; } last[16];
+        uint32_t cam;
+
+        if (on < 0)
+            on = getenv("RECOMP_TS2_CAMLOG") != NULL;
+        cam = on && lines < 200 ? TS2_MEM32_EARLY(0x004B2F60u) : 0;
+        if (cam) {
+            float t = TS2_MEMF(cam + 0x31C), a = t != 0.0f ? TS2_MEMF(cam + 0x320) / t : 0.0f;
+            int i;
+
+            for (i = 0; i < n && last[i].caller != log_caller; i++)
+                ;
+            if (i == n && n < 16) {
+                last[n].caller = log_caller;
+                last[n].aspect = -1.0f;
+                n++;
+            }
+            if (i < n && fabsf(last[i].aspect - a) >= 0.01f) {
+                last[i].aspect = a;
+                lines++;
+                fprintf(stderr, "[TS2] camera from 0x%08X: aspect %.3f (arg %.3f, fovy %.1f, "
+                        "widen %.3f) at tick %u\n", log_caller, a, log_arg, log_fovy, widen,
+                        recomp_lockstep_tick());
+            }
+        }
+    }
+}
+
+/*
+ * build_projection(out, aspect, fovy, near, far) for everything but the
+ * in-game camera, whose aspect camera_setup has already widened: the front
+ * end's own 3D -- the character select's model, the menus' figures -- kept
+ * its 4:3 projection, so in widescreen it was stretched by 4/3 inside panels
+ * the 2D placement keeps in proportion (24 Nov 2026: the character select's
+ * Sgt Cortez measured 26% wider by area at 16:9 than at 4:3, the same
+ * height). Widening the aspect makes x shrink by 3/4 about the middle of the
+ * screen, which is what the squeeze does to the panel around it, so the two
+ * stay together. Not while the front end is shown at 4:3 (RECOMP_TS2_MENUS=43).
+ * RECOMP_TS2_CAMLOG=1 also logs each caller here once.
+ */
+static int ts2_menus_wide(void);
+
+static void ts2_build_projection(void (*build_projection)(void), uint32_t camera_caller)
+{
+    static int camlog = -1;
+    uint32_t caller = TS2_MEM32_EARLY(g_esp);
+    float widen = ts2_camera_widen();
+    int widened = 0;
+
+    if (caller != camera_caller && widen != 1.0f && ts2_menus_wide()) {
+        TS2_MEMF(g_esp + 0x08) *= widen;   /* [esp] return, +4 out, +8 aspect */
+        widened = 1;
+    }
+    if (camlog < 0)
+        camlog = getenv("RECOMP_TS2_CAMLOG") != NULL;
+    if (camlog) {
+        static uint32_t seen[16];
+        static int n;
+        int i;
+
+        for (i = 0; i < n && seen[i] != caller; i++)
+            ;
+        if (i == n && n < 16) {
+            seen[n++] = caller;
+            fprintf(stderr, "[TS2] projection from 0x%08X: aspect %.3f%s, fovy %.1f, near %g, far %g "
+                    "at tick %u\n", caller, TS2_MEMF(g_esp + 0x08), widened ? " (widened)" : "",
+                    TS2_MEMF(g_esp + 0x0C), TS2_MEMF(g_esp + 0x10), TS2_MEMF(g_esp + 0x14),
+                    recomp_lockstep_tick());
+        }
+    }
+    build_projection();
 }
 
 /*
@@ -1057,7 +1140,9 @@ static void ts2_ui_note_site(uint32_t site, uint32_t leaf)
     fprintf(stderr, "[TS2-UI] site %08X:", site);
     for (i = 0; i < g_ts2_depth && i < 8; i++)
         fprintf(stderr, " %08X ->", g_ts2_chain[i]);
-    fprintf(stderr, " %08X -> reserve\n", leaf);
+    /* The frame it first drew in, under lockstep, so a replay can dump it. */
+    fprintf(stderr, " %08X -> reserve (tick %u%s)\n", leaf, recomp_lockstep_tick(),
+            ts2_ui_place_for(site) == TS2_UI_AUTO ? ", not placed" : "");
     RECOMP_DIAG_UNLOCK();
     fflush(stderr);
 }

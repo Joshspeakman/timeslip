@@ -120,3 +120,52 @@ own bullet trail.
 `tests/lockstep/arcade-mexican-mission-us.trace` is the scene for this:
 Arcade, Deathmatch on Mexican Mission with the recommended bots, walking
 along the walls, turning and firing.
+
+Checked on the Mac too (M1 Pro, Metal): both recordings the same at every
+frame at 5x, the same pictures and brightness, and 0.55 ms more GPU time a
+frame at 5x (2.41 to 2.96 ms), under a third of a 120 Hz frame.
+
+## Widescreen without stretching (24 November 2026)
+
+Josh's report: the world and the HUD looked stretched at 16:9 rather than
+corrected. What was measured, at his settings (16:9, 2560x1440 screen):
+
+- **The in-game camera is right.** The horizontal half-width the game keeps
+  over the vertical one (`RECOMP_TS2_CAMLOG=1`) is 1.778 for the player's
+  view in one-player play and in co-op's own-screen view, and 3.556 for
+  each half of split screen, which is 16:9 for a half-height view. It has
+  been widened in the game itself (so what is drawn and what is culled
+  agree) since the USA release was added.
+- **Every other projection was 4:3, fixed.** The game builds four more
+  (`build_projection`'s other callers): the front end's two scene cameras,
+  the character select's model and the projection decals are drawn with.
+  Left at 4:3 they were stretched by 4/3 at 16:9. Sgt Cortez on the
+  character select measured 26% wider by area than at 4:3, the same height;
+  now the same as at 4:3. Bullet holes landed up to 4/3 too far from the
+  middle of the screen, or not at all; now they are where the shots hit.
+  Widened only in widescreen with the 16:9 front end, both of which an
+  online session already makes the machines agree on.
+- **The 2D: what the width guess got wrong, fixed.** Unplaced 2D is left to
+  the renderer, which squeezes a narrow batch to 4:3 and spans a wide one.
+  Comparing each frame with every unplaced site forced to the middle and
+  forced to span found:
+  - the row of bullets beside each ammo number once some were spent stayed
+    beside the guns while the number went to the corner;
+  - falling snow (Siberia) was squeezed toward the middle whenever few
+    flakes were on screen, and spread out when many were;
+  - the whole-screen tint while the player burns, a frame of which at 4:3
+    put a seam down both old borders;
+  - eight more sites of the code that projects sprites into the world,
+    spanned in every frame seen, now pinned so a frame with few of them is
+    not squeezed off the 3D.
+
+  Everything else the two recordings draw unplaced (68 sites in Story
+  co-op, 82 in Arcade) the guess put right: text and panels kept in
+  proportion, haze and fades across the whole picture.
+
+Left: the PAL release has neither the projection hook nor the new sites
+(its addresses are not checked). Screens neither recording reaches
+(Challenge, MapMaker, Options, the story's other levels and cutscenes) are
+unsurveyed. `RECOMP_TS2_UI_SITES=1` now logs each site's first frame and
+whether it is placed, so a replay of a recording that reaches a screen
+lists what to look at.

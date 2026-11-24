@@ -12,6 +12,10 @@ must reach the same hash at every checkpoint.
 | `coop-siberia-us.trace` | USA | A fresh game: 2 Players, both create a profile, Story Co-op, Siberia, both players walking, turning and firing | 8,000 |
 | `arcade-mexican-mission-us.trace` | USA | A fresh game: 1 Player, a profile, Arcade Custom, Normal, Deathmatch on Mexican Mission with the recommended bots and weapons, walking along the walls, turning, strafing and firing until the bots win (about frame 7,600), then the results screens | 13,500 |
 
+A gate replay must run without `RECOMP_TS2_VIEW_PORT`: offline it turns on
+each player's own screen, which lays the game out differently (the co-op one
+differs from frame 4,680 with it).
+
 Both are recorded at the default settings and replay the same only at them:
 widescreen (and each player's own screen, `RECOMP_TS2_VIEW_PORT`) change the
 game's memory, so a replay with them on differs from the recording early on
