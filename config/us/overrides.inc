@@ -289,10 +289,19 @@ const Ts2Paks k_ts2_paks = { 0 };
  *                 the stick's turn and look speed as they ramp up
  *   0x002CE388    player number -> controller (4 bytes each)
  * Holding the stick turns 2.64 degrees a frame at most, and the pitch stops
- * at +-40 degrees. */
+ * at +-40 degrees; a positive pitch looks up. */
 extern void sub_00148160_gen(void);
 void sub_00148160(void)
 {
     sub_00148160_gen();
     ts2_mouse_look(0x00497100u, 0x002CE388u);
+}
+
+/* The look step (ts2_look_spring): after the stick read above, it turns the
+ * player by the stick and, with the profile's Auto Lookahead, levels the
+ * view while walking (watched: the pitch fell 5% a frame from 40 to 0). */
+extern void sub_00148A60_gen(void);
+void sub_00148A60(void)
+{
+    ts2_look_spring(sub_00148A60_gen, 0x00497100u, 0x002CE388u);
 }

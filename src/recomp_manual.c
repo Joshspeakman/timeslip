@@ -707,9 +707,14 @@ static void ts2_viewport_rect(void (*viewport_rect)(void), uint32_t player_calle
  * player's controller, and the game's own turning by the stick, if any, adds
  * to it. recomp_input_look gives the latched look online, so both machines
  * turn the joiner's player alike, and nothing at all to a controller with no
- * mouse. Directions as the stick's: left adds to the yaw, up takes from the
- * pitch, which the game keeps within +-40 degrees; the yaw is kept in
- * [0, 360), as the game keeps it (it goes 2.33 -> 359.67 turning right).
+ * mouse.
+ *
+ * Directions, measured: the yaw grows turning left and is kept in [0, 360)
+ * as the game keeps it (2.33 -> 359.67 turning right); a positive pitch looks
+ * up (+40 shows the ceiling) and the game keeps it within +-40. The mouse
+ * goes the PC way -- forward looks up -- whatever the profile's Inverse Look
+ * (on by default, so the stick is a flight stick); the toolkit's own
+ * mouse_invert turns it over for a player who wants that.
  *
  *   RECOMP_TS2_LOOKLOG=<n>  the first n turns, with the yaw the game kept
  */
@@ -717,37 +722,62 @@ extern int recomp_input_look(unsigned port, float *dx_deg, float *dy_deg);
 
 #define TS2_PITCH_LIMIT 40.0f
 
+/* A controller whose mouse has turned its player: from then on that player
+ * plays with a mouse (ts2_look_spring). Decided from the look the game was
+ * given, which online is the latched one, so every machine decides alike. */
+static unsigned char g_ts2_mouse_player[4];
+
+/* The player being updated and the controller it reads, or 0. */
+static int ts2_look_player(uint32_t current_player, uint32_t player_controller,
+                           uint32_t *ctx_out, uint32_t *port_out)
+{
+    uint32_t ctx = TS2_MEM32_EARLY(current_player), player, port;
+
+    if (ctx < 0x10000u || ctx >= 0x84000000u || (ctx & 3u))
+        return 0;
+    player = TS2_MEM32_EARLY(ctx);
+    if (player > 3u)
+        return 0;
+    port = TS2_MEM32_EARLY(player_controller + player * 4u);
+    if (port > 3u)
+        return 0;
+    *ctx_out = ctx;
+    *port_out = port;
+    return 1;
+}
+
 static void ts2_mouse_look(uint32_t current_player, uint32_t player_controller)
 {
     static int log_left = -1;
     static float logged_yaw;
     static int log_pending;
-    uint32_t ctx = TS2_MEM32_EARLY(current_player), player, port;
+    uint32_t ctx, port;
     float dx, dy, yaw, pitch;
 
     if (log_left < 0) {
         const char *v = getenv("RECOMP_TS2_LOOKLOG");
         log_left = v && *v ? atoi(v) : 0;
     }
-    if (ctx < 0x10000u || ctx >= 0x84000000u || (ctx & 3u))
+    if (!ts2_look_player(current_player, player_controller, &ctx, &port))
         return;
-    player = TS2_MEM32_EARLY(ctx);
-    if (player > 3u)
-        return;
-    port = TS2_MEM32_EARLY(player_controller + player * 4u);
     if (log_pending && port == 0u) {
         fprintf(stderr, "[TS2-LOOK]   the next frame starts at yaw %.3f (set %.3f)\n",
                 TS2_MEMF(ctx + 0x148), logged_yaw);
         log_pending = 0;
     }
-    if (port > 3u || !recomp_input_look(port, &dx, &dy))
+    if (!recomp_input_look(port, &dx, &dy))
         return;
+    if (!g_ts2_mouse_player[port]) {
+        g_ts2_mouse_player[port] = 1;
+        fprintf(stderr, "[TS2] controller %u plays with a mouse: its Auto Lookahead is off\n",
+                port + 1u);
+    }
     yaw = TS2_MEMF(ctx + 0x148) - dx;
     while (yaw >= 360.0f)
         yaw -= 360.0f;
     while (yaw < 0.0f)
         yaw += 360.0f;
-    pitch = TS2_MEMF(ctx + 0x14C) + dy;
+    pitch = TS2_MEMF(ctx + 0x14C) - dy;     /* dy is down the screen */
     if (pitch > TS2_PITCH_LIMIT)
         pitch = TS2_PITCH_LIMIT;
     if (pitch < -TS2_PITCH_LIMIT)
@@ -755,13 +785,48 @@ static void ts2_mouse_look(uint32_t current_player, uint32_t player_controller)
     if (log_left > 0) {
         log_left--;
         fprintf(stderr, "[TS2-LOOK] player %u controller %u: %+.3f,%+.3f deg, yaw %.3f -> %.3f, "
-                "pitch %.3f -> %.3f\n", player, port, dx, dy, TS2_MEMF(ctx + 0x148), yaw,
-                TS2_MEMF(ctx + 0x14C), pitch);
+                "pitch %.3f -> %.3f\n", TS2_MEM32_EARLY(ctx), port, dx, dy,
+                TS2_MEMF(ctx + 0x148), yaw, TS2_MEMF(ctx + 0x14C), pitch);
         logged_yaw = yaw;
         log_pending = port == 0u;
     }
     TS2_MEMF(ctx + 0x148) = yaw;
     TS2_MEMF(ctx + 0x14C) = pitch;
+}
+
+/*
+ * No look-spring with a mouse. The profile's Auto Lookahead (Preferences, on
+ * by default) levels the view while the player walks with no look input:
+ * the look step (sub_00148A60) takes 5% of the pitch a frame when the look
+ * state (+0x150) is 2 and bit 8 of byte 2 of the profile's preferences (the
+ * pointer at +0x14) is set. Right for a stick, which springs back to the
+ * middle; wrong for a mouse, which stays where it was put. For a mouse
+ * player the bit is cleared while that step runs and put back straight
+ * after, so the profile -- and what the game saves of it -- is untouched,
+ * and a pad player in the same game keeps the lookahead.
+ */
+static void ts2_look_spring(void (*look_step)(void), uint32_t current_player,
+                            uint32_t player_controller)
+{
+    uint32_t ctx, port, prefs = 0;
+    uint8_t was = 0;
+
+    if (ts2_look_player(current_player, player_controller, &ctx, &port) &&
+        g_ts2_mouse_player[port]) {
+        prefs = TS2_MEM32_EARLY(ctx + 0x14);
+        if (prefs < 0x10000u || prefs >= 0x84000000u)
+            prefs = 0;
+    }
+    if (prefs) {
+        volatile uint8_t *b = (volatile uint8_t *)((uintptr_t)(prefs + 2u) + g_xbox_mem_offset);
+
+        was = *b;
+        *b = (uint8_t)(was & ~8u);
+        look_step();
+        *b = was;
+        return;
+    }
+    look_step();
 }
 
 /* At the end of a frame: whose pass the next frame leaves undrawn. */
