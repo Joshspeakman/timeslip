@@ -53,6 +53,7 @@ endif()
 set(TIMESLIP_SOURCES
     src/main.c
     src/recomp_manual.c
+    src/title_defaults.c
     ${RECOMP_GEN_SOURCES}
 )
 
@@ -128,5 +129,6 @@ if(COMMAND recomp_add_launcher)
     # COOP: the System Link tab also hosts and joins online co-op, which TS2's
     # build supports (its frame clock is hooked for lockstep,
     # src/recomp_manual.c).
-    recomp_add_launcher(${PROJECT_NAME}_launcher ${PROJECT_NAME}.exe COOP)
+    recomp_add_launcher(${PROJECT_NAME}_launcher ${PROJECT_NAME}.exe COOP
+        DEFAULTS ${CMAKE_CURRENT_SOURCE_DIR}/src/title_defaults.c)
 endif()

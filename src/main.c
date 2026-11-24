@@ -445,6 +445,17 @@ static int title_main(int argc, char **argv)
      * unless this says where. */
     host_setup_output(g_log_path, sizeof g_log_path);
 
+    /* TimeSplitters 2's own defaults (src/title_defaults.c): a shooter's
+     * keyboard and mouse, and mouse look on. Before anything reads a
+     * setting or a pad. */
+    {
+        extern const char *const recomp_title_bindings[];
+        extern const char *const recomp_title_settings[];
+        extern void recomp_title_defaults_install(const char *const *bindings,
+                                                  const char *const *settings);
+        recomp_title_defaults_install(recomp_title_bindings, recomp_title_settings);
+    }
+
     /* Online co-op plays only between copies of one build: a different
      * build, or another release, computes a different game. */
     {

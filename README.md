@@ -86,22 +86,32 @@ the shortcut `icon.png` from the release folder as its icon.
 
 ## Controls
 
-Controllers work as an Xbox pad. The keyboard plays as controller 1:
+Controllers work as an Xbox pad. The keyboard and mouse play as controller 1,
+laid out like a modern PC shooter:
 
-| Xbox | Key |
+| Action | Keyboard and mouse |
 | --- | --- |
-| D-pad | Arrows |
-| A, B, X, Y | Z, X, A, S |
-| Start, Back | Enter, Backspace |
-| White, Black | Q, W |
-| Left, right trigger | E, R |
+| Move, side step | W A S D |
+| Look | The mouse |
+| Fire | Left mouse button |
+| Aim | Right mouse button |
+| Alternate fire | G, middle mouse button |
+| Reload | R |
+| Use (activate) | F, E, Space |
+| Crouch | C, left Ctrl |
+| Next / previous weapon | Mouse wheel, Q, left and right arrows |
+| Zoom in / out | Z / X, the mouse's side buttons, up and down arrows |
+| Pause the game, objectives | Enter, Tab |
+| Menus | W A S D or arrows to move, Enter, Space or F to choose, Backspace to go back |
 
-Change them in the launcher's Input tab.
+These are the game's own "Default" control configuration (Options > Player
+Options > Controls); change the keys in the launcher's Input tab.
 
 While playing:
 
 | Key | |
 | --- | --- |
+| Esc | The PC menu: pause, settings (display, frame rate, mouse) and Quit to desktop |
 | F9 | Show or hide the frame rate |
 | F10 | Change the frame cap: adaptive, 60, 30, off |
 | F11 | Save a screenshot and a capture of the frame, for bug reports |

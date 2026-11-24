@@ -33,11 +33,14 @@ camera, its control layouts, its defaults.
    Left: a controller can't open it yet (keyboard only), controls are not
    rebindable from it (the launcher's Input tab does that), and it is
    checked on Windows only so far.
-2. **Call of Duty-style keyboard and mouse defaults** (TS2): WASD to move,
-   the mouse to look, left button fire, right button aim, R reload, E use,
-   C crouch, the wheel and 1-9 for weapons, Esc for the menu, Tab for the
-   objectives. Which control layout TS2's profile uses decides what each
-   Xbox control does; the defaults follow the game's default layout.
+2. ~~Call of Duty-style keyboard and mouse defaults~~ **Done** (Recompose
+   770c186, `src/title_defaults.c`): over TS2's own "Default" control
+   configuration, W A S D, mouse look on, left button fire, right button
+   aim, G or middle button alternate fire, R reload, F/E/Space use, C or
+   Ctrl crouch, wheel/Q/arrows for weapons, Z/X or the side buttons to zoom,
+   Enter or Tab to pause; the README's Controls table. The launcher shows
+   the same defaults. To check by hand: whether TS2's aim (right stick
+   press) is a toggle or held, and whether that suits the right button.
 3. **Mouse look that is a mouse, not a stick** (both): the mouse turns the
    view by an angle in proportion to how far it moved, with no stick
    acceleration, dead zone or top speed in the way; aim assist off for the
