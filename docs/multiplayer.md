@@ -144,10 +144,18 @@ the same build (both repositories' commits, stamped at build time) with the
 same Widescreen and front-end (`ts2_menus`) settings; a joiner that differs
 is refused, told why, in the log beside the game.
 
-Both machines show the whole split screen, as the console did. Each frame
-waits for both controllers: a press lands 4 frames (67 ms) after it is made
-on both machines (`RECOMP_LOCKSTEP_DELAY`), and a slow machine slows the
-game for both.
+Each machine shows its own player's view: in a split-screen frame (player 1
+above, player 2 below) only that half reaches the window, scaled up with
+bars (`coop_view = split` shows the whole split screen, as the console did).
+Menus, cutscenes and loading screens are whole frames and are shown whole.
+The window's title says what the session is doing: waiting for player 2,
+playing with whom, the other player left, or the two games differ.
+
+Each frame waits for both controllers. A press lands a few frames after it
+is made, on both machines: the joiner measures the round trip as it joins
+and picks the delay that covers it (3 frames, 50 ms, on a LAN; 9 at 100 ms
+each way), unless `coop_delay` / `RECOMP_LOCKSTEP_DELAY` names one. A slow
+machine slows the game for both.
 
 ### What it took in TS2
 
@@ -179,15 +187,19 @@ replay the same.
 | Online, two copies on one PC | the same at every frame, both against the recording |
 | Online, Windows host with a saved profile, Linux joiner (WSL) | the joiner booted from the host's saves (5 files, 23 KB); the two the same at every frame |
 | Online, Windows host, Mac joiner, over the LAN | 8,000 frames, every 60-frame check the same, the host the same as the recording |
+| Online, two copies, 50 ms more each way and 5% lost (`RECOMP_LOCKSTEP_SIM_DELAY_MS`, `_LOSS`) | the same at every frame; 6,000 frames in 102-105 s (100 s of frames) |
+| The same, 100 ms each way and 10% lost | the same at every frame; 218 ms measured, 9 frames of delay, 6,000 frames in 103-106 s (at a fixed 4 frames: 139 s) |
+| Each player's own view (`RECOMP_TS2_VIEW_PORT`, the window dumped by `RECOMP_PRESENT_DUMP`) | player 1's half and player 2's, from the level intro on; the game unchanged (the recording the same at every frame) |
 
 ### Not done
 
-- Each screen showing only its own player full screen.
-- Played by people with controllers (every run so far was a recording or a
-  script).
-- Over the internet, and the input delay measured from the round trip
-  rather than fixed.
-- More than two players; a desync is reported in the log, not repaired.
+- Played by people with controllers: every run so far was a recording or a
+  script.
+- Over the real internet (simulated only), and a Mac hosting (macOS asks the
+  person at the Mac to let the game through its firewall the first time).
+- Each player's view drawn at the full window's shape: it is the console's
+  half-height view, scaled up with bars. `resolution_scale` keeps it sharp.
+- More than two players; a desync is reported, not repaired.
 
 ## Not done or not checked
 
