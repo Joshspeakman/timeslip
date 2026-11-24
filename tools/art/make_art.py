@@ -232,6 +232,12 @@ def main():
 
     big = tile(1024)
     big.save(os.path.join(out, 'icon-1024.png'))
+    # The sizes a release's desktop icon and macOS .icns are made from
+    # (recompose tools/release/make_release.py, the recipe's icon_dir).
+    os.makedirs(os.path.join(out, 'icon', 'png'), exist_ok=True)
+    for n in (16, 32, 64, 128, 256, 512, 1024):
+        (big if n == 1024 else tile(n) if n <= 64 else big.resize((n, n), Image.LANCZOS)).save(
+            os.path.join(out, 'icon', 'png', f'{n}.png'))
     big.resize((256, 256), Image.LANCZOS).save(os.path.join(out, 'icon-256.png'))
     big.resize((64, 64), Image.LANCZOS).save(os.path.join(out, 'icon-64.png'))
     # Each size drawn at its own size, so 16 and 24 stay crisp rather than mush.
