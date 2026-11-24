@@ -130,5 +130,7 @@ if(COMMAND recomp_add_launcher)
     # build supports (its frame clock is hooked for lockstep,
     # src/recomp_manual.c).
     recomp_add_launcher(${PROJECT_NAME}_launcher ${PROJECT_NAME}.exe COOP
-        DEFAULTS ${CMAKE_CURRENT_SOURCE_DIR}/src/title_defaults.c)
+        DEFAULTS ${CMAKE_CURRENT_SOURCE_DIR}/src/title_defaults.c
+        BRAND "Timeslip"
+        THEME ${CMAKE_CURRENT_SOURCE_DIR}/src/launcher_theme_timeslip.h)
 endif()
