@@ -10,6 +10,10 @@ cmake_minimum_required(VERSION 3.20)
 # the executable links with the C++ driver. This repository's sources are C.
 project(timeslip C CXX)
 
+# Timeslip's own icon on both executables (recompose cmake/title_icon.cmake),
+# drawn by tools/art/make_art.py, not the toolkit's.
+set(XBOXRECOMP_TITLE_ICON "${CMAKE_CURRENT_SOURCE_DIR}/art/timeslip.ico")
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 

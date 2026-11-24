@@ -1,3 +1,5 @@
+<p align="center"><img src="art/logo-dark.png" alt="Timeslip" width="760"></p>
+
 # Timeslip
 
 TimeSplitters 2 for the original Xbox, recompiled into a native program for
@@ -9,10 +11,22 @@ Timeslip is built on [Recompose](https://github.com/Joshspeakman/recompose),
 its recompilation toolkit. Both began as forks of phobos665's work; see
 [Credits](#credits).
 
-<img width="796" height="468" alt="Screenshot 2026-10-20 at 09 31 50" src="https://github.com/user-attachments/assets/139ac55d-e26a-476b-83ad-5704bdab6acc" />
+<p align="center">
+<img src="docs/screenshots/mexican-mission.jpg" width="49%" alt="Mexican Mission, Arcade">
+<img src="docs/screenshots/siberia-dam.jpg" width="49%" alt="Siberia's fly-by">
+<img src="docs/screenshots/sparks.jpg" width="49%" alt="Firing at a wall">
+<img src="docs/screenshots/handheld.jpg" width="49%" alt="The handheld scanner in Siberia's tunnel">
+<img src="docs/screenshots/siberia-base.jpg" width="49%" alt="Siberia's base">
+<img src="docs/screenshots/sniper.jpg" width="49%" alt="The sniper rifle at the tunnel's mouth">
+</p>
 
-Video:
-https://youtu.be/1foP74hN2uw
+Rendered at 5 times the console's resolution in widescreen, captured from the
+game as it runs (the two recordings in `tests/lockstep`).
+
+<p align="center">
+<img src="docs/screenshots/launcher.png" width="45%" alt="The launcher's settings">
+<img src="docs/screenshots/launcher-setup.png" width="45%" alt="The first start: drop the game on it">
+</p>
 
 - [Play](#play): download, point it at your disc, play.
 - [Build it yourself](#build-it-yourself): for developers working on the port.
@@ -43,7 +57,8 @@ Download the file for your system from the
 | macOS | `timeslip-<version>-macos-arm64.tar.xz` | Unpack it, then see [macOS](#macos) below |
 | Linux, SteamOS | `timeslip-<version>-linux-x86_64.tar.xz` | Unpack it and run `./timeslip` |
 
-The first time it starts, it asks for your copy of the game: choose **Disc
+The first time it starts, it asks for your copy of the game: drop the disc
+image or the game's folder onto its window (or onto its icon), choose **Disc
 image...** or **Folder...**, or paste a path. It then builds the game, which
 takes a minute or two (longer on a Steam Deck), and opens the settings. Press
 **Play**. After that it opens straight to the settings.
@@ -405,6 +420,15 @@ phobos665 and its contributors. Their history is kept in both repositories.
 Since November 2026 the two are developed separately and nothing is sent
 back upstream. Thank you to phobos665 and everyone who worked on the
 originals; phobos665 can be supported on [Ko-fi](https://ko-fi.com/phobos665).
+
+Timeslip's own icon, logo and box art (`art/`) are drawn by
+`tools/art/make_art.py` and set in [Exo 2](https://github.com/googlefonts/Exo-2.0)
+(SIL Open Font License, `tools/art/fonts/OFL.txt`). The launcher's backdrop
+and the game's logo in it are TimeSplitters 2's own art: they are not in this
+repository or its releases, but fetched once onto the player's computer from
+the [LaunchBox Games Database](https://gamesdb.launchbox-app.com/)
+(`src/launcher_theme_timeslip.h`), and an `art/` folder beside the launcher
+with a `backdrop` and `logo` of your own takes their place.
 
 # Legal
 
