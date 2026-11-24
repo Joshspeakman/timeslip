@@ -79,7 +79,19 @@ endif()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE xboxrecomp)
 
+# The build's name for online co-op (cmake/build_id.cmake): both repositories'
+# commits, stamped at every build into ts2_build_id.h, which src/main.c hands
+# the toolkit. A session between two builds that differ is refused.
+add_custom_target(ts2_build_id
+    COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_CURRENT_SOURCE_DIR}
+            -DOUT=${CMAKE_CURRENT_BINARY_DIR}/ts2_build_id.h
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/build_id.cmake
+    BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/ts2_build_id.h
+    COMMENT "Naming the build by its commits")
+add_dependencies(${PROJECT_NAME} ts2_build_id)
+
 target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/recomp
     ${XBOXRECOMP_DIR}/include

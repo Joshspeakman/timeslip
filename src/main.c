@@ -58,6 +58,7 @@
 /* Which release of the game src/recomp/gen was lifted from: written by
  * scripts/build.py with the lift (TS2_REGION_NAME, TS2_ENTRY_POINT). */
 #include "ts2_region.h"
+#include "ts2_build_id.h"   /* the build's commits: cmake/build_id.cmake */
 
 /*
  * If xboxrecomp.h is not an umbrella header in your setup, include
@@ -443,6 +444,13 @@ static int title_main(int argc, char **argv)
     /* Before anything prints: a windowed program has nowhere to print
      * unless this says where. */
     host_setup_output(g_log_path, sizeof g_log_path);
+
+    /* Online co-op plays only between copies of one build: a different
+     * build, or another release, computes a different game. */
+    {
+        extern void recomp_lockstep_set_build_id(const char *id);
+        recomp_lockstep_set_build_id(TS2_BUILD_ID " " TS2_REGION_NAME);
+    }
 
     /* Unbuffered output for immediate visibility during debugging, and so a
      * crash keeps the tail of the log rather than losing it in a buffer. */
