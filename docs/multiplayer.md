@@ -116,6 +116,37 @@ A match's load handshake, as seen on the card: at START the host sends one
 and then one each of 82, 98, 157 and 266 bytes; then both send a 76-byte
 frame about every 100 ms for the rest of the match.
 
+## Online co-op (in progress, `coop` branch)
+
+System Link only ever covered Arcade, and Story co-op on the console is two
+players split-screen on one machine. Online co-op runs that split-screen game
+on every machine and sends only the controllers: each copy computes the same
+game from the same pads, frame by frame (xboxrecomp
+`src/kernel/recomp_lockstep.h`). For that, under lockstep:
+
+- the game steps one frame at a time: TS2 steps by the vblanks elapsed, so
+  its vblank count (USA `sub_001C8190`) answers the lockstep tick
+  (`ts2_vblank_count` in `src/recomp_manual.c`), and its frame clock
+  (`sub_001ADF80`) is the frame boundary;
+- every clock the guest can see counts frames (TS2 seeds its random numbers
+  from the time of day), files report the session's time, and the time zone
+  is UTC;
+- sound's play state, stream packets and notifications run on frame time and
+  land at the frame boundary, and the music streamer (TS2's second thread)
+  runs only at frame boundaries;
+- GPU visibility tests are answered the same everywhere.
+
+Two players reach Story Co-op from a fresh game this way (controller 2 by
+`RECOMP_INPUT_SEQ_P2`): controller 1
+`10000:down,12000:start,16000:a,22000:a,26000:start,30000:a,38000:a,46000:a,52000:a,58000:a,64000:a,70000:a,76000:a`
+(2 Players, claim controller 1, a new profile, Story Co-op, through the
+intro, Siberia on Normal) and controller 2 `18000:a,23000:a,27000:start,31000:a`
+(claim controller 2, a new profile). `tests/lockstep/` has a recording of it
+that replays the same on Windows (Direct3D 11 and Vulkan) and Linux.
+
+Not done yet: the network between the copies, each screen showing only its
+own player, and a check on macOS (arm64).
+
 ## Not done or not checked
 
 - A Mac hosting a PC (it needs macOS's firewall to allow the game's incoming
