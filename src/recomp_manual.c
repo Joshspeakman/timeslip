@@ -485,6 +485,9 @@ static float ts2_camera_widen(void)
 
 /* What the frame now being drawn has run, for the choice below. */
 static int g_ts2_frame_camera, g_ts2_frame_front_end;
+/* How many times the in-game camera was built this frame: once a frame for
+ * one player, once per player's view in split screen (ts2_coop_view). */
+static int g_ts2_frame_cameras;
 
 static void ts2_camera_setup(void (*camera_setup)(void))
 {
@@ -494,6 +497,7 @@ static void ts2_camera_setup(void (*camera_setup)(void))
         TS2_MEMF(g_esp + 0x0C) *= widen;   /* [esp] is the return address */
     camera_setup();
     g_ts2_frame_camera = 1;                /* see ts2_present below */
+    g_ts2_frame_cameras++;
 }
 
 /*
@@ -559,6 +563,60 @@ static int ts2_menus_wide(void)
  */
 extern void xbox_D3D8SetInterpRegisters(int projection, int affine_first, int affine_count);
 
+/*
+ * Online co-op (xboxrecomp src/kernel/recomp_lockstep.h): both machines run
+ * the whole split-screen game, and each shows its own player's view of it,
+ * scaled up to the window. Two-player split screen in TS2 is the frame cut
+ * across the middle, player 1 above and player 2 below, and its frames
+ * build the in-game camera once per view: a frame that built it twice is a
+ * split one. Only what reaches the window is cropped
+ * (xbox_D3D8SetPresentCrop), never anything the game sees, so the machines
+ * still compute the same game. The menus, the cutscenes and the loading
+ * screens are whole frames and are shown whole. A few frames of the new
+ * shape before it is taken, so a frame that builds one camera mid-level does
+ * not flash the whole split screen.
+ *
+ *   coop_view = own (default) | split          [RECOMP_COOP_VIEW]
+ *   RECOMP_TS2_VIEW_PORT=0|1  shows a local game as that player would see
+ *                             it online, for checking the crop
+ */
+extern int recomp_lockstep_local_guest_port(void);
+extern void xbox_D3D8SetPresentCrop(float x, float y, float w, float h);
+extern const char *recomp_config_lookup(const char *env_name, const char *key);
+
+static void ts2_coop_view(int cameras, int front_end)
+{
+    static int own = -1, test_port = -2, shown = -1, streak;
+    int port = recomp_lockstep_local_guest_port();
+    int want;
+
+    if (own < 0) {
+        const char *v = recomp_config_lookup("RECOMP_COOP_VIEW", "coop_view");
+        own = !(v && strcmp(v, "split") == 0);
+    }
+    if (test_port == -2) {
+        const char *t = getenv("RECOMP_TS2_VIEW_PORT");
+        test_port = t && *t ? atoi(t) : -1;
+    }
+    if (port < 0)
+        port = test_port;
+    if (!own || port < 0 || port > 1)
+        return;
+    want = cameras >= 2 && !front_end;
+    if (want == shown) {
+        streak = 0;
+        return;
+    }
+    if (++streak < 3)
+        return;
+    streak = 0;
+    shown = want;
+    if (want)
+        xbox_D3D8SetPresentCrop(0.0f, port ? 0.5f : 0.0f, 1.0f, 0.5f);
+    else
+        xbox_D3D8SetPresentCrop(0.0f, 0.0f, 0.0f, 0.0f);
+}
+
 static void ts2_present(void (*present)(void))
 {
     static int interp_said;
@@ -570,7 +628,9 @@ static void ts2_present(void (*present)(void))
     present();
     xbox_D3D8SetWideFrames(ts2_menus_wide() ||
                            (g_ts2_frame_camera && !g_ts2_frame_front_end));
+    ts2_coop_view(g_ts2_frame_cameras, g_ts2_frame_front_end);
     g_ts2_frame_camera = g_ts2_frame_front_end = 0;
+    g_ts2_frame_cameras = 0;
 }
 
 /* ── TimeSplitters 2: where each piece of 2D goes in widescreen ── */
