@@ -456,11 +456,15 @@ static int title_main(int argc, char **argv)
         recomp_title_defaults_install(recomp_title_bindings, recomp_title_settings);
     }
     /* The mouse turns the player as an angle (ts2_mouse_look in
-     * recomp_manual.c), not by pushing the right stick. */
+     * recomp_manual.c), not by pushing the right stick -- in the release
+     * whose look hook has been found (config/us/overrides.inc). PAL's has
+     * not: there the mouse pushes the right stick, as before. */
+#if defined(TS2_REGION_US)
     {
         extern void recomp_mouse_look_native(int on);
         recomp_mouse_look_native(1);
     }
+#endif
 
     /* Online co-op plays only between copies of one build: a different
      * build, or another release, computes a different game. */

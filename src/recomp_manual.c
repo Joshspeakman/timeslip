@@ -708,7 +708,8 @@ static void ts2_viewport_rect(void (*viewport_rect)(void), uint32_t player_calle
  * to it. recomp_input_look gives the latched look online, so both machines
  * turn the joiner's player alike, and nothing at all to a controller with no
  * mouse. Directions as the stick's: left adds to the yaw, up takes from the
- * pitch, which the game keeps within +-40 degrees.
+ * pitch, which the game keeps within +-40 degrees; the yaw is kept in
+ * [0, 360), as the game keeps it (it goes 2.33 -> 359.67 turning right).
  *
  *   RECOMP_TS2_LOOKLOG=<n>  the first n turns, with the yaw the game kept
  */
