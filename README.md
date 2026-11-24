@@ -24,7 +24,7 @@ Rendered at 5 times the console's resolution in widescreen, captured from the
 game as it runs (the two recordings in `tests/lockstep`).
 
 <p align="center">
-<img src="docs/screenshots/launcher.png" width="45%" alt="The launcher's settings">
+<img src="docs/screenshots/launcher.png" width="45%" alt="The launcher: the renderer, the settings, Play">
 <img src="docs/screenshots/launcher-setup.png" width="45%" alt="The first start: drop the game on it">
 </p>
 
@@ -120,7 +120,7 @@ laid out like a modern PC shooter:
 | Menus | W A S D or arrows to move, Enter, Space or F to choose, Backspace to go back |
 
 These are the game's own "Default" control configuration (Options > Player
-Options > Controls); change the keys in the launcher's Input tab.
+Options > Controls); change the keys in the launcher's Controls.
 
 While playing:
 
@@ -134,7 +134,8 @@ While playing:
 
 ## Settings
 
-In the launcher's Video tab:
+The launcher's two cards choose the renderer: Direct3D 11 (the default) or
+Vulkan on Windows; the Mac draws with Metal. Its Graphics Options:
 
 | Setting | What it does |
 | --- | --- |
@@ -160,9 +161,9 @@ Windows, and macOS between copies on one Mac so far (see
 [docs/multiplayer.md](docs/multiplayer.md)). On Linux it is not checked yet.
 
 One player hosts a session and everyone else joins it. Up to 16 copies can be
-in one session. In the launcher's System Link tab:
+in one session. In the launcher's Online:
 
-- Host a session. The tab shows the address to give the others: your PC's
+- Host a session. The launcher shows the address to give the others: your PC's
   address on your own network, and your internet address once your router
   answers. With Open the router on (the default), the game asks your router
   (over UPnP) to forward UDP port 27610 while you host. If your router does not
@@ -345,6 +346,7 @@ file:
 | --- | --- | --- |
 | Resolution | `resolution_scale` | `RECOMP_RES_SCALE` |
 | Widescreen | `widescreen` | `RECOMP_WIDESCREEN` |
+| Renderer | `renderer` (`auto`, `d3d11`, `vulkan`, `metal`) | `RECOMP_D3D8_BACKEND` |
 | Texture sharpness | `anisotropy` | `RECOMP_ANISO` |
 | Frame rate | `frame_cap` (0 for uncapped) | `RECOMP_FPS_CAP` |
 | Show frame rate | `fps_overlay` | `RECOMP_FPS_OVERLAY` |
@@ -421,16 +423,20 @@ Since November 2026 the two are developed separately and nothing is sent
 back upstream. Thank you to phobos665 and everyone who worked on the
 originals; phobos665 can be supported on [Ko-fi](https://ko-fi.com/phobos665).
 
-Timeslip's own icon, logo and box art (`art/`) are drawn by
-`tools/art/make_art.py` and set in [Exo 2](https://github.com/googlefonts/Exo-2.0)
-(SIL Open Font License, `tools/art/fonts/OFL.txt`); the launcher shows that
-mark. Nothing of the game's art is in this repository or its releases, and
-the launcher downloads none of it unless you ask: a `backdrop` and `logo`
-(JPEG or PNG) in an `art/` folder beside the launcher are shown instead,
-which `mac/make_art.sh` makes from your own copy of the game on a Mac, and
-`RECOMP_LAUNCHER_FETCH_ART=1` fetches the game's key art and logo once from
-the [LaunchBox Games Database](https://gamesdb.launchbox-app.com/)
-(`src/launcher_theme_timeslip.h`).
+Timeslip's own icon, logo and box art (`art/`), for the app, its shortcuts
+and this repository, are drawn by `tools/art/make_art.py` and set in
+[Exo 2](https://github.com/googlefonts/Exo-2.0) (SIL Open Font License,
+`tools/art/fonts/OFL.txt`).
+
+The launcher shows the game's own logo and art, made from your own copy of
+the game: `tools/make_disc_art.py` on Windows (the installer,
+`tools/install_windows.ps1`, runs it once) and `mac/make_art.sh` on a Mac
+play into the Siberia level and keep a few of its frames. None of the
+game's art files are in this repository or its releases, and nothing is
+downloaded unless you ask: `RECOMP_LAUNCHER_FETCH_ART=1` fetches the key art
+and logo once from the [LaunchBox Games Database](https://gamesdb.launchbox-app.com/)
+(`src/launcher_theme_timeslip.h`). Without either, the launcher writes the
+game's name.
 
 # Legal
 
