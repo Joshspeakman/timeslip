@@ -23,18 +23,16 @@ camera, its control layouts, its defaults.
 | Frame counter, captures | Toolkit | F9, F11 |
 | Rebindable keyboard and pads | Toolkit | `input_bindings.json`, launcher Input tab; mouse buttons are sources too |
 | Mouse look | Toolkit | `mouse_look`: the mouse pushes controller 1's right stick (raw input, pointer clipped to the window) |
-| Quitting | Toolkit | closing the window or Alt+F4 only; nothing in the game |
+| Quitting | Toolkit | closing the window, Alt+F4, or the in-game menu's Quit to desktop |
+| **In-game menu** (Nov 2026) | Toolkit | Esc: pauses (holds the title and its sound; online the game goes on), Resume, Quit to desktop, and display, frame-rate and mouse settings, saved to the settings file; some apply at once, the rest at the next start, with Restart now. Dear ImGui through the RHI, so the same on every renderer |
 | Renderers | Toolkit | Windows: Direct3D 11 (default), Vulkan. Linux: Vulkan. macOS: Metal (`mac-local`/`metal`), MoltenVK |
 
 ## Missing, in the order it will be done
 
-1. **An in-game menu** (toolkit): Esc while playing, or the window losing
-   the pointer, opens a menu over the game: Resume, the settings that can
-   change while playing (display, frame rate, mouse, controls), and **Quit
-   to desktop**. It releases the pointer and pauses input to the game.
-   Drawn by the renderer itself after the frame (Dear ImGui over the RHI),
-   so it is the same on Direct3D 11, Vulkan and Metal. Settings are written
-   to the title's settings file.
+1. ~~An in-game menu~~ **Done** (Recompose 2bb2629): see the table above.
+   Left: a controller can't open it yet (keyboard only), controls are not
+   rebindable from it (the launcher's Input tab does that), and it is
+   checked on Windows only so far.
 2. **Call of Duty-style keyboard and mouse defaults** (TS2): WASD to move,
    the mouse to look, left button fire, right button aim, R reload, E use,
    C crouch, the wheel and 1-9 for weapons, Esc for the menu, Tab for the
