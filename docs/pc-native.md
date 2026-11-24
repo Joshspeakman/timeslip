@@ -79,8 +79,10 @@ three times with a 640x480 point sample of itself:
 
 - the whole picture veiled at console resolution: "still looks low-res";
 - every edge against a bright background stair-stepped and partly
-  transparent, shifting as the camera moved: the "seams you can see
-  through" along the walls against the sky;
+  transparent, shifting as the camera moved. This is very likely the
+  "seams you can see through" along the walls: it matches where and when
+  Josh saw them (walls against the sky, moving, scaled only), and nothing
+  else that looks like a seam was found. Inferred, not confirmed by him;
 - sparks, fire and smoke with serrated, blocky outlines.
 
 Render targets, depth surfaces and depth textures the game creates are now
@@ -114,8 +116,9 @@ What TS2 draws that depends on the resolution, and where each stands:
 
 Not found: cracks between pieces of the level. Full-resolution scene dumps
 (`RECOMP_PRESENT_DUMP_SCENE=1`) of Siberia and Mexican Mission, still and
-turning, showed none. The long dark line seen from the pistols is the game's
-own bullet trail.
+turning, showed none. A long dark line from a pistol to where it hit, seen
+while firing, is drawn the same at 1x and 5x, at 4:3 and 16:9, so it is the
+game's own (a bullet trail, by its look) rather than anything of the port's.
 
 `tests/lockstep/arcade-mexican-mission-us.trace` is the scene for this:
 Arcade, Deathmatch on Mexican Mission with the recommended bots, walking
@@ -162,6 +165,11 @@ corrected. What was measured, at his settings (16:9, 2560x1440 screen):
   Everything else the two recordings draw unplaced (68 sites in Story
   co-op, 82 in Arcade) the guess put right: text and panels kept in
   proportion, haze and fades across the whole picture.
+
+Online: two copies in one session with widescreen on, 6,000 frames of play
+and firing, the same game on both at every frame. A machine on an older
+build is refused at the handshake (the build id is both repositories'
+commits), so a PC and a Mac on different builds cannot drift apart.
 
 Left: the PAL release has neither the projection hook nor the new sites
 (its addresses are not checked). Screens neither recording reaches
