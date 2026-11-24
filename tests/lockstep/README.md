@@ -10,6 +10,13 @@ must reach the same hash at every checkpoint.
 | File | Release | What it plays | Frames |
 | --- | --- | --- | --- |
 | `coop-siberia-us.trace` | USA | A fresh game: 2 Players, both create a profile, Story Co-op, Siberia, both players walking, turning and firing | 8,000 |
+| `arcade-mexican-mission-us.trace` | USA | A fresh game: 1 Player, a profile, Arcade Custom, Normal, Deathmatch on Mexican Mission with the recommended bots and weapons, walking along the walls, turning, strafing and firing until the bots win (about frame 7,600), then the results screens | 13,500 |
+
+Both are recorded at the default settings and replay the same only at them:
+widescreen (and each player's own screen, `RECOMP_TS2_VIEW_PORT`) change the
+game's memory, so a replay with them on differs from the recording early on
+-- which is fine for comparing pictures between two replays, which agree with
+each other.
 
 Replay one from a copy of the game folder with no `UDATA` (the recording
 starts from a fresh profile) and an empty save folder, muted:
@@ -37,5 +44,14 @@ Checked (23 November 2026): Windows 11 (zig/clang, Direct3D 11 and Vulkan)
 and Linux (WSL Ubuntu, clang, Vulkan on llvmpipe) replay it the same at every
 frame.
 
-Recorded with the menu script in `docs/multiplayer.md` ("Online co-op"),
-then reduced with `py -3 -m tools.lockstep compact`.
+The co-op one was recorded with the menu script in `docs/multiplayer.md`
+("Online co-op"); the Arcade one (24 November 2026, Windows, Direct3D 11)
+with `RECOMP_LOCKSTEP=1` and `RECOMP_INPUT_SEQ` set to
+`12000:start,16000:start,20000:start,24000:start,28000:a,34000:down,38000:a,42000:down,47000:a,52000:a,57000:a,62000:a,67000:a,72000:a`
+(a profile, Arcade, Arcade Custom, Normal, Deathmatch, Mexican Mission, GO,
+the first character), then from 80 s every 6 s for 140 s:
+`<t>:lstick_up:3500,<t+800>:rt:1800,<t+3600>:rstick_left:450,<t+4200>:lstick_left:1200`
+(every third turn to the right, every second strafe to the right). Both were
+reduced with `py -3 -m tools.lockstep compact`. Rendering does not touch the
+game's state: the co-op one replays the same at 5x with offscreen targets
+scaled (24 November 2026).
