@@ -211,7 +211,7 @@ Any other disc, such as the Japanese release or another revision, is refused.
 
 For working on the port. This builds the same game by hand, from a clone,
 against the [Recompose](https://github.com/Joshspeakman/recompose)
-toolkit (`xboxrecomp/` here): the build translates the game's code to C, then
+toolkit (`recompose/` here): the build translates the game's code to C, then
 compiles it.
 
 ## What you need to build
@@ -285,7 +285,7 @@ On Linux, fetch the shader compiler first (once; distributions do not package
 it):
 
 ```sh
-bash xboxrecomp/tools/linux/fetch_dxc.sh
+bash recompose/tools/linux/fetch_dxc.sh
 ```
 
 Then:
@@ -330,7 +330,7 @@ file:
 
 The settings and controls files are as in [Where things are
 kept](#where-things-are-kept);
-the controls' format is in `xboxrecomp/docs/technical/input-binding.md`. What
+the controls' format is in `recompose/docs/technical/input-binding.md`. What
 differs from a release:
 
 | | Windows | macOS and Linux |
@@ -384,7 +384,7 @@ toolkit's
 
 - "no default.xbe in ...": the disc's files are not in `game/`.
 - Linux, "DXC (the shader compiler) is missing": run
-  `bash xboxrecomp/tools/linux/fetch_dxc.sh`, then build again.
+  `bash recompose/tools/linux/fetch_dxc.sh`, then build again.
 
 # Credits
 

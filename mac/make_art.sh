@@ -1,7 +1,7 @@
 #!/bin/bash
 # The launcher's art, made from the player's own copy of the game: nothing from the
 # game is in this repository. Runs the built game once, unseen and muted, down the
-# scripted path to Siberia (xboxrecomp docs/technical/ts2-resource-use.md), capturing
+# scripted path to Siberia (recompose docs/technical/ts2-resource-use.md), capturing
 # frames as it goes; then
 #   logo.png, glow.png   the title screen's own logo textures (mac/tools/captex.py)
 #   backdrop.jpg         the Oblask Dam establishing shot, replayed at 4x

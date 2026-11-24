@@ -1,7 +1,7 @@
 # Writes OUT, a header naming this build by its sources: this repository's
 # commit and the toolkit's, each marked -dirty when it has uncommitted
 # changes. An online co-op session refuses a machine whose build differs
-# (xboxrecomp src/kernel/recomp_lockstep_net.c), because a different build
+# (recompose src/kernel/recomp_lockstep_net.c), because a different build
 # computes a different game. Run at every build (cmake -P), and rewrites OUT
 # only when the name changes, so an unchanged build recompiles nothing.
 #
@@ -24,7 +24,7 @@ function(commit_of dir out)
 endfunction()
 
 commit_of("${SRC}" ts2)
-commit_of("${SRC}/xboxrecomp" xbr)
+commit_of("${SRC}/recompose" xbr)
 set(text "/* Written at every build by cmake/build_id.cmake. */\n#define TS2_BUILD_ID \"ts2 ${ts2} xbr ${xbr}\"\n")
 if(EXISTS "${OUT}")
     file(READ "${OUT}" old)

@@ -2,7 +2,7 @@
 
 `TimeSplitters 2.app`: a launch window in the style of the other native Mac ports, then the recompiled game.
 
-- **Renderer**: a card each for **Metal** (the toolkit's native Metal renderer, `xboxrecomp/src/d3d/rhi_metal.m`) and
+- **Renderer**: a card each for **Metal** (the toolkit's native Metal renderer, `recompose/src/d3d/rhi_metal.m`) and
   **Vulkan** (through MoltenVK, upstream's path). Double-click a card to play with it.
 - **Graphics Options**: window or full screen, resolution 1x–4x, 16:9 or 4:3, texture filtering, frame rate,
   frame interpolation, FPS counter.

@@ -207,7 +207,7 @@ Each record is drawn in one of two ways, so a writer must provide both:
    of consecutive records with the same material** and covers the whole run;
    the other records have `0, 0` (measured: 11,727 lists sit there, 4 sit on
    another record of their run). These index blocks reach the D3D draw unchanged (toolkit
-   capture, `xboxrecomp/docs/technical/modding-models-textures.md`).
+   capture, `recompose/docs/technical/modding-models-textures.md`).
 
 Compared by position, the strip form and the face lists give the same
 triangles in all 11,714 material runs (measured). Compared by position and

@@ -2,7 +2,7 @@
 
 Online co-op runs the whole game on every machine and sends only the
 controllers, so every build on every system has to compute the same game
-from the same pads (xboxrecomp `src/kernel/recomp_lockstep.h`). These files
+from the same pads (recompose `src/kernel/recomp_lockstep.h`). These files
 are the check: controller input for each frame, with a hash of the game's
 state every 60 frames, recorded on one machine. A replay on any other build
 must reach the same hash at every checkpoint.
@@ -29,7 +29,7 @@ both machines and compare them, then dump memory at the first differing
 tick (`RECOMP_LOCKSTEP_DUMP=<tick>`):
 
 ```bash
-py -3 -m tools.lockstep trace a.trace b.trace --base 0x002A01E0   # from xboxrecomp/
+py -3 -m tools.lockstep trace a.trace b.trace --base 0x002A01E0   # from recompose/
 py -3 -m tools.lockstep dump a.trace.t<tick>.bin b.trace.t<tick>.bin
 ```
 

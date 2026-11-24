@@ -12,7 +12,7 @@ so there is no online service to replace. The toolkit emulates the console's
 network card and carries its Ethernet frames between copies, and the game's
 own network code runs unchanged on top. How the card, the sessions and the
 crypto work is toolkit material, in
-`xboxrecomp/docs/technical/system-link.md`. This file keeps what is specific
+`recompose/docs/technical/system-link.md`. This file keeps what is specific
 to TS2.
 
 ## Playing
@@ -89,7 +89,7 @@ The USA release, `netplay` b7aa63c (toolkit bbcbb1c), PC hosting:
 A Linux host in WSL drawing on llvmpipe with every core starved its own
 System Link thread, so its welcome came seconds late and Join Game found
 nothing; `LP_NUM_THREADS=4` fixed that, and so does any real GPU. The
-toolkit now also holds a joiner's first frames until it is welcomed (xboxrecomp
+toolkit now also holds a joiner's first frames until it is welcomed (recompose
 `src/kernel/xbox_net_udp.c`), so a slow welcome no longer loses the search.
 
 What it took, beyond the card:
@@ -97,7 +97,7 @@ What it took, beyond the card:
 - A second USA seed, `0x000D0DD0`, called on the joiner's match load (the
   first, `0x0009D4F0`, opens the menu; see "Not done" for the history).
 - The x87 transcendentals from the toolkit's `src/math` instead of the host's
-  libm (xboxrecomp `src/math/recomp_math.h`): glibc, Apple's libm and Windows'
+  libm (recompose `src/math/recomp_math.h`): glibc, Apple's libm and Windows'
   CRTs round some sin, cos, tan, atan2, log2 and exp2 results differently, and
   two systems playing each other must compute the same game. It turned out
   not to be what was dropping matches, and no match has been seen to drift
@@ -121,7 +121,7 @@ frame about every 100 ms for the rest of the match.
 System Link only ever covered Arcade, and Story co-op on the console is two
 players split-screen on one machine. Online co-op runs that split-screen game
 on both machines and sends only the controllers: each copy computes the same
-game from the same pads, frame by frame (xboxrecomp
+game from the same pads, frame by frame (recompose
 `docs/technical/lockstep.md`). The host is player 1 and the joiner player 2,
 each with their own machine's controller 1.
 
@@ -179,7 +179,7 @@ machine slows the game for both.
   them), less the vblank counter and the music streamer's own state
   (`config/us/overrides.inc`).
 - Everything else is the toolkit's (clocks, sound, the music thread, GPU
-  visibility tests, x87 NaNs, saves, the network): xboxrecomp
+  visibility tests, x87 NaNs, saves, the network): recompose
   `docs/technical/lockstep.md` lists what each difference was.
 
 Two players reach Story Co-op from a fresh game by script (controller 2 by
@@ -220,7 +220,7 @@ replay the same.
 - More than two systems in one session, and Mac against Linux. On one Mac
   (23 November 2026, an M1 Pro, the USA
   release, `netplay` 51d36f3) the card works through the toolkit's POSIX path
-  (the signal handler and the arm64 decoder; xboxrecomp
+  (the signal handler and the arm64 decoder; recompose
   `docs/technical/system-link.md`): two copies, host and join on 127.0.0.1
   with the scripts below, both on the Metal renderer, loaded the same
   Deathmatch on Mexican Mission at 60 fps; over the run the host sent 916

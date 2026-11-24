@@ -11,7 +11,7 @@ Which release the disc is -- PAL or USA -- is read from default.xbe's SHA-1,
 and the addresses for it come from config/<region>/. A release whose folder
 has an xbe_patches.json (PAL: the roster with room for added characters) is
 lifted from its default.xbe with those patches applied; the file on disc is
-only read (xboxrecomp docs/technical/xbe-patches.md).
+only read (recompose docs/technical/xbe-patches.md).
 """
 
 import argparse
@@ -25,7 +25,7 @@ from collections import namedtuple
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TOOLKIT = ROOT / "xboxrecomp"
+TOOLKIT = ROOT / "recompose"
 GEN = ROOT / "src" / "recomp" / "gen"
 BUILD = ROOT / "build"
 # Which release src/recomp/gen was lifted from, for the C side
@@ -112,7 +112,7 @@ def write_manual_scan(release: Release) -> Path:
 
     The toolkit scans one file, <project>/src/recomp_manual.c, as text: a
     function it defines is not generated, and one it wraps is generated as
-    sub_X_gen (xboxrecomp tools/recomp/manual_scan.py). TimeSplitters 2's
+    sub_X_gen (recompose tools/recomp/manual_scan.py). TimeSplitters 2's
     overrides are src/recomp_manual.c, which is the same for every release,
     plus config/<region>/overrides.inc, which names this release's functions
     and which src/recomp_manual.c includes. So the scan is given the two as
@@ -159,7 +159,7 @@ def main() -> int:
     xbe = game / "default.xbe"
 
     if not (TOOLKIT / "scripts" / "recompile.py").is_file():
-        return fail("the xboxrecomp submodule is missing. Run: git submodule update --init")
+        return fail("the Recompose submodule is missing. Run: git submodule update --init")
     if not xbe.is_file():
         return fail(f"no default.xbe in {game}. Copy the extracted disc there "
                     f"(see README.md).")
@@ -178,7 +178,7 @@ def main() -> int:
                      or (sdk and (Path(sdk) / "include" / "dxc" / "dxcapi.h").is_file()))
         if not dxc_found:
             return fail("DXC (the shader compiler) is missing, and without it the game "
-                        "has no picture.\n       Run: bash xboxrecomp/tools/linux/fetch_dxc.sh")
+                        "has no picture.\n       Run: bash recompose/tools/linux/fetch_dxc.sh")
 
     # config/<region>/ holds addresses inside one particular default.xbe.
     # Another release puts its functions elsewhere, and lifting it with the

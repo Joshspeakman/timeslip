@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-# TimeSplitters 2, statically recompiled on the xboxrecomp toolkit.
+# TimeSplitters 2, statically recompiled on the Recompose toolkit.
 #
 # Build with scripts/build.py, which lifts the game first. The generated
 # sources in src/recomp/gen/ come from your own copy of the game and are
@@ -18,11 +18,11 @@ add_compile_definitions(
     NOMINMAX
 )
 
-set(XBOXRECOMP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/xboxrecomp" CACHE PATH
-    "Path to the xboxrecomp toolkit (the submodule by default)")
+set(XBOXRECOMP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/recompose" CACHE PATH
+    "Path to the Recompose toolkit (the submodule by default)")
 
 if(NOT EXISTS "${XBOXRECOMP_DIR}/CMakeLists.txt")
-    message(FATAL_ERROR "xboxrecomp not found at ${XBOXRECOMP_DIR}. "
+    message(FATAL_ERROR "Recompose not found at ${XBOXRECOMP_DIR}. "
         "Run: git submodule update --init")
 endif()
 

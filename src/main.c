@@ -50,7 +50,7 @@
 #include <malloc/malloc.h>            /* malloc_zone_pressure_relief */
 #endif
 
-/* xboxrecomp runtime headers */
+/* recompose runtime headers */
 #include <xbox/xboxrecomp.h>
 #include "xbox_watchpoint.h"
 #include "xbox_fault_route.h"
@@ -626,7 +626,7 @@ static int title_main(int argc, char **argv)
      * does nothing while appearing to be set. */
     xbox_WatchdogStart();
 
-    /* Online co-op (xboxrecomp src/kernel/recomp_lockstep.h): a joiner meets
+    /* Online co-op (recompose src/kernel/recomp_lockstep.h): a joiner meets
      * its host here -- the session's clock, the host's saves, the settings
      * that change the game checked -- before the game reads anything. Does
      * nothing unless RECOMP_LOCKSTEP_NET is set. */

@@ -1,4 +1,4 @@
 [submodule "xboxrecomp"]
-	path = xboxrecomp
-	url = https://github.com/Joshspeakman/DirectXbox-Recomp.git
-	branch = metal
+	path = recompose
+	url = https://github.com/Joshspeakman/recompose.git
+	branch = main

@@ -21,7 +21,7 @@ git fetch -q origin "$BRANCH"
 git checkout -q "$BRANCH"
 git merge -q --ff-only "origin/$BRANCH"
 echo "== $BRANCH: $(git log -1 --format='%h %s')"
-git submodule update --init xboxrecomp
+git submodule update --init recompose
 echo "== recompiling"
 PY=python3; [ -x "$HOME/.venvs/recomp/bin/python" ] && PY=$HOME/.venvs/recomp/bin/python
 VULKAN_SDK=${VULKAN_SDK:-$HOME/VulkanSDK/1.4.357.1/macOS} "$PY" scripts/build.py --relift

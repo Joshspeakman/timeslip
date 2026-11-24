@@ -36,7 +36,7 @@ file, mip level 0 first. All fields are little-endian 32-bit.
 The bytes from 0x80 go to `D3DResource_Register` as the texture's data, so
 the game uses the disc's bytes as they are (code). The toolkit's own
 measurement agrees: a captured texture's level 0 is the file's bytes from +128
-(`xboxrecomp/docs/technical/modding-models-textures.md`).
+(`recompose/docs/technical/modding-models-textures.md`).
 
 There is no magic number and no size field. The loader refuses only a negative
 width or height (code).
@@ -115,7 +115,7 @@ The Xbox swizzle for a power-of-two `w x h` level: the texel at (x, y) is
 stored at an index whose bits interleave those of x and y, starting with x in
 bit 0. Once the shorter side has run out of bits, the longer side's remaining
 bits fill the top. This is the toolkit's `xbox_swizzle_masks` in
-`xboxrecomp/src/d3d/d3d8_swizzle.h` (xemu's algorithm).
+`recompose/src/d3d/d3d8_swizzle.h` (xemu's algorithm).
 
 ### Against the community references
 

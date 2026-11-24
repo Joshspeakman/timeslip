@@ -10,7 +10,7 @@ it (127 dwords at 0x0035C2D8, BSS) and the texture list that holds the
 portraits (548 entries of 0x10 at 0x002BF7B0) are fixed-size tables in
 .data with their counts written into the code. This moves the three into a
 section added after the image, with SPARE more entries in each, and repoints
-every instruction that names them (xboxrecomp docs/technical/xbe-patches.md,
+every instruction that names them (recompose docs/technical/xbe-patches.md,
 the file format; docs/formats/roster.md, "Room for more characters", the
 sites and why each one changes).
 
@@ -167,7 +167,7 @@ def main():
     data = open(a.xbe, "rb").read()
     if hashlib.sha1(data).hexdigest() != PAL_SHA1:
         sys.exit("not the PAL default.xbe these addresses are for")
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "xboxrecomp"))
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "recompose"))
     from tools.xbe_patch.patcher import Image
     img = Image(data)
 

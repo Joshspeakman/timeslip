@@ -1,9 +1,9 @@
 # Enhancements: what is done and what is next
 
 Tracking list for TimeSplitters 2. Each candidate has an estimate and a
-split: **toolkit** work goes in xboxrecomp and every title gets it;
+split: **toolkit** work goes in recompose and every title gets it;
 **TS2** work is this repository. The general list, and the reasoning behind
-the split, is in `xboxrecomp/docs/technical/xbox-game-enhancements.md`.
+the split, is in `recompose/docs/technical/xbox-game-enhancements.md`.
 
 Estimates are working time; calendar time will be longer. They date from
 30 September 2026.
@@ -30,7 +30,7 @@ Estimates are working time; calendar time will be longer. They date from
 - Not yet checked: the first-person weapon and muzzle flashes while
   firing, guards animating (the bone matrices), the pause menu, a death.
 - Measurements and how it works:
-  `xboxrecomp/docs/technical/frame-interpolation.md`.
+  `recompose/docs/technical/frame-interpolation.md`.
 
 ### System Link leftovers
 
@@ -113,7 +113,7 @@ then add new ones to the roster. **How to do it: [modding.md](modding.md)**
 (editing, new characters from two existing ones, from Blender, or low-poly
 from boxes; adding them to the roster; keeping private ones out of git). Estimated 15 October 2026. The format
 research behind it is in
-`xboxrecomp/docs/technical/modding-models-textures.md`.
+`recompose/docs/technical/modding-models-textures.md`.
 
 What makes it feasible:
 
@@ -132,7 +132,7 @@ What makes it feasible:
 
 | Step | Where | Estimate |
 | --- | --- | --- |
-| A `mods/` folder read before the disc's `.pak` files | Toolkit | **Done:** `RECOMP_MODS` (xboxrecomp `feat/mods-overlay`; macOS checked, Windows not built yet) |
+| A `mods/` folder read before the disc's `.pak` files | Toolkit | **Done:** `RECOMP_MODS` (recompose `feat/mods-overlay`; macOS checked, Windows not built yet) |
 | `.pak` unpack and repack (or `tspak`) | TS2 | **Done:** `tools/ts2pak.py`, all 68 paks round-trip byte for byte |
 | Write a character's files into every pak that holds them (see below) | TS2 | **Done:** `tools/ts2mod.py build`, checked in Siberia; and since 15 Oct 2026 at run time instead, from a mod's `files/` (a recolour of the Siberian guards' textures, as loose files, drew in Siberia) |
 | **Mods stack:** loose files inside the paks served at run time from every `RECOMP_MODS` folder, new names added to a pak's directory, every mod's `characters.ini` merged | TS2 (+ toolkit `xbox_mods_walk`) | **Done (PAL):** two `ts2kitbash` mods (two characters, one) and a texture mod together: all three characters on Select Character and playable, the recoloured guards in Siberia; each alone, and both orders; a mod's loose files on top of another's whole paks (scripted, macOS) |
@@ -142,7 +142,7 @@ What makes it feasible:
 | Low-detail models (`chrNNlod2.xbr`) and hat and head attachment points | TS2 | 3–5 days |
 | Checking in game: animation, hit detection, split screen | TS2 | ~5 days |
 | **A character in the spare roster slot**, declared by a mod (`ts2/characters.ini`): name, portrait, description, unlock, stats and voice | TS2 | **Done (PAL):** Agent Static (chr id 70) on Select Character, in matches, in the bot list and the Gallery (15 columns); `docs/formats/roster.md`, "Adding a character (mods)" |
-| **Characters added, not swapped:** the roster grown in the XBE before the lift (xboxrecomp XBE patches; `config/pal/xbe_patches.json`): 32 hidden spare slots, the unlock snapshot and the portraits' texture list with them, 78 code sites repointed; `slot = next` in `ts2/characters.ini`, and `tools/ts2kitbash.py` writes that file from its recipe | TS2 | **Done (PAL):** Agent Static, The Bone Ranger and Monkey Business added beside all 126 characters: Select Character, a match each, the Gallery (15 columns); no mod, no change (frame dumps against the unpatched build); `docs/formats/roster.md`, "Room for more characters" |
+| **Characters added, not swapped:** the roster grown in the XBE before the lift (recompose XBE patches; `config/pal/xbe_patches.json`): 32 hidden spare slots, the unlock snapshot and the portraits' texture list with them, 78 code sites repointed; `slot = next` in `ts2/characters.ini`, and `tools/ts2kitbash.py` writes that file from its recipe | TS2 | **Done (PAL):** Agent Static, The Bone Ranger and Monkey Business added beside all 126 characters: Select Character, a match each, the Gallery (15 columns); no mod, no change (frame dumps against the unpatched build); `docs/formats/roster.md`, "Room for more characters" |
 | More than 35 new characters (new chr ids: the definition, flags and object tables grow too), new characters in story levels | TS2 | 2–3 weeks |
 | **To add characters:** System Link refuses players whose mods differ | Toolkit | 2–3 days |
 

@@ -462,7 +462,7 @@ void recomp_icall_not_code_log(uint32_t va, uint32_t saved_esp)
  * config/<region>/overrides.inc wraps its own with the hooks in this file
  * (see the end of it), so nothing in this file is an address.
  */
-/* xboxrecomp src/d3d/d3d8_xbox.h */
+/* recompose src/d3d/d3d8_xbox.h */
 extern float xbox_D3D8ClaimHorPlus(void);
 extern void  xbox_D3D8SetWideFrames(int wide);
 
@@ -551,7 +551,7 @@ static int ts2_menus_wide(void)
 }
 
 /*
- * Frame interpolation (xboxrecomp hle_d3d8_interp.c, RECOMP_FRAME_INTERP)
+ * Frame interpolation (recompose hle_d3d8_interp.c, RECOMP_FRAME_INTERP)
  * blends the matrices in TS2's vertex constants, measured from captures:
  * c60-c63 hold the projection alone, set once or twice a frame; c64-c67
  * the model-view of each object; c68-c75 the second and third matrices of
@@ -561,7 +561,7 @@ static int ts2_menus_wide(void)
 extern void xbox_D3D8SetInterpRegisters(int projection, int affine_first, int affine_count);
 
 /*
- * Online co-op (xboxrecomp src/kernel/recomp_lockstep.h): each player has
+ * Online co-op (recompose src/kernel/recomp_lockstep.h): each player has
  * the whole screen, as in GoldenEye's network co-op. Both machines run the
  * whole two-player game, so both must lay it out the same way, and they do:
  * every player's view is laid out as the whole screen, as in one-player play,
@@ -770,7 +770,7 @@ static void ts2_present(void (*present)(void))
 enum { TS2_UI_AUTO = 0, TS2_UI_STRETCH, TS2_UI_CENTRE, TS2_UI_LEFT, TS2_UI_RIGHT,
        TS2_UI_SIDE };
 
-/* xboxrecomp src/hle/hle_d3d8_record.h: xbox_D3D8SetTwoDPlacement, recorded in
+/* recompose src/hle/hle_d3d8_record.h: xbox_D3D8SetTwoDPlacement, recorded in
  * frame captures so a capture replays with these placements. Same values
  * as XBOX_D3D8_2D_*. */
 extern void host_SetTwoDPlacement(int placement, uint32_t tag);
@@ -1093,7 +1093,7 @@ typedef struct Ts2Roster {
  * found in that release yet. */
 extern const Ts2Roster k_ts2_roster;
 
-/* xboxrecomp src/kernel: kernel_path.c, xbox_memory_layout.c */
+/* recompose src/kernel: kernel_path.c, xbox_memory_layout.c */
 extern int         xbox_mods_count(void);
 extern const char *xbox_mods_dir(int i);
 extern uint32_t xbox_HeapAlloc(uint32_t size, uint32_t alignment);
@@ -1614,7 +1614,7 @@ static void ts2_gallery_draw(void (*draw)(void))
  * added to them would hide a level's own. paks/<pak>/ adds to that pak
  * whatever its kind.
  *
- * The mods are indexed once, at start-up (xboxrecomp xbox_mods_walk); a
+ * The mods are indexed once, at start-up (recompose xbox_mods_walk); a
  * mount only compares the pak's directory against that index, and a read
  * opens the one host file it needs.
  */
@@ -1632,7 +1632,7 @@ typedef struct Ts2Paks {
  * found in that release yet, and nothing here runs. */
 extern const Ts2Paks k_ts2_paks;
 
-/* xboxrecomp src/kernel/kernel.h */
+/* recompose src/kernel/kernel.h */
 typedef void (*xbox_mods_walk_fn)(const char *rel, const char *host_path,
                                   unsigned long long size, void *ctx);
 extern int         xbox_mods_walk(int mod, const char *sub, xbox_mods_walk_fn fn, void *ctx);
@@ -2314,7 +2314,7 @@ static void ts2_paks_read_async(void (*start)(void))
 
 /*
  * Online co-op runs the whole game on every machine and sends only the
- * controllers (xboxrecomp src/kernel/recomp_lockstep.h), so every copy must
+ * controllers (recompose src/kernel/recomp_lockstep.h), so every copy must
  * step the game by the same amount each frame. TS2 does not step by one: its
  * frame clock (frame_clock, USA sub_001ADF80) reads a vblank counter that its
  * vblank callback bumps on the host's vblank thread, and steps the game by
@@ -2378,7 +2378,7 @@ static void ts2_vblank_count(void (*gen)(void))
  * scripts/build.py writes with the lift.
  *
  * The lifter decides what not to generate by reading this file as text
- * (xboxrecomp tools/recomp/manual_scan.py) and does not follow the #include
+ * (recompose tools/recomp/manual_scan.py) and does not follow the #include
  * below, so scripts/build.py hands it this file and the release's
  * overrides.inc as one: each release's functions, and only those, are
  * wrapped. A function goes into a release's overrides.inc only once it has

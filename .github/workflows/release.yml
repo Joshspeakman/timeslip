@@ -40,12 +40,12 @@ jobs:
       # The toolkit, and of its submodules only what the release builds.
       - name: Fetch the toolkit
         run: |
-          git submodule update --init --depth 1 xboxrecomp
-          git -C xboxrecomp submodule update --init --depth 1 \
+          git submodule update --init --depth 1 recompose
+          git -C recompose submodule update --init --depth 1 \
             third_party/SDL third_party/Vulkan-Headers \
             third_party/volk third_party/VulkanMemoryAllocator \
             third_party/libsamplerate third_party/miniupnp
-          git -C xboxrecomp submodule update --init --recursive --depth 1 \
+          git -C recompose submodule update --init --recursive --depth 1 \
             third_party/XbSymbolDatabase
 
       # The release's zig compiles against its own glibc headers; these are
@@ -62,12 +62,12 @@ jobs:
             libfreetype-dev libfontconfig-dev
 
       - name: Fetch DXC
-        run: bash xboxrecomp/tools/linux/fetch_dxc.sh
+        run: bash recompose/tools/linux/fetch_dxc.sh
 
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/downloads
-          key: release-downloads-${{ hashFiles('xboxrecomp/tools/release/fetch_toolchain.py') }}
+          key: release-downloads-${{ hashFiles('recompose/tools/release/fetch_toolchain.py') }}
 
       # zig's own cache: the C runtime and compiler-rt it builds from source
       # the first time it links for a target. Content-addressed by zig, so a
@@ -75,10 +75,10 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/work/zig-cache
-          key: release-zig-cache-linux-${{ hashFiles('xboxrecomp/tools/release/fetch_toolchain.py', 'xboxrecomp/tools/release/zigwrap.c') }}
+          key: release-zig-cache-linux-${{ hashFiles('recompose/tools/release/fetch_toolchain.py', 'recompose/tools/release/zigwrap.c') }}
 
       - name: Make the release
-        working-directory: xboxrecomp
+        working-directory: recompose
         run: |
           python3 -m tools.release.make_release ../release/timeslip.json \
             --out "$RUNNER_TEMP/release/timeslip" --work "$RUNNER_TEMP/work" \
@@ -101,36 +101,36 @@ jobs:
 
       - name: Fetch the toolkit
         run: |
-          git submodule update --init --depth 1 xboxrecomp
-          git -C xboxrecomp submodule update --init --depth 1 \
+          git submodule update --init --depth 1 recompose
+          git -C recompose submodule update --init --depth 1 \
             third_party/SDL third_party/Vulkan-Headers \
             third_party/volk third_party/VulkanMemoryAllocator \
             third_party/libsamplerate third_party/miniupnp
-          git -C xboxrecomp submodule update --init --recursive --depth 1 \
+          git -C recompose submodule update --init --recursive --depth 1 \
             third_party/XbSymbolDatabase
 
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/vulkan-sdk-downloads
-          key: vulkan-sdk-${{ hashFiles('xboxrecomp/tools/macos/fetch_vulkan_sdk.sh') }}
+          key: vulkan-sdk-${{ hashFiles('recompose/tools/macos/fetch_vulkan_sdk.sh') }}
 
       - name: Fetch the Vulkan SDK
         run: |
-          bash xboxrecomp/tools/macos/fetch_vulkan_sdk.sh "$RUNNER_TEMP/VulkanSDK" \
+          bash recompose/tools/macos/fetch_vulkan_sdk.sh "$RUNNER_TEMP/VulkanSDK" \
             "$RUNNER_TEMP/vulkan-sdk-downloads" >> "$GITHUB_ENV"
 
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/downloads
-          key: release-downloads-macos-${{ hashFiles('xboxrecomp/tools/release/fetch_toolchain.py') }}
+          key: release-downloads-macos-${{ hashFiles('recompose/tools/release/fetch_toolchain.py') }}
 
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/work/zig-cache
-          key: release-zig-cache-macos-${{ hashFiles('xboxrecomp/tools/release/fetch_toolchain.py', 'xboxrecomp/tools/release/zigwrap.c') }}
+          key: release-zig-cache-macos-${{ hashFiles('recompose/tools/release/fetch_toolchain.py', 'recompose/tools/release/zigwrap.c') }}
 
       - name: Make the release
-        working-directory: xboxrecomp
+        working-directory: recompose
         run: |
           python3 -m tools.release.make_release ../release/timeslip.json \
             --out "$RUNNER_TEMP/release/timeslip" --work "$RUNNER_TEMP/work" \
@@ -155,28 +155,28 @@ jobs:
 
       - name: Fetch the toolkit
         run: |
-          git submodule update --init --depth 1 xboxrecomp
-          git -C xboxrecomp submodule update --init --depth 1 \
+          git submodule update --init --depth 1 recompose
+          git -C recompose submodule update --init --depth 1 \
             third_party/SDL third_party/Vulkan-Headers \
             third_party/volk third_party/VulkanMemoryAllocator \
             third_party/libsamplerate third_party/miniupnp
-          git -C xboxrecomp submodule update --init --recursive --depth 1 \
+          git -C recompose submodule update --init --recursive --depth 1 \
             third_party/XbSymbolDatabase
 
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/downloads
-          key: release-downloads-windows-${{ hashFiles('xboxrecomp/tools/release/fetch_toolchain.py', 'xboxrecomp/tools/release/zigwrap.c') }}
+          key: release-downloads-windows-${{ hashFiles('recompose/tools/release/fetch_toolchain.py', 'recompose/tools/release/zigwrap.c') }}
 
       # On Windows zig's cache is MinGW's runtime, built again for every new
       # set of CPU features: the compiler checks took 14 minutes of a cold run.
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/work/zig-cache
-          key: release-zig-cache-windows-${{ hashFiles('xboxrecomp/tools/release/fetch_toolchain.py', 'xboxrecomp/tools/release/zigwrap.c') }}
+          key: release-zig-cache-windows-${{ hashFiles('recompose/tools/release/fetch_toolchain.py', 'recompose/tools/release/zigwrap.c') }}
 
       - name: Make the release
-        working-directory: xboxrecomp
+        working-directory: recompose
         run: |
           python -m tools.release.make_release ../release/timeslip.json \
             --out "$RUNNER_TEMP/release/timeslip" --work "$RUNNER_TEMP/work" \
@@ -205,12 +205,12 @@ jobs:
 
       - name: Fetch the toolkit
         run: |
-          git submodule update --init --depth 1 xboxrecomp
-          git -C xboxrecomp submodule update --init --depth 1 \
+          git submodule update --init --depth 1 recompose
+          git -C recompose submodule update --init --depth 1 \
             third_party/SDL third_party/Vulkan-Headers \
             third_party/volk third_party/VulkanMemoryAllocator \
             third_party/libsamplerate third_party/miniupnp
-          git -C xboxrecomp submodule update --init --recursive --depth 1 \
+          git -C recompose submodule update --init --recursive --depth 1 \
             third_party/XbSymbolDatabase
 
       # A tag's APK must carry the release key: one signed with a throwaway
@@ -239,17 +239,17 @@ jobs:
       # (an LLVM build: long the first time, so the results are kept).
       - uses: actions/cache@v4
         with:
-          path: xboxrecomp/third_party/android
-          key: android-deps-${{ env.NDK_VERSION }}-${{ hashFiles('xboxrecomp/tools/android/fetch_deps.py', 'xboxrecomp/tools/android/build_dxc.sh') }}
+          path: recompose/third_party/android
+          key: android-deps-${{ env.NDK_VERSION }}-${{ hashFiles('recompose/tools/android/fetch_deps.py', 'recompose/tools/android/build_dxc.sh') }}
 
       - name: Fetch the device's toolchain
         run: |
-          python3 xboxrecomp/tools/android/fetch_deps.py
+          python3 recompose/tools/android/fetch_deps.py
           # Only the results are kept: the sources and build trees are GBs.
-          rm -rf xboxrecomp/third_party/android/dxc-src \
-            xboxrecomp/third_party/android/dxc-build \
-            xboxrecomp/third_party/android/capstone/src \
-            xboxrecomp/third_party/android/capstone/build
+          rm -rf recompose/third_party/android/dxc-src \
+            recompose/third_party/android/dxc-build \
+            recompose/third_party/android/capstone/src \
+            recompose/third_party/android/capstone/build
 
       # Without the key, make_apk signs with a key of its own.
       - name: Make the APK
@@ -259,7 +259,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/release"
           read -r PACKAGE LABEL < <(python3 -c 'import json; a = json.load(open("release/timeslip.json"))["android"]; print(a["package"], a["label"])')
-          python3 xboxrecomp/tools/android/build_apk.py --project . \
+          python3 recompose/tools/android/build_apk.py --project . \
             --recipe release/timeslip.json --package "$PACKAGE" --label "$LABEL" \
             --version-code "${{ github.run_number }}" --version-name "$VERSION" \
             --out "$RUNNER_TEMP/release/timeslip-$VERSION-android-arm64.apk"

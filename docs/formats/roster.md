@@ -636,7 +636,7 @@ panel's old width (measured).
 ## Room for more characters (the XBE patch)
 
 Every PAL lift applies `config/pal/xbe_patches.json` (written by
-`tools/ts2_roster_patches.py`; the format is xboxrecomp's
+`tools/ts2_roster_patches.py`; the format is recompose's
 `docs/technical/xbe-patches.md`). It adds a section, `TS2ROSTER` at
 `0x004CE000` (0x4000 bytes, after `dsstdfx`, the last one), moves three
 tables into it with room for **32 spare roster slots**, and repoints the
