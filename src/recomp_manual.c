@@ -465,6 +465,8 @@ void recomp_icall_not_code_log(uint32_t va, uint32_t saved_esp)
  */
 /* recompose src/d3d/d3d8_xbox.h */
 extern float xbox_D3D8ClaimHorPlus(void);
+/* recompose src/hle/hle_menu.h: the title's own menu is up, or play */
+extern void hle_window_title_menu(int on);
 /* recompose src/hle/hle_settings.h */
 extern int hle_fov(void);
 extern void  xbox_D3D8SetWideFrames(int wide);
@@ -489,8 +491,9 @@ static float ts2_camera_widen(void)
     return widen;
 }
 
-/* What the frame now being drawn has run, for the choice below. */
-static int g_ts2_frame_camera, g_ts2_frame_front_end;
+/* What the frame now being drawn has run, for the choice below; whether a
+ * player was updated in it (ts2_mouse_look), which is play. */
+static int g_ts2_frame_camera, g_ts2_frame_front_end, g_ts2_frame_play;
 
 /*
  * The field of view (the toolkit's fov setting, the in-game menu's slider):
@@ -503,21 +506,69 @@ static int g_ts2_frame_camera, g_ts2_frame_front_end;
  */
 #define TS2_FOV_DEFAULT 60.0f
 
+/*
+ * The first-person weapon at the game's own field of view. TS2 draws the
+ * hands and weapon with the camera's projection, uploaded together with
+ * their own transform (c60-c67 in one upload, which nothing of the level
+ * does: its pieces upload the projection alone, c60-c63, and their
+ * transforms apart). With the field of view widened the weapon shrank
+ * toward the middle of the screen and the arms showed to the elbow: "the
+ * gun just looks like it's floating" (Josh, 24 Nov 2026). Such an upload
+ * of the widened projection gets the 60-degree one the game was made with
+ * (the same x and y scales, multiplied by tan(fov/2) / tan(30)), on its way
+ * to the renderer (xbox_D3D8SetConstantFilter), so the weapon sits where
+ * it always did at any field of view. A scope's narrower view is the
+ * game's own and is left alone.
+ */
+extern void xbox_D3D8SetConstantFilter(void (*fn)(int first_reg, float *data, int count));
+
+static float g_ts2_fov_sx, g_ts2_fov_sy, g_ts2_own_sx, g_ts2_own_sy;
+
+static void ts2_weapon_fov(int first, float *data, int count)
+{
+    if (first == 60 && count == 8 && g_ts2_fov_sx != 0.0f &&
+        data[0] == g_ts2_fov_sx && data[5] == g_ts2_fov_sy) {
+        data[0] = g_ts2_own_sx;
+        data[5] = g_ts2_own_sy;
+    }
+}
+
 static void ts2_camera_setup(void (*camera_setup)(void), uint32_t player_caller)
 {
     float widen = ts2_camera_widen();
-    int fov = hle_fov();
+    int fov = hle_fov(), fov_set = 0;
 
     if (widen != 1.0f)
         TS2_MEMF(g_esp + 0x0C) *= widen;   /* [esp] is the return address */
     if (fov > 0 && player_caller && TS2_MEM32_EARLY(g_esp) == player_caller &&
-        TS2_MEMF(g_esp + 0x10) == TS2_FOV_DEFAULT)
+        TS2_MEMF(g_esp + 0x10) == TS2_FOV_DEFAULT) {
         TS2_MEMF(g_esp + 0x10) = (float)fov;
+        fov_set = fov != (int)TS2_FOV_DEFAULT;
+    }
     /* Read before the call, which may pop them (for the log below). */
     uint32_t log_caller = TS2_MEM32_EARLY(g_esp);
     float log_arg = TS2_MEMF(g_esp + 0x0C), log_fovy = TS2_MEMF(g_esp + 0x10);
     camera_setup();
     g_ts2_frame_camera = 1;                /* see ts2_present below */
+    if (fov_set) {
+        static int filtering;
+        uint32_t cam = TS2_MEM32_EARLY(0x004B2F60u);
+        uint32_t m = cam ? TS2_MEM32_EARLY(cam + 0x204) : 0;
+
+        if (m) {
+            /* tan(fov/2) / tan(30 degrees) */
+            float k = (float)(tan((double)fov * 3.14159265358979 / 360.0) / 0.57735026918962573);
+
+            g_ts2_fov_sx = TS2_MEMF(m + 0x00);
+            g_ts2_fov_sy = TS2_MEMF(m + 0x14);
+            g_ts2_own_sx = g_ts2_fov_sx * k;
+            g_ts2_own_sy = g_ts2_fov_sy * k;
+            if (!filtering) {
+                filtering = 1;
+                xbox_D3D8SetConstantFilter(ts2_weapon_fov);
+            }
+        }
+    }
     /* RECOMP_TS2_CAMLOG=1: the aspect each camera ends up with -- the
      * horizontal half-width the game keeps over the vertical one -- each
      * time it changes for a caller, with the frame. 16:9 on screen wants
@@ -846,13 +897,208 @@ static int ts2_look_player(uint32_t current_player, uint32_t player_controller,
     return 1;
 }
 
+/*
+ * A test that plays the game (RECOMP_TS2_SWEEP=<script file>), for finding
+ * what goes wrong in the picture while a player turns fast, fires and
+ * switches weapons: it moves controller 1's player, hands it weapons, keeps
+ * it alive and turns it as a mouse would, by lockstep tick, so a run with
+ * RECOMP_LOCKSTEP=1 does the same at the same frames every time. Nothing of
+ * it runs without the variable. One step a line ('#' starts a comment):
+ *
+ *   give <tick> <weapon id> ...           own these weapons, every ammo full
+ *   look <from> <to> <yaw> <pitch>        turn by that much a frame (degrees;
+ *                                         a positive yaw turns right)
+ *   swing <from> <to> <deg> <frames>      turn right <deg> a frame for
+ *                                         <frames> frames, then back, again
+ *   weapon <tick> <weapon id>             switch to that weapon (the game's own
+ *                                         switch, as when one is picked up)
+ *   god <from> <to>                       health kept full
+ *   pin <from> <to>                       kept where it stood at <from> (the
+ *                                         bots' shots push a player about)
+ *   log <file>                            each frame of play: tick, position,
+ *                                         yaw, pitch, weapon, ammo, health
+ *
+ * Where the player is comes from the match: under lockstep with the same
+ * menu script it starts at the same place every time (Mexican Mission's
+ * Arcade script in the docs: inside the mission, in the cloister). Writing a
+ * new position does not move it there: the game keeps which room the
+ * player is in apart from the position, so a player written into another
+ * room stood on the old room's floor and saw almost nothing of the level.
+ *
+ * The player, found by logging and memory dumps of an Arcade match (USA, 24
+ * Nov 2026): the player context (0x00497100 while it is updated) holds the
+ * yaw and pitch (+0x148, +0x14C) and copies of the position (+0xF0 the feet,
+ * +0xFC the eyes); +0x1BC is its character, which holds the position
+ * (+0x58, again at +0xA0), health (+0x19C, its most +0x1A0) and at +0x124
+ * the player's weapons: the weapon in hand (+0xC8), one word a weapon id
+ * for each weapon owned (+0x984) and the ammo of each kind (+0xA2C; 1 is
+ * pistol ammo, 6 shotgun shells). A match's five weapons are a count and
+ * five ids (Mexican Mission's Recommended: 6, 32, 22, 13, 20).
+ */
+#define TS2_SWEEP_MAX 512
+enum { TS2_SW_GIVE, TS2_SW_LOOK, TS2_SW_SWING, TS2_SW_GOD, TS2_SW_PIN, TS2_SW_WEAPON };
+typedef struct { int kind; uint32_t from, to; float v[8]; int n; } Ts2SweepStep;
+static Ts2SweepStep g_ts2_sweep[TS2_SWEEP_MAX];
+static int g_ts2_sweep_n = -1;
+static FILE *g_ts2_sweep_log;
+
+static void ts2_sweep_load(void)
+{
+    const char *path = getenv("RECOMP_TS2_SWEEP");
+    char line[512];
+    FILE *f;
+
+    g_ts2_sweep_n = 0;
+    if (!path || !*path || !(f = fopen(path, "r")))
+        return;
+    while (fgets(line, sizeof line, f) && g_ts2_sweep_n < TS2_SWEEP_MAX) {
+        Ts2SweepStep *s = &g_ts2_sweep[g_ts2_sweep_n];
+        char word[16], *p = line, *end;
+        unsigned a = 0, b = 0;
+        int used = 0;
+
+        if (sscanf(p, "%15s%n", word, &used) != 1 || word[0] == '#')
+            continue;
+        p += used;
+        memset(s, 0, sizeof *s);
+        if (!strcmp(word, "log")) {
+            char file[400];
+            if (sscanf(p, " %399[^\r\n]", file) == 1 && !g_ts2_sweep_log)
+                g_ts2_sweep_log = fopen(file, "w");
+            if (g_ts2_sweep_log)
+                fprintf(g_ts2_sweep_log, "tick,x,y,z,yaw,pitch,wanted,held,ammo,health\n");
+            continue;
+        }
+        if (!strcmp(word, "give") || !strcmp(word, "weapon")) {
+            s->kind = word[0] == 'g' ? TS2_SW_GIVE : TS2_SW_WEAPON;
+            a = (unsigned)strtoul(p, &end, 10);
+            b = a;
+        } else {
+            s->kind = !strcmp(word, "look") ? TS2_SW_LOOK : !strcmp(word, "swing") ? TS2_SW_SWING
+                    : !strcmp(word, "god") ? TS2_SW_GOD : !strcmp(word, "pin") ? TS2_SW_PIN : -1;
+            if (s->kind < 0)
+                continue;
+            a = (unsigned)strtoul(p, &end, 10);
+            b = (unsigned)strtoul(end, &end, 10);
+        }
+        s->from = a;
+        s->to = b;
+        for (p = end; s->n < 8; s->n++) {
+            float x = strtof(p, &end);
+            if (end == p)
+                break;
+            s->v[s->n] = x;
+            p = end;
+        }
+        g_ts2_sweep_n++;
+    }
+    fclose(f);
+    fprintf(stderr, "[TS2] sweep test: %d steps from %s\n", g_ts2_sweep_n, path);
+}
+
+/* The steps due this frame for controller 1's player; the turn it asks for,
+ * in the mouse's terms (positive x turns right, positive y looks down). */
+static int ts2_sweep(uint32_t ctx, uint32_t port, float *dx, float *dy)
+{
+    static uint32_t last_tick = ~0u;
+    uint32_t tick = recomp_lockstep_tick(), chr, pw;
+    int i, turned = 0;
+
+    *dx = *dy = 0.0f;
+    if (g_ts2_sweep_n < 0)
+        ts2_sweep_load();
+    if (!g_ts2_sweep_n || port != 0u || tick == last_tick)
+        return 0;
+    last_tick = tick;
+    chr = TS2_MEM32_EARLY(ctx + 0x1BC);
+    if (chr < 0x80000000u || chr >= 0x84000000u)
+        return 0;
+    pw = TS2_MEM32_EARLY(chr + 0x124);
+    if (pw < 0x80000000u || pw >= 0x84000000u)
+        pw = 0;
+    for (i = 0; i < g_ts2_sweep_n; i++) {
+        const Ts2SweepStep *s = &g_ts2_sweep[i];
+
+        if (tick < s->from || tick > s->to)
+            continue;
+        switch (s->kind) {
+        case TS2_SW_GIVE:
+            if (pw) {
+                int k;
+                for (k = 0; k < s->n; k++)
+                    if (s->v[k] >= 0.0f && s->v[k] < 64.0f)
+                        TS2_MEM32_EARLY(pw + 0x984 + 4u * (uint32_t)s->v[k]) = 1;
+                for (k = 1; k <= 22; k++)
+                    TS2_MEM32_EARLY(pw + 0xA2C + 4u * (uint32_t)k) = 200;
+                fprintf(stderr, "[TS2] sweep: tick %u, %d weapons given\n", tick, s->n);
+            }
+            break;
+        case TS2_SW_LOOK:
+            *dx += s->v[0];
+            *dy -= s->v[1];
+            turned = 1;
+            break;
+        case TS2_SW_SWING:
+            if (s->n >= 2 && s->v[1] >= 1.0f) {
+                uint32_t leg = (tick - s->from) / (uint32_t)s->v[1];
+                *dx += (leg & 1u) ? -s->v[0] : s->v[0];
+                turned = 1;
+            }
+            break;
+        case TS2_SW_WEAPON:
+            if (pw && s->n >= 1)
+                TS2_MEM32_EARLY(pw + 0xC8) = (uint32_t)s->v[0];
+            break;
+        case TS2_SW_GOD:
+            /* Well over full: an explosion takes more than a full bar in
+             * one frame (the player's own mines killed it at full). */
+            TS2_MEMF(chr + 0x19C) = TS2_MEMF(chr + 0x1A0) * 50.0f;
+            break;
+        case TS2_SW_PIN: {
+            /* Within the room it starts in, so the room the game keeps
+             * stays right (see above). */
+            Ts2SweepStep *w = &g_ts2_sweep[i];
+            if (tick == s->from) {
+                w->v[0] = TS2_MEMF(chr + 0x58);
+                w->v[1] = TS2_MEMF(chr + 0x5C);
+                w->v[2] = TS2_MEMF(chr + 0x60);
+                w->n = 3;
+            } else if (w->n == 3 &&
+                       fabsf(TS2_MEMF(chr + 0x58) - w->v[0]) + fabsf(TS2_MEMF(chr + 0x60) - w->v[2]) < 2.0f) {
+                /* (not after a respawn somewhere else) */
+                TS2_MEMF(chr + 0x58) = TS2_MEMF(chr + 0xA0) = TS2_MEMF(ctx + 0xF0) = w->v[0];
+                TS2_MEMF(chr + 0x5C) = TS2_MEMF(chr + 0xA4) = TS2_MEMF(ctx + 0xF4) = w->v[1];
+                TS2_MEMF(chr + 0x60) = TS2_MEMF(chr + 0xA8) = TS2_MEMF(ctx + 0xF8) = w->v[2];
+                TS2_MEMF(ctx + 0xFC) = w->v[0];
+                TS2_MEMF(ctx + 0x104) = w->v[2];
+            }
+            break;
+        }
+        }
+    }
+    if (g_ts2_sweep_log) {
+        int ammo = 0, k;
+
+        for (k = 1; pw && k <= 22; k++)
+            ammo += (int)TS2_MEM32_EARLY(pw + 0xA2C + 4u * (uint32_t)k);
+        fprintf(g_ts2_sweep_log, "%u,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%.3f\n", tick,
+                TS2_MEMF(chr + 0x58), TS2_MEMF(chr + 0x5C), TS2_MEMF(chr + 0x60),
+                TS2_MEMF(ctx + 0x148), TS2_MEMF(ctx + 0x14C),
+                pw ? (int)TS2_MEM32_EARLY(pw + 0xC8) : -1,
+                pw ? (int)TS2_MEM32_EARLY(pw + 0xCC) : -1, ammo, TS2_MEMF(chr + 0x19C));
+        fflush(g_ts2_sweep_log);
+    }
+    return turned;
+}
+
 static void ts2_mouse_look(uint32_t current_player, uint32_t player_controller)
 {
     static int log_left = -1;
     static float logged_yaw;
     static int log_pending;
     uint32_t ctx, port;
-    float dx, dy, yaw, pitch;
+    float dx, dy, yaw, pitch, sx, sy;
+    int scripted;
 
     if (log_left < 0) {
         const char *v = getenv("RECOMP_TS2_LOOKLOG");
@@ -865,8 +1111,12 @@ static void ts2_mouse_look(uint32_t current_player, uint32_t player_controller)
                 TS2_MEMF(ctx + 0x148), logged_yaw);
         log_pending = 0;
     }
-    if (!recomp_input_look(port, &dx, &dy))
+    g_ts2_frame_play = 1;                  /* a player was updated: play (ts2_present) */
+    scripted = ts2_sweep(ctx, port, &sx, &sy);
+    if (!recomp_input_look(port, &dx, &dy) && !scripted)
         return;
+    dx += sx;
+    dy += sy;
     if (!g_ts2_mouse_player[port]) {
         g_ts2_mouse_player[port] = 1;
         fprintf(stderr, "[TS2] controller %u plays with a mouse: its Auto Lookahead is off\n",
@@ -954,7 +1204,23 @@ static void ts2_present(void (*present)(void))
     xbox_D3D8SetWideFrames(ts2_menus_wide() ||
                            (g_ts2_frame_camera && !g_ts2_frame_front_end));
     ts2_coop_frame_done();
-    g_ts2_frame_camera = g_ts2_frame_front_end = 0;
+    /* A mouse cursor in the game's own menus (recompose hle_window_title_menu):
+     * once no player has been updated for a quarter of a second -- the front
+     * end, the pause menu, a level's results -- the pointer is shown and the
+     * mouse works the menu (left A, right B, wheel up and down); the first
+     * frame of play takes the pointer back for mouse look. */
+    {
+        static int quiet = 1000, shown = -1;
+        int menu;
+
+        quiet = g_ts2_frame_play ? 0 : quiet < 1000 ? quiet + 1 : quiet;
+        menu = quiet >= 15;
+        if (menu != shown) {
+            shown = menu;
+            hle_window_title_menu(menu);
+        }
+    }
+    g_ts2_frame_camera = g_ts2_frame_front_end = g_ts2_frame_play = 0;
 }
 
 /* ── TimeSplitters 2: where each piece of 2D goes in widescreen ── */
@@ -2573,6 +2839,89 @@ extern void recomp_lockstep_frame(void);
 extern uint32_t recomp_lockstep_tick(void);
 extern void recomp_lockstep_add_region(uint32_t va, uint32_t size, const char *name);
 
+/*
+ * RECOMP_TS2_MEMDUMP=<prefix> with RECOMP_TS2_MEMDUMP_AT=<tick>,<tick>,...: the
+ * game's heap (the contiguous window, 0x80000000 up, every mapped 64 KB of
+ * it; RECOMP_TS2_MEMDUMP_RANGE=<va>-<va> for another) written at those
+ * lockstep ticks to <prefix>t<tick>.bin, in the lockstep dump's format (py -m
+ * tools.lockstep), for finding where the game keeps something the .data
+ * dumps do not hold: the players, their weapons. A tool for finding things;
+ * nothing reads it back.
+ */
+extern int xbox_guest_range_mapped(uint32_t va, uint32_t bytes);
+
+static void ts2_memdump(uint32_t tick)
+{
+    static int ready, n;
+    static uint32_t at[32], lo = 0x80000000u, hi = 0x84000000u;
+    static const char *prefix;
+    char path[512];
+    FILE *f;
+    uint32_t va, runs = 0;
+    int i;
+
+    if (!ready) {
+        const char *v = getenv("RECOMP_TS2_MEMDUMP_AT"), *r = getenv("RECOMP_TS2_MEMDUMP_RANGE");
+
+        ready = 1;
+        prefix = getenv("RECOMP_TS2_MEMDUMP");
+        while (prefix && v && *v && n < 32) {
+            at[n++] = (uint32_t)strtoul(v, (char **)&v, 10);
+            if (*v == ',')
+                v++;
+            else
+                break;
+        }
+        if (r && *r) {
+            lo = (uint32_t)strtoul(r, (char **)&r, 0);
+            if (*r == '-')
+                hi = (uint32_t)strtoul(r + 1, NULL, 0);
+        }
+    }
+    for (i = 0; i < n && at[i] != tick; i++)
+        ;
+    if (i == n)
+        return;
+    snprintf(path, sizeof path, "%st%u.bin", prefix, tick);
+    f = fopen(path, "wb");
+    if (!f)
+        return;
+    /* Count the runs of mapped 64 KB first: the format leads with it. */
+    for (va = lo; va < hi; ) {
+        uint32_t end = va;
+
+        while (end < hi && xbox_guest_range_mapped(end, 0x10000u))
+            end += 0x10000u;
+        if (end > va) {
+            runs++;
+            va = end;
+        } else {
+            va += 0x10000u;
+        }
+    }
+    fwrite("LSDUMP1\n", 1, 8, f);
+    fwrite(&runs, 4, 1, f);
+    for (va = lo; va < hi; ) {
+        uint32_t end = va;
+
+        while (end < hi && xbox_guest_range_mapped(end, 0x10000u))
+            end += 0x10000u;
+        if (end > va) {
+            uint32_t hdr[2] = { va, end - va };
+            char name[32] = "heap";
+
+            fwrite(hdr, 4, 2, f);
+            fwrite(name, 1, 32, f);
+            fwrite((const void *)((uintptr_t)va + g_xbox_mem_offset), 1, end - va, f);
+            va = end;
+        } else {
+            va += 0x10000u;
+        }
+    }
+    fclose(f);
+    fprintf(stderr, "[TS2] memory dump at tick %u: %s\n", tick, path);
+}
+
 static void ts2_frame_clock(void (*gen)(void), const Ts2StateRegion *state)
 {
     static int named;
@@ -2587,6 +2936,7 @@ static void ts2_frame_clock(void (*gen)(void), const Ts2StateRegion *state)
                     recomp_lockstep_ignore(state->va, state->size);
         }
         recomp_lockstep_frame();
+        ts2_memdump(recomp_lockstep_tick());
     }
     gen();
 }

@@ -177,3 +177,32 @@ Left: the PAL release has neither the projection hook nor the new sites
 unsurveyed. `RECOMP_TS2_UI_SITES=1` now logs each site's first frame and
 whether it is placed, so a replay of a recording that reaches a screen
 lists what to look at.
+
+## The corridor sweep (24 November 2026)
+
+Josh's report: on Mexican Mission, moving the mouse quickly opened breaks in
+the level through to the sky, the post-processing was still blurry, the gun
+floated at a wider field of view, the plasma gun blinked the screen, and he
+wanted a mouse cursor in the menus. A test that plays the game found each of
+them: `RECOMP_TS2_SWEEP=<script>` (`src/recomp_manual.c`) runs an Arcade match
+under lockstep from the player's spawn in the mission's cloister, turns the
+player as a mouse does (5 to 60 degrees a frame), hands out the match's
+weapons, fires each, keeps the player alive and in place, and logs every
+frame; frame dumps by tick range (`RECOMP_PRESENT_DUMP_TICKS=a-b/n`, in-between
+frames named `...i.bmp`) and input-script steps by tick (`t<tick>:button`) make
+a run that slows down still line up. The recording replays the same at every
+frame, so a setting that only changes the picture can be compared frame by
+frame.
+
+What it found, and what changed:
+
+| | Found | Fixed |
+| --- | --- | --- |
+| Breaks to the sky on fast turns | Only in frame interpolation's in-between frames (the game's own frames were clean in every replay). TS2 draws what it sees through a doorway clipped to the doorway's rectangle on screen (about fifty scissors a frame) and culls to its newer camera; an in-between frame looks part of the way back, so it showed rooms clipped by the newer frame's rectangles, and rooms only the older camera saw were never drawn. Breaking in-between frames: 34 of 72 at 5 degrees a frame, 50 of 71 at 15 | Recompose `hle_d3d8_interp.c`: each scissor is carried along with the camera's turn (`d3d8_SetScissorWarp`), what the older frame drew and the newer left out is drawn into the in-between frame moved as the camera moved (and what only the newer one drew is moved back), every piece is blended by its motion relative to the frame before so the level's pieces move together, and a turn of up to 70 degrees a frame is interpolated (45 before: hard flicks dropped to 60). After: 2 of 54 at 15 degrees a frame, none while firing the fire rifle or weapon 13, 2 with the shotgun, 4 with the pistols (60 before); a thin sliver at the screen's edge on the frame a swing reverses remains. Widening the game's own culling was tried and dropped: what it culls feeds the game (a replay ended with a different rank) |
+| The soften pass | A copy of the screen blended back over it at 25%, one console pixel down: five screen pixels at 5x, a ghost under every edge | Recompose `post_soften` (launcher Graphics, Esc menu): `sharp` (default) scales the shift to one screen pixel, `console` keeps it, `off` leaves it out |
+| The gun at a wider field of view | TS2 draws the hands and weapon with the camera's projection (uploaded with their transform, c60-c67 at once), so they shrank toward the middle | `ts2_weapon_fov`: such an upload of the widened projection gets the 60 degrees the game was made with (`xbox_D3D8SetConstantFilter`, before anything keeps it); every weapon sits where it does at 60 |
+| The plasma blink | Not black: one frame washed white. The Plasma Autorifle's bolt glow, an additive sprite spawned at the camera, crossed the near plane and covered the view (draw 237 of the frame took the picture's mean from 82 to 138); the same with interpolation off | Recompose `reduce_flashes` (on): an additive glow reaching behind the near plane is left out. 414 frames of fire after it: brightness 71 to 88 |
+| A mouse cursor in the menus | | Once no player has been updated for a quarter of a second (front end, pause, results), the pointer shows and the mouse works the menu: wheel to move, left to choose, right to go back (`hle_window_title_menu`); play takes the pointer back. Pointing at an item to highlight it is the next step |
+
+Left: Vulkan and Metal not run through the sweep yet; the plasma grenades
+(alternate fire) untested; strafing frames cannot be judged by the sky test.
