@@ -1,16 +1,16 @@
 /*
  * The launcher's look for Timeslip (recompose src/launcher/launcher_theme.h):
- * colours taken from TimeSplitters 2's own key art -- a deep teal, and the
- * orange of its stripe and the gun's muzzle -- and where that art is fetched
- * from.
+ * a deep teal and an orange, after TimeSplitters 2's key art.
  *
- * The pictures are not in this repository or its releases. The launcher
- * fetches them once into the player's art cache (recompose
- * src/launcher/launcher_art.c) from the LaunchBox Games Database's image
- * host: the GameCube release's fanart background (the Xbox release has none
- * there, and the art is the same game's) and the Xbox release's clear logo.
- * Offline, or until they arrive, the launcher draws its own background in
- * these colours and writes the game's name instead.
+ * By default the launcher shows Timeslip's own mark (art/logo-launcher.png,
+ * compiled in) over its own background in these colours. A backdrop of the
+ * game's comes only from the player: an art/ folder beside the launcher, or
+ * the art cache (recompose src/launcher/launcher_art.c), which Timeslip's
+ * mac/make_art.sh fills from the player's own copy of the game. The two
+ * addresses below -- the LaunchBox Games Database's copies of the GameCube
+ * release's fanart and the Xbox release's clear logo -- are fetched only if
+ * the player asks (RECOMP_LAUNCHER_FETCH_ART=1): they are the publisher's
+ * art, and nothing here downloads it unasked.
  */
 #ifndef TIMESLIP_LAUNCHER_THEME_H
 #define TIMESLIP_LAUNCHER_THEME_H

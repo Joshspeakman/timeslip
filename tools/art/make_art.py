@@ -255,6 +255,10 @@ def main():
     logo.alpha_composite(em, (0, (logo.height - em.height) // 2))
     logo.alpha_composite(wm, (em.width + gap, (logo.height - wm.height) // 2))
     logo.save(os.path.join(out, 'logo.png'))
+    # The launcher's, compiled into it (recomp_add_launcher LOGO): drawn about
+    # 340 units wide, so 700 px is sharp at twice that on a Retina display.
+    logo.resize((700, round(logo.height * 700 / logo.width)), Image.LANCZOS).save(
+        os.path.join(out, 'logo-launcher.png'), optimize=True)
     dark = to_img(field(logo.width + 160, logo.height + 120, 0.3, 0.5))
     dark.paste(logo, (80, 60), logo)
     dark.save(os.path.join(out, 'logo-dark.png'))

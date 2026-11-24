@@ -423,12 +423,14 @@ originals; phobos665 can be supported on [Ko-fi](https://ko-fi.com/phobos665).
 
 Timeslip's own icon, logo and box art (`art/`) are drawn by
 `tools/art/make_art.py` and set in [Exo 2](https://github.com/googlefonts/Exo-2.0)
-(SIL Open Font License, `tools/art/fonts/OFL.txt`). The launcher's backdrop
-and the game's logo in it are TimeSplitters 2's own art: they are not in this
-repository or its releases, but fetched once onto the player's computer from
+(SIL Open Font License, `tools/art/fonts/OFL.txt`); the launcher shows that
+mark. Nothing of the game's art is in this repository or its releases, and
+the launcher downloads none of it unless you ask: a `backdrop` and `logo`
+(JPEG or PNG) in an `art/` folder beside the launcher are shown instead,
+which `mac/make_art.sh` makes from your own copy of the game on a Mac, and
+`RECOMP_LAUNCHER_FETCH_ART=1` fetches the game's key art and logo once from
 the [LaunchBox Games Database](https://gamesdb.launchbox-app.com/)
-(`src/launcher_theme_timeslip.h`), and an `art/` folder beside the launcher
-with a `backdrop` and `logo` of your own takes their place.
+(`src/launcher_theme_timeslip.h`).
 
 # Legal
 
