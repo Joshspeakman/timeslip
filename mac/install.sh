@@ -86,8 +86,21 @@ echo "== signing"
 # "Josh Local Code Signing"): the firewall's Allow and the Local Network permission follow the signing
 # identity, so with it they survive rebuilds; ad hoc, every build is new to macOS and it asks again.
 ID=${TS2_SIGN_ID:-Josh Local Code Signing}
+SIGN_WAIT=${TS2_SIGN_WAIT:-60}
 if security find-identity -v -p codesigning 2>/dev/null | grep -q "\"$ID\""; then
-    if codesign --force --deep --sign "$ID" "$A" 2>"$STAGE/sign.log"; then
+    # Until the key's partition list allows codesign (`security set-key-partition-list`, which needs the
+    # login password), codesign either fails at once (errSecInternalComponent) or waits on a keychain
+    # prompt that may never be answered. So it gets $SIGN_WAIT seconds, then the build is signed ad hoc.
+    codesign --force --deep --sign "$ID" "$A" 2>"$STAGE/sign.log" & SIGN_PID=$!
+    waited=0
+    while kill -0 "$SIGN_PID" 2>/dev/null && [ "$waited" -lt "$SIGN_WAIT" ]; do sleep 1; waited=$((waited + 1)); done
+    if kill -0 "$SIGN_PID" 2>/dev/null; then
+        kill "$SIGN_PID" 2>/dev/null; wait "$SIGN_PID" 2>/dev/null || true
+        # a codesign stopped part way leaves <binary>.cstemp files, which the next seal would count as content
+        find "$A" -name '*.cstemp' -delete
+        echo "   signing as $ID waited ${SIGN_WAIT}s (a keychain prompt?); signing ad hoc" >&2
+        codesign --force --deep --sign - "$A" 2>/dev/null
+    elif wait "$SIGN_PID"; then
         echo "   signed as $ID"
     else
         echo "   could not sign as $ID ($(tail -1 "$STAGE/sign.log")); signing ad hoc" >&2
