@@ -1,0 +1,22 @@
+# The corridor sweep's own script (RECOMP_TS2_SWEEP; README.md). Ticks are lockstep frames.
+# Weapons: 6 pistols, 32 shotgun, 22 Plasma Autorifle, 13, 20 fire rifle (Mexican Mission, Recommended).
+god 4400 99999
+give 4450 6 32 22 13 20
+pin 4430 6990
+look 4440 4799 1 0
+swing 4860 4979 5 18
+swing 4980 5099 15 6
+swing 5100 5219 30 3
+swing 5220 5339 60 2
+weapon 5400 6
+swing 5530 5680 10 9
+weapon 5700 20
+swing 5830 6080 10 9
+weapon 6100 13
+swing 6230 6380 10 9
+weapon 6400 32
+swing 6530 6680 10 9
+weapon 6700 22
+swing 6830 6980 10 9
+weapon 7000 6
+swing 7030 7300 8 9
