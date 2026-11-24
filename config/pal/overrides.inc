@@ -13,7 +13,8 @@
 /* camera_setup is sub_00032DC0(near, far, aspect, fov_degrees);
  * build_projection is sub_000E6E30. */
 extern void sub_00032DC0_gen(void);
-void sub_00032DC0(void) { ts2_camera_setup(sub_00032DC0_gen); }
+/* The player's camera's call site is not found in PAL yet: no fov setting. */
+void sub_00032DC0(void) { ts2_camera_setup(sub_00032DC0_gen, 0u); }
 
 /* front_end_scene is sub_0009F1C0, which builds its camera through
  * sub_00095CE0. */

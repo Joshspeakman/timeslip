@@ -464,6 +464,8 @@ void recomp_icall_not_code_log(uint32_t va, uint32_t saved_esp)
  */
 /* recompose src/d3d/d3d8_xbox.h */
 extern float xbox_D3D8ClaimHorPlus(void);
+/* recompose src/hle/hle_settings.h */
+extern int hle_fov(void);
 extern void  xbox_D3D8SetWideFrames(int wide);
 
 #define TS2_MEMF(a) (*(volatile float *)((uintptr_t)(uint32_t)(a) + g_xbox_mem_offset))
@@ -487,12 +489,27 @@ static float ts2_camera_widen(void)
 /* What the frame now being drawn has run, for the choice below. */
 static int g_ts2_frame_camera, g_ts2_frame_front_end;
 
-static void ts2_camera_setup(void (*camera_setup)(void))
+/*
+ * The field of view (the toolkit's fov setting, the in-game menu's slider):
+ * camera_setup's fourth argument is the vertical field of view in degrees,
+ * 60 for a player looking about and less while a scope zooms (logged: 28
+ * down to 4 in steps, and back). The player's camera comes from one place
+ * (player_caller); its 60 becomes the chosen angle, and anything narrower --
+ * a scope -- is left as the game made it, as is every other camera
+ * (cutscenes build their own, at other angles).
+ */
+#define TS2_FOV_DEFAULT 60.0f
+
+static void ts2_camera_setup(void (*camera_setup)(void), uint32_t player_caller)
 {
     float widen = ts2_camera_widen();
+    int fov = hle_fov();
 
     if (widen != 1.0f)
         TS2_MEMF(g_esp + 0x0C) *= widen;   /* [esp] is the return address */
+    if (fov > 0 && player_caller && TS2_MEM32_EARLY(g_esp) == player_caller &&
+        TS2_MEMF(g_esp + 0x10) == TS2_FOV_DEFAULT)
+        TS2_MEMF(g_esp + 0x10) = (float)fov;
     camera_setup();
     g_ts2_frame_camera = 1;                /* see ts2_present below */
 }

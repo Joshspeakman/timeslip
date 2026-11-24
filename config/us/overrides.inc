@@ -25,7 +25,9 @@
  * aspect * tan(fov/2) at camera+0x320 -- the description in recomp_manual.c,
  * instruction for instruction. */
 extern void sub_00032D90_gen(void);
-void sub_00032D90(void) { ts2_camera_setup(sub_00032D90_gen); }
+/* The player's camera is built from 0x00035A16 (sub_00035930, the camera's
+ * path): the call whose field of view the fov setting replaces. */
+void sub_00032D90(void) { ts2_camera_setup(sub_00032D90_gen, 0x00035A16u); }
 
 /* front_end_scene is sub_0009F180 (PAL 0x0009F1C0): it builds its camera
  * through sub_00095CA0 (PAL 0x00095CE0), which calls build_projection. */

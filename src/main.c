@@ -462,7 +462,10 @@ static int title_main(int argc, char **argv)
 #if defined(TS2_REGION_US)
     {
         extern void recomp_mouse_look_native(int on);
+        extern void hle_fov_title_default(int degrees);
         recomp_mouse_look_native(1);
+        /* The field of view can be chosen (ts2_camera_setup): 60 is the game's. */
+        hle_fov_title_default(60);
     }
 #endif
 
@@ -670,6 +673,14 @@ static int title_main(int argc, char **argv)
             const char *view = recomp_config_lookup("RECOMP_COOP_VIEW", "coop_view");
             recomp_lockstep_add_setting("coop_view",
                                         view && strcmp(view, "split") == 0 ? "split" : "own");
+        }
+        /* The field of view widens what the game culls as well as what it
+         * draws, so both machines must agree on it too. */
+        {
+            extern int hle_fov(void);
+            char fov[16];
+            snprintf(fov, sizeof fov, "%d", hle_fov());
+            recomp_lockstep_add_setting("fov", fov);
         }
         recomp_lockstep_start();
     }
