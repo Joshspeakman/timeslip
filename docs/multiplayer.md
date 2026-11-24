@@ -116,36 +116,78 @@ A match's load handshake, as seen on the card: at START the host sends one
 and then one each of 82, 98, 157 and 266 bytes; then both send a 76-byte
 frame about every 100 ms for the rest of the match.
 
-## Online co-op (in progress, `coop` branch)
+## Online co-op (Story, `coop` branch)
 
 System Link only ever covered Arcade, and Story co-op on the console is two
 players split-screen on one machine. Online co-op runs that split-screen game
-on every machine and sends only the controllers: each copy computes the same
+on both machines and sends only the controllers: each copy computes the same
 game from the same pads, frame by frame (xboxrecomp
-`src/kernel/recomp_lockstep.h`). For that, under lockstep:
+`docs/technical/lockstep.md`). The host is player 1 and the joiner player 2,
+each with their own machine's controller 1.
 
-- the game steps one frame at a time: TS2 steps by the vblanks elapsed, so
-  its vblank count (USA `sub_001C8190`) answers the lockstep tick
+### Playing
+
+In the launcher's System Link tab, one player chooses **Host online co-op**
+and the other **Join online co-op** with the host's address (the router is
+opened on the host's side, as for System Link). Or without the launcher:
+
+```text
+host:  RECOMP_LOCKSTEP_NET=host                 (UDP 27620)
+join:  RECOMP_LOCKSTEP_NET=join RECOMP_LOCKSTEP_PEER=<host's address>
+```
+
+The joiner's game starts from the host's saves, handed over before it boots
+(the joiner's own are not touched). Then, as on one console: **2 Players** at
+the title screen, each player presses A to claim a controller and picks or
+creates a profile, and **Story Co-op** in the main menu. Both copies must be
+the same build (both repositories' commits, stamped at build time) with the
+same Widescreen and front-end (`ts2_menus`) settings; a joiner that differs
+is refused, told why, in the log beside the game.
+
+Both machines show the whole split screen, as the console did. Each frame
+waits for both controllers: a press lands 4 frames (67 ms) after it is made
+on both machines (`RECOMP_LOCKSTEP_DELAY`), and a slow machine slows the
+game for both.
+
+### What it took in TS2
+
+- One step per frame: TS2 steps by the vblanks elapsed (1 to 3), so its
+  vblank count (USA `sub_001C8190`) answers the lockstep tick
   (`ts2_vblank_count` in `src/recomp_manual.c`), and its frame clock
-  (`sub_001ADF80`) is the frame boundary;
-- every clock the guest can see counts frames (TS2 seeds its random numbers
-  from the time of day), files report the session's time, and the time zone
-  is UTC;
-- sound's play state, stream packets and notifications run on frame time and
-  land at the frame boundary, and the music streamer (TS2's second thread)
-  runs only at frame boundaries;
-- GPU visibility tests are answered the same everywhere.
+  (`sub_001ADF80`) is the frame boundary.
+- The state checked each 60 frames: `.data` (globals and the pools after
+  them), less the vblank counter and the music streamer's own state
+  (`config/us/overrides.inc`).
+- Everything else is the toolkit's (clocks, sound, the music thread, GPU
+  visibility tests, x87 NaNs, saves, the network): xboxrecomp
+  `docs/technical/lockstep.md` lists what each difference was.
 
-Two players reach Story Co-op from a fresh game this way (controller 2 by
+Two players reach Story Co-op from a fresh game by script (controller 2 by
 `RECOMP_INPUT_SEQ_P2`): controller 1
 `10000:down,12000:start,16000:a,22000:a,26000:start,30000:a,38000:a,46000:a,52000:a,58000:a,64000:a,70000:a,76000:a`
 (2 Players, claim controller 1, a new profile, Story Co-op, through the
 intro, Siberia on Normal) and controller 2 `18000:a,23000:a,27000:start,31000:a`
-(claim controller 2, a new profile). `tests/lockstep/` has a recording of it
-that replays the same on Windows (Direct3D 11 and Vulkan) and Linux.
+(claim controller 2, a new profile). `tests/lockstep/` has 8,000 frames of it,
+both players moving and firing in Siberia, as a recording every build must
+replay the same.
 
-Not done yet: the network between the copies, each screen showing only its
-own player, and a check on macOS (arm64).
+### Measured (23 November 2026)
+
+| Check | Result |
+| --- | --- |
+| The recording replayed offline: Windows (Direct3D 11, Vulkan), Linux (WSL, clang), macOS (M1 Pro, Metal) | the same at every frame on all |
+| Online, two copies on one PC | the same at every frame, both against the recording |
+| Online, Windows host with a saved profile, Linux joiner (WSL) | the joiner booted from the host's saves (5 files, 23 KB); the two the same at every frame |
+| Online, Windows host, Mac joiner, over the LAN | 8,000 frames, every 60-frame check the same, the host the same as the recording |
+
+### Not done
+
+- Each screen showing only its own player full screen.
+- Played by people with controllers (every run so far was a recording or a
+  script).
+- Over the internet, and the input delay measured from the round trip
+  rather than fixed.
+- More than two players; a desync is reported in the log, not repaired.
 
 ## Not done or not checked
 
