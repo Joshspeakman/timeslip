@@ -144,10 +144,12 @@ the same build (both repositories' commits, stamped at build time) with the
 same Widescreen and front-end (`ts2_menus`) settings; a joiner that differs
 is refused, told why, in the log beside the game.
 
-Each machine shows its own player's view: in a split-screen frame (player 1
-above, player 2 below) only that half reaches the window, scaled up with
-bars (`coop_view = split` shows the whole split screen, as the console did).
-Menus, cutscenes and loading screens are whole frames and are shown whole.
+Each player has the whole screen, as in GoldenEye's online co-op: the game
+lays every player's view out as the whole screen, as in one-player play, on
+both machines, and each machine draws only its own player's (`coop_view =
+split` keeps the console's split screen instead; both players must choose the
+same). Menus, cutscenes, loading screens and a level's fly-by, which both
+players watch, are shown to both.
 The window's title says what the session is doing: waiting for player 2,
 playing with whom, the other player left, or the two games differ.
 
@@ -159,6 +161,16 @@ machine slows the game for both.
 
 ### What it took in TS2
 
+- Each player's whole screen: TS2 lays a player's view out with
+  `sub_001B49C0(viewport, x0, y0, x1, y1)` from a handful of places (each
+  player's own viewport every frame, the camera's through a level's opening
+  and when the player takes control, the level's setup); called from those
+  it is given the whole 640x480 frame, so the camera, the HUD and the aspect
+  are one player's. The game points `0x00483F28` at a player's viewport for
+  that player's pass, and the renderer leaves out every draw and clear made
+  during the other player's (`xbox_D3D8SetDrawFilter`). Found by logging the
+  layout calls and watching writes to player 2's viewport
+  (`RECOMP_WATCH_WRITE`); `ts2_viewport_rect` in `src/recomp_manual.c`.
 - One step per frame: TS2 steps by the vblanks elapsed (1 to 3), so its
   vblank count (USA `sub_001C8190`) answers the lockstep tick
   (`ts2_vblank_count` in `src/recomp_manual.c`), and its frame clock
@@ -189,7 +201,7 @@ replay the same.
 | Online, Windows host, Mac joiner, over the LAN | 8,000 frames, every 60-frame check the same, the host the same as the recording |
 | Online, two copies, 50 ms more each way and 5% lost (`RECOMP_LOCKSTEP_SIM_DELAY_MS`, `_LOSS`) | the same at every frame; 6,000 frames in 102-105 s (100 s of frames) |
 | The same, 100 ms each way and 10% lost | the same at every frame; 218 ms measured, 9 frames of delay, 6,000 frames in 103-106 s (at a fixed 4 frames: 139 s) |
-| Each player's own view (`RECOMP_TS2_VIEW_PORT`, the window dumped by `RECOMP_PRESENT_DUMP`) | player 1's half and player 2's, from the level intro on; the game unchanged (the recording the same at every frame) |
+| Each player's whole screen, online between two copies (the windows dumped by `RECOMP_PRESENT_DUMP`) | each machine its own player only, at the whole window with its own HUD, from the moment the player takes control; the fly-by, menus, pause, Game Over and status screens on both; the two the same at every frame over the recording and over 40,000 frames of random play (pause, hits, Mission Failed, quit to the title). The game's memory differs from a split-screen run from the level's setup on (the layout is in it), so a split-screen recording does not replay the same with it; offline, with no session, nothing changes (the recording the same at every frame) |
 
 ### Not done
 
@@ -197,8 +209,6 @@ replay the same.
   script.
 - Over the real internet (simulated only), and a Mac hosting (macOS asks the
   person at the Mac to let the game through its firewall the first time).
-- Each player's view drawn at the full window's shape: it is the console's
-  half-height view, scaled up with bars. `resolution_scale` keeps it sharp.
 - More than two players; a desync is reported, not repaired.
 
 ## Not done or not checked

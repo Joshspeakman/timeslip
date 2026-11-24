@@ -467,6 +467,7 @@ extern float xbox_D3D8ClaimHorPlus(void);
 extern void  xbox_D3D8SetWideFrames(int wide);
 
 #define TS2_MEMF(a) (*(volatile float *)((uintptr_t)(uint32_t)(a) + g_xbox_mem_offset))
+#define TS2_MEM32_EARLY(a) (*(volatile uint32_t *)((uintptr_t)(uint32_t)(a) + g_xbox_mem_offset))
 
 /* The factor to multiply the camera's aspect by: 1 when no wider view is
  * wanted, 4/3 for the usual Hor+ 0.75. Claiming it stops the toolkit
@@ -485,9 +486,6 @@ static float ts2_camera_widen(void)
 
 /* What the frame now being drawn has run, for the choice below. */
 static int g_ts2_frame_camera, g_ts2_frame_front_end;
-/* How many times the in-game camera was built this frame: once a frame for
- * one player, once per player's view in split screen (ts2_coop_view). */
-static int g_ts2_frame_cameras;
 
 static void ts2_camera_setup(void (*camera_setup)(void))
 {
@@ -497,7 +495,6 @@ static void ts2_camera_setup(void (*camera_setup)(void))
         TS2_MEMF(g_esp + 0x0C) *= widen;   /* [esp] is the return address */
     camera_setup();
     g_ts2_frame_camera = 1;                /* see ts2_present below */
-    g_ts2_frame_cameras++;
 }
 
 /*
@@ -564,57 +561,153 @@ static int ts2_menus_wide(void)
 extern void xbox_D3D8SetInterpRegisters(int projection, int affine_first, int affine_count);
 
 /*
- * Online co-op (xboxrecomp src/kernel/recomp_lockstep.h): both machines run
- * the whole split-screen game, and each shows its own player's view of it,
- * scaled up to the window. Two-player split screen in TS2 is the frame cut
- * across the middle, player 1 above and player 2 below, and its frames
- * build the in-game camera once per view: a frame that built it twice is a
- * split one. Only what reaches the window is cropped
- * (xbox_D3D8SetPresentCrop), never anything the game sees, so the machines
- * still compute the same game. The menus, the cutscenes and the loading
- * screens are whole frames and are shown whole. A few frames of the new
- * shape before it is taken, so a frame that builds one camera mid-level does
- * not flash the whole split screen.
+ * Online co-op (xboxrecomp src/kernel/recomp_lockstep.h): each player has
+ * the whole screen, as in GoldenEye's network co-op. Both machines run the
+ * whole two-player game, so both must lay it out the same way, and they do:
+ * every player's view is laid out as the whole screen, as in one-player play,
+ * on both machines (the game itself is then the same on both). Each machine
+ * still runs every player's pass, as the game needs, and draws only its own
+ * player's: the renderer leaves out every draw and clear made while the
+ * game's current viewport is another player's (xbox_D3D8SetDrawFilter).
+ *
+ * TS2 lays a player's view out with viewport_rect(vp, x0, y0, x1, y1) (USA
+ * sub_001B49C0, ts2_viewport_rect below), each frame in player order (player
+ * 1, the top half, first), and points its current-viewport word at a
+ * player's viewport object for that player's pass. When the game shows a
+ * player nothing of their own (a level's fly-by, which both watch), this
+ * machine shows what the game shows.
  *
  *   coop_view = own (default) | split          [RECOMP_COOP_VIEW]
- *   RECOMP_TS2_VIEW_PORT=0|1  shows a local game as that player would see
- *                             it online, for checking the crop
+ *   RECOMP_TS2_VIEW_PORT=0|1  plays a local game as that player would see it
+ *                             online (the layout changes, so a replay of a
+ *                             recording made without it can go its own way)
  */
 extern int recomp_lockstep_local_guest_port(void);
-extern void xbox_D3D8SetPresentCrop(float x, float y, float w, float h);
 extern const char *recomp_config_lookup(const char *env_name, const char *key);
+extern void xbox_D3D8SetDrawFilter(int (*keep)(void));
 
-static void ts2_coop_view(int cameras, int front_end)
+static uint32_t g_ts2_current_viewport;     /* the game's current-viewport word */
+/* This frame's players, in the order the game lays them out (player 1
+ * first): the viewport object current during each player's pass, and
+ * whether the game's own layout shows that player at all. */
+static struct { uint32_t pass_vp; int visible; } g_ts2_frame_player[2];
+static int      g_ts2_frame_players;
+static uint32_t g_ts2_other_vp;             /* the other player's: its pass is not drawn */
+
+/* Every player's view laid out as the whole screen: on in an online session
+ * unless coop_view = split, the same on every machine in it. */
+static int ts2_coop_full_views(void)
 {
-    static int own = -1, test_port = -2, shown = -1, streak;
-    int port = recomp_lockstep_local_guest_port();
-    int want;
+    static int on = -1;
 
-    if (own < 0) {
+    if (on < 0) {
         const char *v = recomp_config_lookup("RECOMP_COOP_VIEW", "coop_view");
-        own = !(v && strcmp(v, "split") == 0);
+        const char *t = getenv("RECOMP_TS2_VIEW_PORT");
+        on = !(v && strcmp(v, "split") == 0) &&
+             (recomp_lockstep_local_guest_port() >= 0 || (t && *t));
     }
+    return on;
+}
+
+/* This machine's player: online, the session's; for a local check,
+ * RECOMP_TS2_VIEW_PORT. -1 when every pass is drawn. */
+static int ts2_coop_own_port(void)
+{
+    static int test_port = -2;
+    int port = recomp_lockstep_local_guest_port();
+
     if (test_port == -2) {
         const char *t = getenv("RECOMP_TS2_VIEW_PORT");
         test_port = t && *t ? atoi(t) : -1;
     }
     if (port < 0)
         port = test_port;
-    if (!own || port < 0 || port > 1)
-        return;
-    want = cameras >= 2 && !front_end;
-    if (want == shown) {
-        streak = 0;
-        return;
+    return port >= 0 && port <= 1 ? port : -1;
+}
+
+static int ts2_coop_keep_draw(void)
+{
+    return !g_ts2_other_vp || TS2_MEM32_EARLY(g_ts2_current_viewport) != g_ts2_other_vp;
+}
+
+/*
+ * viewport_rect from the places that lay a player's view out: the player's
+ * own viewport, every frame (player_caller: the split mid-level), the
+ * camera's, every frame of a level's opening (the split sliding in) and when
+ * the player takes control (camera_callers), and at a level's setup
+ * (setup_callers). A rectangle that is part
+ * of the screen becomes the whole of it; an empty one stays empty, since the
+ * game shows that player nothing (in a level's intro player 2's camera's is
+ * empty and both players watch player 1's fly-by), and so does a whole one.
+ */
+static int ts2_caller_in(uint32_t from, const uint32_t *list, int n)
+{
+    int i;
+
+    for (i = 0; i < n; i++)
+        if (list[i] == from)
+            return 1;
+    return 0;
+}
+
+static void ts2_viewport_rect(void (*viewport_rect)(void), uint32_t player_caller,
+                              const uint32_t *camera_callers, int camera_count,
+                              const uint32_t *setup_callers, int setup_count,
+                              uint32_t current_viewport)
+{
+    uint32_t from = TS2_MEM32_EARLY(g_esp);     /* the return address: who lays it out */
+    int camera_caller = ts2_caller_in(from, camera_callers, camera_count);
+
+    if (ts2_coop_full_views() && (from == player_caller || camera_caller ||
+                                  ts2_caller_in(from, setup_callers, setup_count))) {
+        static int said;
+        int x0 = (int)TS2_MEM32_EARLY(g_esp + 8), y0 = (int)TS2_MEM32_EARLY(g_esp + 12);
+        int x1 = (int)TS2_MEM32_EARLY(g_esp + 16), y1 = (int)TS2_MEM32_EARLY(g_esp + 20);
+        int visible = x1 - x0 >= 2 && y1 - y0 >= 2;
+
+        if (!said++) {
+            g_ts2_current_viewport = current_viewport;
+            if (ts2_coop_own_port() >= 0)
+                xbox_D3D8SetDrawFilter(ts2_coop_keep_draw);
+            fprintf(stderr, "[TS2] online co-op: every player's view laid out as the whole "
+                    "screen%s\n", ts2_coop_own_port() >= 0 ? "; only this player's drawn" : "");
+        }
+        if (from == player_caller && g_ts2_frame_players < 2) {
+            g_ts2_frame_player[g_ts2_frame_players].pass_vp = TS2_MEM32_EARLY(current_viewport);
+            g_ts2_frame_player[g_ts2_frame_players].visible = visible;
+            g_ts2_frame_players++;
+        } else if (camera_caller) {
+            /* In a level's opening a player's own rectangle can be whole
+             * while the camera's is empty: the camera's says whether the
+             * game shows that player anything yet. */
+            uint32_t vp = TS2_MEM32_EARLY(g_esp + 4);
+            int i;
+
+            for (i = 0; i < g_ts2_frame_players; i++)
+                if (g_ts2_frame_player[i].pass_vp == vp)
+                    g_ts2_frame_player[i].visible &= visible;
+        }
+        if (visible) {
+            TS2_MEM32_EARLY(g_esp + 8) = 0;        /* x0 */
+            TS2_MEM32_EARLY(g_esp + 12) = 0;       /* y0 */
+            TS2_MEM32_EARLY(g_esp + 16) = 639;     /* x1 */
+            TS2_MEM32_EARLY(g_esp + 20) = 479;     /* y1: the whole 640x480 frame */
+        }
     }
-    if (++streak < 3)
-        return;
-    streak = 0;
-    shown = want;
-    if (want)
-        xbox_D3D8SetPresentCrop(0.0f, port ? 0.5f : 0.0f, 1.0f, 0.5f);
-    else
-        xbox_D3D8SetPresentCrop(0.0f, 0.0f, 0.0f, 0.0f);
+    viewport_rect();
+}
+
+/* At the end of a frame: whose pass the next frame leaves undrawn. */
+static void ts2_coop_frame_done(void)
+{
+    int own = ts2_coop_own_port();
+
+    /* The other player's pass is left out only when the game shows this
+     * player a view of their own; otherwise this machine shows what the game
+     * shows (both players watching one fly-by, say). */
+    g_ts2_other_vp = (own >= 0 && g_ts2_frame_players == 2 && g_ts2_frame_player[own].visible)
+                     ? g_ts2_frame_player[1 - own].pass_vp : 0u;
+    g_ts2_frame_players = 0;
 }
 
 static void ts2_present(void (*present)(void))
@@ -628,9 +721,8 @@ static void ts2_present(void (*present)(void))
     present();
     xbox_D3D8SetWideFrames(ts2_menus_wide() ||
                            (g_ts2_frame_camera && !g_ts2_frame_front_end));
-    ts2_coop_view(g_ts2_frame_cameras, g_ts2_frame_front_end);
+    ts2_coop_frame_done();
     g_ts2_frame_camera = g_ts2_frame_front_end = 0;
-    g_ts2_frame_cameras = 0;
 }
 
 /* ── TimeSplitters 2: where each piece of 2D goes in widescreen ── */

@@ -642,6 +642,14 @@ static int title_main(int argc, char **argv)
         /* The 4:3 front end places its panels differently, in the game's
          * own draw calls: the same on every machine in a session. */
         recomp_lockstep_add_setting("ts2_menus", menus && *menus ? menus : "wide");
+        /* Every player's view as the whole screen changes how the game lays
+         * its views out, so both machines must agree on it: split, or own
+         * (anything else, as recomp_manual.c reads it). */
+        {
+            const char *view = recomp_config_lookup("RECOMP_COOP_VIEW", "coop_view");
+            recomp_lockstep_add_setting("coop_view",
+                                        view && strcmp(view, "split") == 0 ? "split" : "own");
+        }
         recomp_lockstep_start();
     }
 

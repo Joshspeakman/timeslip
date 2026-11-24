@@ -65,6 +65,29 @@ void sub_001ADF80(void) { ts2_frame_clock(sub_001ADF80_gen, k_ts2_state); }
 extern void sub_001C8190_gen(void);
 void sub_001C8190(void) { ts2_vblank_count(sub_001C8190_gen); }
 
+/* viewport_rect is sub_001B49C0(vp, x0, y0, x1, y1) (online co-op,
+ * ts2_viewport_rect): it fills a viewport object from a rectangle. Logged in
+ * a two-player level (RECOMP_TS2_VIEW_PORT replays): from 0x000D940A every
+ * frame for each player's own viewport (player 1's at 0x004AE8D0, player 2's
+ * at 0x004AF07C; 0,0-639,240 and 0,240-639,479 mid-level, the split). The
+ * camera's (camera + 0x224), watched: from 0x00035603 every frame of a
+ * level's opening, when the split slides in, and from 0x000A74AE (top half)
+ * or 0x000A74E0 (bottom half) when the player takes control, each a rectangle
+ * from the screen's edges and middle at 0x00483F2C..0x00483F48; at the
+ * level's setup from the layout switch at 0x001405DC (0x0014062D two
+ * players, 0x0014067F more; 0x001405F7 is one, already the whole screen).
+ * The game's current-viewport word is 0x00483F28: during each player's pass
+ * it points at that player's camera's object (0x00483EE0, the whole screen,
+ * outside them), and camera_setup reads the width and height from it. */
+extern void sub_001B49C0_gen(void);
+void sub_001B49C0(void)
+{
+    static const uint32_t camera[] = { 0x00035603u, 0x000A74AEu, 0x000A74E0u };
+    static const uint32_t setup[] = { 0x0014062Du, 0x0014067Fu };
+
+    ts2_viewport_rect(sub_001B49C0_gen, 0x000D940Au, camera, 3, setup, 2, 0x00483F28u);
+}
+
 /* reserve is sub_001C8E35 (PAL 0x001C9265): 52 callers, a switch on its
  * first argument (the primitive type), and it calls the flush. flush is
  * sub_001C98AF (PAL 0x001C9CDF): it draws through sub_001CC1D0, the game's
