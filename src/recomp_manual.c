@@ -2158,6 +2158,63 @@ static void ts2_paks_read_async(void (*start)(void))
     g_esp += 4;                            /* ret */
 }
 
+/* ── Online co-op: one step per frame on every machine ────────── */
+
+/*
+ * Online co-op runs the whole game on every machine and sends only the
+ * controllers (xboxrecomp src/kernel/recomp_lockstep.h), so every copy must
+ * step the game by the same amount each frame. TS2 does not step by one: its
+ * frame clock (frame_clock, USA sub_001ADF80) reads a vblank counter that its
+ * vblank callback bumps on the host's vblank thread, and steps the game by
+ * the vblanks that passed since the last frame -- 1 at 60 fps, clamped to 3
+ * when a frame ran long. Two machines would step differently whenever one
+ * runs a frame late. With lockstep on, the counter frame_clock reads
+ * (vblank_count, USA sub_001C8190) answers the lockstep tick instead, and
+ * frame_clock's entry is the frame boundary where the tick advances and the
+ * controllers are latched: every frame is one step everywhere, and a machine
+ * that falls behind slows the game rather than skipping ahead. The other
+ * reader of vblank_count (USA sub_000DCE30) only asks whether it changed,
+ * which the tick answers once a frame, as 60 fps does.
+ *
+ * The state the trace hashes each tick is the release's data section (its
+ * globals and the zero-filled pools after them), named in overrides.inc,
+ * less the words in it that are not game state (entries with no name).
+ */
+typedef struct Ts2StateRegion { uint32_t va, size; const char *name; } Ts2StateRegion;
+extern void recomp_lockstep_ignore(uint32_t va, uint32_t size);
+extern int recomp_lockstep_active(void);
+extern void recomp_lockstep_frame(void);
+extern uint32_t recomp_lockstep_tick(void);
+extern void recomp_lockstep_add_region(uint32_t va, uint32_t size, const char *name);
+
+static void ts2_frame_clock(void (*gen)(void), const Ts2StateRegion *state)
+{
+    static int named;
+
+    if (recomp_lockstep_active()) {
+        if (!named) {
+            named = 1;
+            for (; state->size; state++)
+                if (state->name)
+                    recomp_lockstep_add_region(state->va, state->size, state->name);
+                else
+                    recomp_lockstep_ignore(state->va, state->size);
+        }
+        recomp_lockstep_frame();
+    }
+    gen();
+}
+
+static void ts2_vblank_count(void (*gen)(void))
+{
+    if (recomp_lockstep_active()) {
+        g_eax = recomp_lockstep_tick();
+        g_esp += 4;                        /* ret */
+        return;
+    }
+    gen();
+}
+
 /* ── TimeSplitters 2: where this release's functions are ─────── */
 
 /*

@@ -37,6 +37,34 @@ void sub_0009F180(void) { ts2_front_end_scene(sub_0009F180_gen); }
 extern void sub_001CC100_gen(void);
 void sub_001CC100(void) { ts2_present(sub_001CC100_gen); }
 
+/* frame_clock is sub_001ADF80 (online co-op, ts2_frame_clock): called once
+ * a frame from the three loops at 0x00168E69, 0x00168F3A and 0x00168FA2, it
+ * reads vblank_count, sub_001C8190 (it returns the word at 0x0047C5E8, which
+ * the vblank callback sub_001C89D2 increments), stores the vblanks elapsed at
+ * 0x00348898 clamped to 1..3, and that as a float at 0x003488A0. The state
+ * hashed for lockstep is .data, 0x002A01E0 for 0x214114 bytes (the section
+ * table of this XBE), globals and the zero-filled pools after them. */
+static const Ts2StateRegion k_ts2_state[] = {
+    { 0x002A01E0u, 0x00214114u, ".data" },
+    /* Not game state: the vblank callback's count (the game reads the tick
+     * instead, through vblank_count). */
+    { 0x0047C5E8u, 4u, 0 },
+    /* Not game state: the music streamer's, written by its own thread (the
+     * second guest thread, sub_001B8670 over sub_001B85B0, every 16 ms): its
+     * busy flag, which the game thread only waits on (sub_001B83A0 sleeps
+     * while it is set), the stream object at 0x0042DEF8 (five packet
+     * statuses at +0x10, the position at +0x28) and the percentage it
+     * writes through +0x2C, to 0x0042DCD8. */
+    { 0x0040BE74u, 4u, 0 },
+    { 0x0042DCD8u, 4u, 0 },
+    { 0x0042DEF8u, 0x30u, 0 },
+    { 0, 0, 0 }
+};
+extern void sub_001ADF80_gen(void);
+void sub_001ADF80(void) { ts2_frame_clock(sub_001ADF80_gen, k_ts2_state); }
+extern void sub_001C8190_gen(void);
+void sub_001C8190(void) { ts2_vblank_count(sub_001C8190_gen); }
+
 /* reserve is sub_001C8E35 (PAL 0x001C9265): 52 callers, a switch on its
  * first argument (the primitive type), and it calls the flush. flush is
  * sub_001C98AF (PAL 0x001C9CDF): it draws through sub_001CC1D0, the game's
