@@ -94,7 +94,7 @@ stands. Run the game with it:
 
 ```bash
 cd build/Release
-RECOMP_MODS=$HOME/TS2Modding/mymod ./split2_recomp
+RECOMP_MODS=$HOME/TS2Modding/mymod ./timeslip
 ```
 
 The character changes everywhere it appears: story, arcade and as bots. (Its
@@ -122,7 +122,7 @@ and build it into a mod:
 ```bash
 python3 -I tools/ts2kitbash.py ~/TS2Modding/mychar/recipe.json game/data \
     ~/TS2Modding/work ~/TS2Modding/mychar-mod
-RECOMP_MODS=$HOME/TS2Modding/mychar-mod ./split2_recomp   # from build/Release
+RECOMP_MODS=$HOME/TS2Modding/mychar-mod ./timeslip   # from build/Release
 ```
 
 `ts2kitbash` makes the character-select preview and a portrait (in Blender,

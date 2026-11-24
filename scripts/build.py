@@ -273,7 +273,7 @@ def main() -> int:
     # and the game paths in src/main.c hold on all of them.
     generator = os.environ.get("CMAKE_GENERATOR", "")
     multi_config = os.name == "nt" and (not generator or generator.startswith("Visual Studio"))
-    exe_name = "split2_recomp" + (".exe" if os.name == "nt" else "")
+    exe_name = "timeslip" + (".exe" if os.name == "nt" else "")
     if multi_config:
         build = BUILD
         exe = BUILD / args.config / exe_name
@@ -295,7 +295,7 @@ def main() -> int:
         return fail("the build failed")
 
     print(f"\nbuilt {exe}")
-    launcher = exe.with_name("split2_recomp_launcher" + (".exe" if os.name == "nt" else ""))
+    launcher = exe.with_name("timeslip_launcher" + (".exe" if os.name == "nt" else ""))
     if launcher.is_file():
         print(f"settings window: {launcher}")
     return 0

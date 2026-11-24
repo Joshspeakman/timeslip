@@ -1,7 +1,7 @@
 /* TimeSplitters 2 launcher, in the manner of the other native ports' launch windows (Homeworld's, Ghost Recon's):
  * the game's logo over its own Oblask Dam, a card for each renderer (native Metal, or Vulkan through MoltenVK), a
  * row of tiles (Graphics Options, Controls, Saves, Updates) and Quit / Play. Then the recompiled game
- * (Contents/MacOS/split2_recomp) starts in this process, so the app in the Dock is the game.
+ * (Contents/MacOS/timeslip) starts in this process, so the app in the Dock is the game.
  *
  * Settings are remembered here and handed to the game as the toolkit's environment variables, which win over its
  * settings file (README: "Running a build of your own"): RECOMP_D3D8_BACKEND, RECOMP_RES_SCALE, RECOMP_WIDESCREEN,
@@ -667,7 +667,7 @@ static NSString *const kbm_json =
         unsetenv("RECOMP_INPUT_CONFIG"); unsetenv("RECOMP_MOUSE_LOOK"); unsetenv("RECOMP_MOUSE_SENSITIVITY");   /* the player's own bindings */
     }
     [self.window orderOut:nil];
-    NSString *exe = [NSBundle.mainBundle.executablePath.stringByDeletingLastPathComponent stringByAppendingPathComponent:@"split2_recomp"];
+    NSString *exe = [NSBundle.mainBundle.executablePath.stringByDeletingLastPathComponent stringByAppendingPathComponent:@"timeslip"];
     char *const av[] = {(char *)exe.fileSystemRepresentation, NULL};
     execv(av[0], av);
     NSAlert *a = [NSAlert new]; a.messageText = @"The game did not start"; a.informativeText = exe; [a runModal];

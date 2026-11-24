@@ -15,13 +15,13 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 DATA=${1:-$HOME/Games/TimeSplitters2Native}
 GAME=$DATA/game
-BIN=$HERE/build/Release/split2_recomp
+BIN=$HERE/build/Release/timeslip
 REPLAY=$HERE/build/Release/xboxrecomp/src/replay/d3d8_replay
 CAPTEX=$HERE/mac/tools/captex.py
 die() { echo "make_art: $*" >&2; exit 1; }
 [ -f "$GAME/default.xbe" ] || die "no game at $GAME"
 [ -x "$BIN" ] && [ -x "$REPLAY" ] || die "build first (scripts/build.py)"
-pgrep -f 'split2_recomp' >/dev/null && die "the game is running; quit it first"
+pgrep -f 'timeslip' >/dev/null && die "the game is running; quit it first"
 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/ts2art.XXXXXX")
 cleanup() { [ -n "${PID:-}" ] && kill -KILL "$PID" 2>/dev/null; rm -rf "${WORK:?}"; }

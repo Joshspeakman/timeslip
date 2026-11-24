@@ -17,7 +17,7 @@ ones first in priority (`;` between them on Windows):
 
 ```bash
 cd build/Release
-RECOMP_MODS=/path/to/modA:/path/to/modB:/path/to/modC ./split2_recomp
+RECOMP_MODS=/path/to/modA:/path/to/modB:/path/to/modC ./timeslip
 ```
 
 Every file the game reads is inside a `.pak`, so a mod holds files from
@@ -200,7 +200,7 @@ Then, for any of the three:
 
 ```bash
 python3 -I tools/ts2kitbash.py <recipe.json> game/data <work> <mod>
-RECOMP_MODS=<mod> ./split2_recomp            # or <mod>:<another mod>
+RECOMP_MODS=<mod> ./timeslip            # or <mod>:<another mod>
 ```
 
 `ts2kitbash` writes a mod folder (loose files and `mod.json`), which stacks

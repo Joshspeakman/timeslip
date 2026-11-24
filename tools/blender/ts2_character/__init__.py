@@ -27,7 +27,7 @@ from bpy_extras.io_utils import ExportHelper, ImportHelper
 
 bl_info = {      # read only when installed as a classic add-on (the manifest replaces it)
     "name": "TimeSplitters 2 character",
-    "author": "split2-recomp",
+    "author": "Timeslip",
     "version": (1, 0, 0),
     "blender": (4, 2, 0),
     "location": "File > Import/Export, 3D View > Sidebar > TS2",
@@ -322,7 +322,7 @@ class TS2_Preferences(AddonPreferences):
                                  description="Default textures source: an unpacked chr.pak")
     mod_dir: StringProperty(name="Mod folder", subtype="DIR_PATH", description="Default for Write into mod folder")
     tools_dir: StringProperty(name="Tools folder", subtype="DIR_PATH",
-                              description="Only when the add-on has no vendored copy: split2-recomp's tools/")
+                              description="Only when the add-on has no vendored copy: Timeslip's tools/")
 
     def draw(self, context):
         for prop in ("bindpose_dir", "textures_dir", "mod_dir", "tools_dir"):

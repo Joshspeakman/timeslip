@@ -18,7 +18,7 @@ starts from a fresh profile) and an empty save folder, muted:
 RECOMP_GAME_DIR=<game copy without UDATA> RECOMP_SAVE_DIR=<empty folder> \
 RECOMP_MUTE=1 RECOMP_WINDOW_BACKGROUND=1 \
 RECOMP_LOCKSTEP_REPLAY=tests/lockstep/coop-siberia-us.trace RECOMP_LOCKSTEP_END=8000 \
-./split2_recomp 2> replay.log
+./timeslip 2> replay.log
 grep LOCKSTEP replay.log | tail -2
 ```
 

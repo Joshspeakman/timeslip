@@ -555,7 +555,7 @@ def export_glb(xbr, name="model", textures=None, bindposes=(), warn=print, extra
                                   "pieces_without_geometry": [i for i, p in enumerate(P) if not any(p["sections"])],
                                   "note": "fromgltf takes everything but geometry from the base .xbr"}}}
     nodes.append(root)
-    gl = {"asset": {"version": "2.0", "generator": "split2-recomp tools/ts2gltf.py"},
+    gl = {"asset": {"version": "2.0", "generator": "Timeslip tools/ts2gltf.py"},
           "scene": 0, "scenes": [{"name": name, "nodes": [len(nodes) - 1]}],
           "nodes": nodes, "meshes": meshes, "materials": materials, "skins": [skin],
           "accessors": g.accessors, "bufferViews": g.views, "buffers": [{"byteLength": 0}]}

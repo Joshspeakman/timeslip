@@ -8,7 +8,7 @@ cmake_minimum_required(VERSION 3.20)
 
 # C and C++: the toolkit's renderer has C++ in it (the DXC loader, VMA), so
 # the executable links with the C++ driver. This repository's sources are C.
-project(split2_recomp C CXX)
+project(timeslip C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -50,7 +50,7 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/recomp/ts2_region.h")
         "that was lifted. Run: py -3 scripts/build.py")
 endif()
 
-set(SPLIT2_SOURCES
+set(TIMESLIP_SOURCES
     src/main.c
     src/recomp_manual.c
     ${RECOMP_GEN_SOURCES}
@@ -62,13 +62,13 @@ set(SPLIT2_SOURCES
 # libmain.so loads (the toolkit's cmake/android.cmake). main() is renamed for
 # it to call.
 if(ANDROID)
-    add_library(${PROJECT_NAME} OBJECT ${SPLIT2_SOURCES})
+    add_library(${PROJECT_NAME} OBJECT ${TIMESLIP_SOURCES})
     set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
     set_source_files_properties(src/main.c PROPERTIES
         COMPILE_DEFINITIONS main=recomp_title_main)
     xboxrecomp_android_libraries(${PROJECT_NAME})
 else()
-    add_executable(${PROJECT_NAME} ${SPLIT2_SOURCES})
+    add_executable(${PROJECT_NAME} ${TIMESLIP_SOURCES})
 endif()
 
 # A windowed program on Windows (WinMain, no console); a plain executable

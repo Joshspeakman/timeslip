@@ -4,7 +4,7 @@ id = "ts2_character"
 version = "1.0.0"
 name = "TimeSplitters 2 character"
 tagline = "Import and export TimeSplitters 2 (Xbox) character models (.xbr)"
-maintainer = "split2-recomp"
+maintainer = "Timeslip"
 type = "add-on"
 tags = ["Import-Export"]
 

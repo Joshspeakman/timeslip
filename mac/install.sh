@@ -7,7 +7,7 @@
 #             (default ~/Games/TimeSplitters2Native; mac/make_art.sh makes the art)
 #
 # The app: Contents/MacOS/"TimeSplitters 2" is the launcher (mac/ts2_launcher.m), which starts the recompiled game
-# (Contents/MacOS/split2_recomp, bundled by xboxrecomp/scripts/make_macos_app.py with its Vulkan loader, MoltenVK and
+# (Contents/MacOS/timeslip, bundled by xboxrecomp/scripts/make_macos_app.py with its Vulkan loader, MoltenVK and
 # DXC for the Vulkan renderer; the Metal renderer needs none of them) in the same process. Contents/MacOS/update runs
 # mac/update.sh from this checkout. It contains the game's recompiled code: for this Mac only, never distribute it.
 set -euo pipefail
@@ -23,7 +23,7 @@ while [ $# -gt 0 ]; do
 done
 BUNDLE_ID=io.github.joshspeakman.timesplitters2
 SDK=${VULKAN_SDK:-$HOME/VulkanSDK/1.4.357.1/macOS}
-BIN=$HERE/build/Release/split2_recomp
+BIN=$HERE/build/Release/timeslip
 die() { echo "install: $*" >&2; exit 1; }
 
 [ -x "$BIN" ] || die "no build: run scripts/build.py first"

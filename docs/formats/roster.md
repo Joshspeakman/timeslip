@@ -34,7 +34,7 @@ The sections from "Experiment" on come from scripted runs.
      bytes, indexed by chr id: flags (hat sizes and others) and four floats;
   3. the **selectable roster** at `0x002BAC60`: 127 entries of 0x20 bytes, in
      select-screen order: chr id, portrait, set background, unlock condition.
-     The split2-recomp PAL build moves it (with 32 hidden spare slots) into a
+     The Timeslip PAL build moves it (with 32 hidden spare slots) into a
      section of its own before the lift: [Room for more characters](#room-for-more-characters-the-xbe-patch).
 - 126 roster entries are selectable (the 127th, entry 126, has unlock kind 0,
   "never"). The character grid is 14 columns by 9 rows = 126 cells, one page.
@@ -213,7 +213,7 @@ mount order. The entry's length and position are all the four readers use:
 else reads the table (code: every reference to `0x358A18`-`0x358A54`,
 `0x358D64` and `0x2BABF8`).
 
-split2-recomp puts a mod's loose files (`files/`, `paks/<pak>/`) into that
+Timeslip puts a mod's loose files (`files/`, `paks/<pak>/`) into that
 directory as each pak is mounted, and reads them from the mod in the two
 read functions (`ts2_paks_*` in `src/recomp_manual.c`, `docs/modding.md`).
 
@@ -739,7 +739,7 @@ Siberia (`l_35_ST.pak`), with no unresolved indirect calls in any run.
 
 ## Adding a character (mods)
 
-What split2-recomp does, PAL only (`src/recomp_manual.c`, "extra playable
+What Timeslip does, PAL only (`src/recomp_manual.c`, "extra playable
 characters"; addresses in `config/pal/overrides.inc`). A mod folder for
 `RECOMP_MODS` holds loose files, which the game serves from inside its paks
 at run time (`docs/modding.md`, "How a mod reaches the game"):
@@ -759,7 +759,7 @@ folder is the mod (`tools/ts2mod.py build` can still turn it into rebuilt
 
 ```bash
 python3 -I tools/ts2kitbash.py tools/examples/characters.json game/data <work> <mod>
-RECOMP_MODS=<mod>:<another mod> ./split2_recomp
+RECOMP_MODS=<mod>:<another mod> ./timeslip
 ```
 
 Every `RECOMP_MODS` folder's `ts2/characters.ini` is read, in that order

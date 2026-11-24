@@ -50,7 +50,7 @@ the game with it, alone or with other mods, or make one self-contained
 folder of rebuilt paks out of it with ts2mod build.
 
   python3 -I tools/ts2kitbash.py <recipe.json> game/data <work dir> <mod>
-  RECOMP_MODS=<mod>:<another mod> ./split2_recomp
+  RECOMP_MODS=<mod>:<another mod> ./timeslip
   python3 -I tools/ts2mod.py build <mod> game/data <self-contained mod>   (optional)
 """
 
@@ -242,7 +242,7 @@ def ini_value(c, key, value):
 def characters_ini(recipe):
     """ts2/characters.ini for the recipe's characters, as
     src/recomp_manual.c (ts2_chars_read) reads it."""
-    out = ["; TimeSplitters 2 (PAL), split2-recomp: the characters this mod adds,",
+    out = ["; TimeSplitters 2 (PAL), Timeslip: the characters this mod adds,",
            "; one [section] each, read at start-up from <mod>/ts2/characters.ini.",
            "; Written by tools/ts2kitbash.py; docs/formats/roster.md has the keys.",
            ";",

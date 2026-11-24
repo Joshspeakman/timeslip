@@ -517,7 +517,7 @@ python3 -I tools/ts2gltf.py fromgltf work/chr/ob/chrs/chr01.xbr chr01_edited.glb
 
 # 5. put it in every pak that carries chr01 and run
 python3 -I tools/ts2mod.py build mod game/data modout
-RECOMP_MODS=modout ./split2_recomp
+RECOMP_MODS=modout ./timeslip
 ```
 
 **What the `.glb` holds.** One joint per palette bone: the animation bones,

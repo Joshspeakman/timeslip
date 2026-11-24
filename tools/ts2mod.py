@@ -1,6 +1,6 @@
 """Make, build and check TimeSplitters 2 mods for RECOMP_MODS.
 
-A mod is a folder. The game (split2-recomp, PAL) reads loose files from it
+A mod is a folder. The game (Timeslip, PAL) reads loose files from it
 at run time and stacks every mod in RECOMP_MODS (docs/modding.md):
 
   files/<path in a pak>                  that file in every pak that holds it,
@@ -49,7 +49,7 @@ laid out as RECOMP_MODS expects, and mod.json saying what went where.
   python3 tools/ts2mod.py loose <source> <mod> [--data game/data]
   python3 tools/ts2mod.py build <source> game/data <mod>
   python3 tools/ts2mod.py check <mod> [<mod> ...]
-  RECOMP_MODS=<mod>:<another mod> ./split2_recomp      (';' on Windows)
+  RECOMP_MODS=<mod>:<another mod> ./timeslip      (';' on Windows)
 
 At run time a name in files/ replaces a pak's copy only where that copy is
 as long as chr.pak's (textures/0478.xbt is another picture in

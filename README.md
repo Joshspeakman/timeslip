@@ -39,9 +39,9 @@ Download the file for your system from the
 
 | System | File | Start |
 | --- | --- | --- |
-| Windows | `split2-<version>-windows-x86_64.zip` | Unzip it and run `split2.exe` |
-| macOS | `split2-<version>-macos-arm64.tar.xz` | Unpack it, then see [macOS](#macos) below |
-| Linux, SteamOS | `split2-<version>-linux-x86_64.tar.xz` | Unpack it and run `./split2` |
+| Windows | `timeslip-<version>-windows-x86_64.zip` | Unzip it and run `timeslip.exe` |
+| macOS | `timeslip-<version>-macos-arm64.tar.xz` | Unpack it, then see [macOS](#macos) below |
+| Linux, SteamOS | `timeslip-<version>-linux-x86_64.tar.xz` | Unpack it and run `./timeslip` |
 
 The first time it starts, it asks for your copy of the game: choose **Disc
 image...** or **Folder...**, or paste a path. It then builds the game, which
@@ -65,8 +65,8 @@ tools it builds the game with. Then open it.
 
 ### Steam Deck and SteamOS
 
-Unpack the release in desktop mode and run `split2` once to build the game.
-To play from Game Mode, add `split2` to Steam (Add a Non-Steam Game) and give
+Unpack the release in desktop mode and run `timeslip` once to build the game.
+To play from Game Mode, add `timeslip` to Steam (Add a Non-Steam Game) and give
 the shortcut `icon.png` from the release folder as its icon.
 
 ## What works
@@ -168,7 +168,7 @@ The built game, its saves and the logs are in one folder per user:
 | Linux | `~/.local/share/xboxrecomp/builds/4553000A/` |
 
 In it, `game/UDATA/4553000a/` holds your saves, `build.log` is the build's
-log and `split2_recomp.log` the game's. Your own disc or folder is never
+log and `timeslip.log` the game's. Your own disc or folder is never
 written to.
 
 The settings and controls are kept apart from the build:
@@ -191,7 +191,7 @@ settings carry over.
   issue with the title, region and SHA-1 the message shows.
 - The build fails: open an issue and attach `build.log` (see [Where things
   are kept](#where-things-are-kept)).
-- A black window and nothing else: attach `split2_recomp.log` from the same
+- A black window and nothing else: attach `timeslip.log` from the same
   folder.
 - A rendering bug in one place: press F11 there, and attach the `.bmp` and
   `.d3dcap` files it writes beside the game.
@@ -301,8 +301,8 @@ it, which takes longer. Later runs only recompile. The program ends up in
 
 | | Windows | macOS and Linux |
 | --- | --- | --- |
-| The game | `split2_recomp.exe` | `split2_recomp` |
-| Settings window, then the game | `split2_recomp_launcher.exe` | `split2_recomp_launcher` |
+| The game | `timeslip.exe` | `timeslip` |
+| Settings window, then the game | `timeslip_launcher.exe` | `timeslip_launcher` |
 
 If your extracted games live somewhere else, `game` can be a link to the folder
 (`ln -s "/path/to/TimeSplitters 2" game`), or pass `--game DIR` to the build and
@@ -336,7 +336,7 @@ differs from a release:
 | | Windows | macOS and Linux |
 | --- | --- | --- |
 | Saves | `game\UDATA\4553000a\` | `game/UDATA/4553000a/` |
-| Log, when not started from a terminal | `build\Release\split2_recomp.log` | `build/Release/split2_recomp.log` |
+| Log, when not started from a terminal | `build\Release\timeslip.log` | `build/Release/timeslip.log` |
 
 System Link without the launcher:
 
@@ -375,7 +375,7 @@ changes.
 
 Pushing a version tag (`git tag v1.0 && git push origin v1.0`) runs
 `.github/workflows/release.yml`, which builds the Windows, macOS and Linux
-downloads from `release/split2.json` and attaches them to the tag's GitHub
+downloads from `release/timeslip.json` and attaches them to the tag's GitHub
 release. No game files are involved. How the downloads work is in the
 toolkit's
 [self-build-release.md](https://github.com/Joshspeakman/recompose/blob/main/docs/technical/self-build-release.md).
