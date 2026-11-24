@@ -697,6 +697,72 @@ static void ts2_viewport_rect(void (*viewport_rect)(void), uint32_t player_calle
     viewport_rect();
 }
 
+/*
+ * Mouse look as a mouse (recompose input_bindings.h, native mouse look): the
+ * mouse turns the player by an angle in proportion to how far it moved, with
+ * none of the stick's ramp, dead zone or top speed in the way -- what a PC
+ * shooter does. The game reads the player's sticks once a player a frame
+ * (sub_00148160, config/<region>/overrides.inc); after that read, the
+ * player's yaw and pitch (degrees) are turned by the mouse's look for that
+ * player's controller, and the game's own turning by the stick, if any, adds
+ * to it. recomp_input_look gives the latched look online, so both machines
+ * turn the joiner's player alike, and nothing at all to a controller with no
+ * mouse. Directions as the stick's: left adds to the yaw, up takes from the
+ * pitch, which the game keeps within +-40 degrees.
+ *
+ *   RECOMP_TS2_LOOKLOG=<n>  the first n turns, with the yaw the game kept
+ */
+extern int recomp_input_look(unsigned port, float *dx_deg, float *dy_deg);
+
+#define TS2_PITCH_LIMIT 40.0f
+
+static void ts2_mouse_look(uint32_t current_player, uint32_t player_controller)
+{
+    static int log_left = -1;
+    static float logged_yaw;
+    static int log_pending;
+    uint32_t ctx = TS2_MEM32_EARLY(current_player), player, port;
+    float dx, dy, yaw, pitch;
+
+    if (log_left < 0) {
+        const char *v = getenv("RECOMP_TS2_LOOKLOG");
+        log_left = v && *v ? atoi(v) : 0;
+    }
+    if (ctx < 0x10000u || ctx >= 0x84000000u || (ctx & 3u))
+        return;
+    player = TS2_MEM32_EARLY(ctx);
+    if (player > 3u)
+        return;
+    port = TS2_MEM32_EARLY(player_controller + player * 4u);
+    if (log_pending && port == 0u) {
+        fprintf(stderr, "[TS2-LOOK]   the next frame starts at yaw %.3f (set %.3f)\n",
+                TS2_MEMF(ctx + 0x148), logged_yaw);
+        log_pending = 0;
+    }
+    if (port > 3u || !recomp_input_look(port, &dx, &dy))
+        return;
+    yaw = TS2_MEMF(ctx + 0x148) - dx;
+    while (yaw >= 360.0f)
+        yaw -= 360.0f;
+    while (yaw < 0.0f)
+        yaw += 360.0f;
+    pitch = TS2_MEMF(ctx + 0x14C) + dy;
+    if (pitch > TS2_PITCH_LIMIT)
+        pitch = TS2_PITCH_LIMIT;
+    if (pitch < -TS2_PITCH_LIMIT)
+        pitch = -TS2_PITCH_LIMIT;
+    if (log_left > 0) {
+        log_left--;
+        fprintf(stderr, "[TS2-LOOK] player %u controller %u: %+.3f,%+.3f deg, yaw %.3f -> %.3f, "
+                "pitch %.3f -> %.3f\n", player, port, dx, dy, TS2_MEMF(ctx + 0x148), yaw,
+                TS2_MEMF(ctx + 0x14C), pitch);
+        logged_yaw = yaw;
+        log_pending = port == 0u;
+    }
+    TS2_MEMF(ctx + 0x148) = yaw;
+    TS2_MEMF(ctx + 0x14C) = pitch;
+}
+
 /* At the end of a frame: whose pass the next frame leaves undrawn. */
 static void ts2_coop_frame_done(void)
 {

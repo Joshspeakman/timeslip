@@ -455,6 +455,12 @@ static int title_main(int argc, char **argv)
                                                   const char *const *settings);
         recomp_title_defaults_install(recomp_title_bindings, recomp_title_settings);
     }
+    /* The mouse turns the player as an angle (ts2_mouse_look in
+     * recomp_manual.c), not by pushing the right stick. */
+    {
+        extern void recomp_mouse_look_native(int on);
+        recomp_mouse_look_native(1);
+    }
 
     /* Online co-op plays only between copies of one build: a different
      * build, or another release, computes a different game. */

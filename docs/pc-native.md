@@ -41,13 +41,16 @@ camera, its control layouts, its defaults.
    Enter or Tab to pause; the README's Controls table. The launcher shows
    the same defaults. To check by hand: whether TS2's aim (right stick
    press) is a toggle or held, and whether that suits the right button.
-3. **Mouse look that is a mouse, not a stick** (both): the mouse turns the
-   view by an angle in proportion to how far it moved, with no stick
-   acceleration, dead zone or top speed in the way; aim assist off for the
-   mouse; a sensitivity for aiming down the sights. TS2's part is finding
-   where it turns the camera from the stick. Online co-op only sends
-   controllers, so the mouse's movement each frame travels with them (a
-   lockstep protocol and trace change; recordings without it still replay).
+3. ~~Mouse look that is a mouse, not a stick~~ **Done** (Recompose
+   f578cf6; TS2 `ts2_mouse_look`): the mouse turns the player's yaw and pitch
+   (degrees, at player context +0x148 / +0x14C) by an angle each frame, after
+   the game reads the sticks (sub_00148160), with no ramp, dead zone or top
+   speed; 0.11 degrees a count at the default sensitivity, invert in the
+   menu; the game's own +-40 degree pitch limit kept. Online, each machine's
+   mouse is latched with its controller (lockstep protocol 4), checked the
+   same on both machines and in replay. Left: aim mode (the right button)
+   with the mouse, aim assist, a separate sensitivity while aiming, and
+   feel by hand.
 4. **Resolution and frame rate the PC way** (toolkit): render at the
    window's own size ("native") or a chosen one, not only whole multiples of
    640x480; a frame-rate target that picks the interpolation for the

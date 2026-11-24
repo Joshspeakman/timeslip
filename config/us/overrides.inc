@@ -276,3 +276,23 @@ const Ts2Roster k_ts2_roster = { 0 };
  * not served; whole data/*.pak files in a mod still are (the toolkit's
  * RECOMP_MODS). PAL's are in config/pal/overrides.inc. */
 const Ts2Paks k_ts2_paks = { 0 };
+
+/* Native mouse look (ts2_mouse_look in src/recomp_manual.c). Found by
+ * logging which code reads which stick axis in play and which floats move
+ * while the right stick is held:
+ *   sub_00148160  the player's look and movement read, once a player a
+ *                 frame (through sub_00140770 / sub_000DA420(player, axis));
+ *                 the yaw and pitch are moved by the stick after it
+ *   0x00497100    the player being updated (a pointer): +0x00 its player
+ *                 number, +0x148 the yaw and +0x14C the pitch in degrees
+ *                 (copies at +0x1AC, +0x1B0 and +0x948), +0x894 / +0x898
+ *                 the stick's turn and look speed as they ramp up
+ *   0x002CE388    player number -> controller (4 bytes each)
+ * Holding the stick turns 2.64 degrees a frame at most, and the pitch stops
+ * at +-40 degrees. */
+extern void sub_00148160_gen(void);
+void sub_00148160(void)
+{
+    sub_00148160_gen();
+    ts2_mouse_look(0x00497100u, 0x002CE388u);
+}
