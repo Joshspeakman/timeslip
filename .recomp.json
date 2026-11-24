@@ -3,7 +3,7 @@
   "game": "TimeSplitters 2",
   "system": "Xbox",
   "type": "recomp",
-  "toolchain": "xboxrecomp",
+  "toolchain": "recompose",
   "original": {"region": "PAL"},
   "status": "released"
 }

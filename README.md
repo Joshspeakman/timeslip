@@ -1,9 +1,13 @@
-# split2-recomp
+# Timeslip
 
 TimeSplitters 2 for the original Xbox, recompiled into a native program for
 Windows, macOS and Linux (including SteamOS and the Steam Deck). You bring your
 own copy of the game, and it is built from that copy on your computer. This
 repository and its releases contain no game code or data.
+
+Timeslip is built on [Recompose](https://github.com/Joshspeakman/recompose),
+its recompilation toolkit. Both began as forks of phobos665's work; see
+[Credits](#credits).
 
 <img width="796" height="468" alt="Screenshot 2026-10-20 at 09 31 50" src="https://github.com/user-attachments/assets/139ac55d-e26a-476b-83ad-5704bdab6acc" />
 
@@ -31,7 +35,7 @@ game with.
 ## Download and start
 
 Download the file for your system from the
-[latest release](https://github.com/phobos665/split2-recomp/releases/latest):
+[latest release](https://github.com/Joshspeakman/timeslip/releases/latest):
 
 | System | File | Start |
 | --- | --- | --- |
@@ -151,7 +155,7 @@ Copies of this port can play each other without anything else. To play
 against xemu or a real console, you also need your console's `XboxLANKey` in
 `%APPDATA%\xboxrecomp\keys.ini` as `lan_key = ...`. The details are in the
 toolkit's
-[system-link.md](https://github.com/phobos665/DirectXbox-Recomp/blob/main/docs/technical/system-link.md).
+[system-link.md](https://github.com/Joshspeakman/recompose/blob/main/docs/technical/system-link.md).
 
 ## Where things are kept
 
@@ -206,7 +210,7 @@ Any other disc, such as the Japanese release or another revision, is refused.
 # Build it yourself
 
 For working on the port. This builds the same game by hand, from a clone,
-against the [DirectXbox-Recomp](https://github.com/phobos665/DirectXbox-Recomp)
+against the [Recompose](https://github.com/Joshspeakman/recompose)
 toolkit (`xboxrecomp/` here): the build translates the game's code to C, then
 compiles it.
 
@@ -270,8 +274,8 @@ runs outside it, straight from SteamOS.
 ## Build
 
 ```sh
-git clone --recursive https://github.com/phobos665/split2-recomp.git
-cd split2-recomp
+git clone --recursive https://github.com/Joshspeakman/timeslip.git
+cd timeslip
 ```
 
 Copy the extracted disc into a folder called `game`, so that `game/default.xbe`
@@ -374,7 +378,7 @@ Pushing a version tag (`git tag v1.0 && git push origin v1.0`) runs
 downloads from `release/split2.json` and attaches them to the tag's GitHub
 release. No game files are involved. How the downloads work is in the
 toolkit's
-[self-build-release.md](https://github.com/phobos665/DirectXbox-Recomp/blob/main/docs/technical/self-build-release.md).
+[self-build-release.md](https://github.com/Joshspeakman/recompose/blob/main/docs/technical/self-build-release.md).
 
 ## Build problems
 
@@ -382,12 +386,24 @@ toolkit's
 - Linux, "DXC (the shader compiler) is missing": run
   `bash xboxrecomp/tools/linux/fetch_dxc.sh`, then build again.
 
+# Credits
+
+Timeslip began as a fork of [split2-recomp](https://github.com/phobos665/split2-recomp)
+by phobos665, and Recompose as a fork of
+[DirectXbox-Recomp](https://github.com/phobos665/DirectXbox-Recomp) by
+phobos665 and its contributors. Their history is kept in both repositories.
+Since November 2026 the two are developed separately and nothing is sent
+back upstream. Thank you to phobos665 and everyone who worked on the
+originals; phobos665 can be supported on [Ko-fi](https://ko-fi.com/phobos665).
+
 # Legal
 
-You need your own copy of TimeSplitters 2. Do not share the game's files, the
-built game, a clone's `src/recomp/` (it is the game's translated code) or
-anything in `build/`. This repository, its releases and xboxrecomp contain no
-game code or assets.
+TimeSplitters 2 is a trademark of its owners; Timeslip is not affiliated with
+or endorsed by them. You need your own copy of the game. Do not share the
+game's files, the built game, a clone's `src/recomp/` (it is the game's
+translated code) or anything in `build/`. This repository, its releases and
+Recompose contain no game code or assets.
 
 The code in this repository is licensed under the GNU General Public License
-v3.0; see [LICENSE](LICENSE). That covers the files committed here, not the game.
+v3.0, as the original was; see [LICENSE](LICENSE). That covers the files
+committed here, not the game.
