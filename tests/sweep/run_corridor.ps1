@@ -19,8 +19,16 @@ $ErrorActionPreference = "Stop"
 $here = $PSScriptRoot
 $repo = Split-Path (Split-Path $here -Parent) -Parent
 if (-not $Exe) { $Exe = Join-Path $repo "build\Release\timeslip.exe" }
-if (Test-Path $Out) { Remove-Item -Recurse -Force $Out }
+if (-not (Test-Path $Exe)) { throw "No game at ${Exe}: build it first (ninja timeslip)" }
+# -Out is emptied first, so only a folder that is empty or an earlier run's (it has
+# the marker this writes) is taken.
+if (Test-Path $Out) {
+    if ((Get-ChildItem -Force $Out | Measure-Object).Count -gt 0 -and -not (Test-Path "$Out\.corridor-run")) {
+        throw "$Out has other things in it: give a new or empty folder" }
+    Remove-Item -Recurse -Force $Out
+}
 New-Item -ItemType Directory -Force "$Out\saves", "$Out\game\UDATA" | Out-Null
+Set-Content -Encoding ascii "$Out\.corridor-run" "a corridor sweep run (tests\sweep\run_corridor.ps1)"
 # The game linked, not copied: the run only reads its disc's files.
 Get-ChildItem $Game -Recurse | Where-Object { $_.FullName -notmatch '\\UDATA(\\|$)' } | ForEach-Object {
     $rel = $_.FullName.Substring($Game.Length).TrimStart('\'); $to = Join-Path "$Out\game" $rel
@@ -47,7 +55,13 @@ $env:RECOMP_PRESENT_DUMP_FRAMES = "3"; $env:RECOMP_PRESENT_DUMP_MAX = "6000"
 # Through cmd's own redirection: a piped stderr stalls the game (see tools\ in the repo's notes).
 $cmd = Start-Process -FilePath cmd.exe -WorkingDirectory (Split-Path $Exe) -PassThru -WindowStyle Hidden `
     -ArgumentList "/c `"`"$Exe`" 2>`"$Out\run.log`"`""
-$cmd.WaitForExit()
+# The run ends itself at RECOMP_LOCKSTEP_END (about two minutes of play and the menus
+# before it); twenty minutes is a hang.
+if (-not $cmd.WaitForExit(1200000)) {
+    Get-Process timeslip -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq (Resolve-Path $Exe).Path } |
+        Stop-Process -Force
+    Write-Warning "the run did not end by itself in 20 minutes; stopped"
+}
 Select-String -Path "$Out\run.log" -Pattern "LOCKSTEP\].*(same|differ|recorded)" | Select-Object -Last 1 | ForEach-Object { $_.Line }
 py -3 "$here\analyze.py" $Out --jpg
 py -3 "$here\odd.py" $Out

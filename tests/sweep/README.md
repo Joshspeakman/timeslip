@@ -58,13 +58,23 @@ courtyard's open roof); in-between frames are the ones frame interpolation
 draws. The strafing part cannot be judged this way (the player moves), and
 the Plasma Autorifle's blue beam reads as sky.
 
-Measured on Windows (D3D11, 5x, 16:9, FOV 80, frame interpolation 3), in
-in-between frames with sky through the walls:
+How many in-between frames a part has varies a little from run to run (they
+are dumped by the clock); the game frames do not. Measured on Windows
+(D3D11, 5x, 16:9, FOV 80, frame interpolation 3), in-between frames with
+sky through the walls, as `analyze.py` prints them:
 
-| Part | Before the fix (88e1999) | After (16a6700) |
-| --- | --- | --- |
-| Swinging 5 degrees a frame | 34 of 72 | 1 to 3 real, at the screen's edge as a swing starts |
-| 15 | 50 of 71 | 2 of 54 |
-| Pistols, firing and swinging | 60 of 148 | 4 of 150 |
-| Fire rifle | 49 of 410 | 0 of 386 |
-| Shotgun | 55 of 147 | 2 of 145 |
+| Part | Before the fix (88e1999) | Turn limit 70 (16a6700) | After: limit 20 |
+| --- | --- | --- | --- |
+| Swinging 5 degrees a frame | 34 of 72 | 11 of 62 | 8 of 59 |
+| 15 | 50 of 71 | 1 of 59 | 1 of 62 |
+| 30 | 0 of 14 | 20 of 62 | 0 of 12 |
+| 60 | 0 of 25 | 11 of 54 | 0 of 22 |
+| Pistols, firing and swinging | 60 of 148 | 4 of 150 | 3 of 150 |
+| Fire rifle | 49 of 410 | 0 of 383 | 0 of 381 |
+| Shotgun | 55 of 147 | 1 of 145 | 1 of 146 |
+
+At 5 degrees most of what is counted is the courtyard's open sky (the game
+frames of that part count it too, 8 here); the real ones are a sliver at the
+screen's edge on the frame a swing turns back. At 30 and 60 the game's own
+frames are shown for the turn itself (a flick past 20 degrees a frame is not
+interpolated); the in-between frames left are where the swing turns back.

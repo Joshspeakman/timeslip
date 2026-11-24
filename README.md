@@ -349,7 +349,6 @@ file:
 | Renderer | `renderer` (`auto`, `d3d11`, `vulkan`, `metal`) | `RECOMP_D3D8_BACKEND` |
 | Texture sharpness | `anisotropy` | `RECOMP_ANISO` |
 | Post-processing (the game's soften pass) | `post_soften` (`sharp`, `console`, `off`) | `RECOMP_POST_SOFTEN` |
-| Leave out glows that would flash the whole screen | `reduce_flashes` (on unless `0`) | `RECOMP_REDUCE_FLASHES` |
 | Frame rate | `frame_cap` (0 for uncapped) | `RECOMP_FPS_CAP` |
 | Show frame rate | `fps_overlay` | `RECOMP_FPS_OVERLAY` |
 | Fullscreen | `fullscreen` | `RECOMP_FULLSCREEN` |
