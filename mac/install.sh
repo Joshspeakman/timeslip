@@ -52,17 +52,11 @@ printf '#!/bin/bash\nexec /bin/bash %q "$@"\n' "$HERE/mac/update.sh" > "$A/Conte
 chmod +x "$A/Contents/MacOS/update"
 
 echo "== the icon"
-# upstream's own icon (release/android/icon.html: drawn in the logo's style, no game artwork), dark tile, on
-# macOS's icon grid
-CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-if [ -x "$CHROME" ]; then
-    "$CHROME" --headless=new --disable-gpu --allow-file-access-from-files --default-background-color=00000000 \
-        --hide-scrollbars --force-device-scale-factor=2 --window-size=512,512 --virtual-time-budget=2000 \
-        --screenshot="$STAGE/icon_raw.png" "file://$HERE/release/android/icon.html?bg=dark" >/dev/null 2>&1 || true
-fi
-[ -s "$STAGE/icon_raw.png" ] || cp "$HERE/release/android/icon.png" "$STAGE/icon_raw.png"
+# Timeslip's own icon (art/icon/png/1024.png, made by tools/art/make_art.py: no game artwork), a full-bleed
+# rounded tile, fitted to macOS's icon grid (the 824 px tile on the 1024 px canvas)
+[ -s "$HERE/art/icon/png/1024.png" ] || die "no art/icon/png/1024.png (tools/art/make_art.py makes it)"
 swiftc -O -o "$STAGE/icongrid" "$HERE/mac/tools/icongrid.swift" 2>/dev/null
-"$STAGE/icongrid" "$STAGE/icon_raw.png" "$STAGE/icon1024.png"
+"$STAGE/icongrid" "$HERE/art/icon/png/1024.png" "$STAGE/icon1024.png"
 IS="$STAGE/AppIcon.iconset"; mkdir -p "$IS"
 for s in 16 32 128 256 512; do
     sips -z $s $s "$STAGE/icon1024.png" --out "$IS/icon_${s}x${s}.png" >/dev/null
@@ -73,6 +67,9 @@ iconutil -c icns "$IS" -o "$A/Contents/Resources/AppIcon.icns"
 echo "== the art"
 mkdir -p "$A/Contents/Resources/art"
 if [ -d "$DATA/art" ]; then cp "$DATA"/art/* "$A/Contents/Resources/art/"; else echo "install: note: no art yet (mac/make_art.sh)" >&2; fi
+# Timeslip's own mark, which the launcher shows over its teal glow (the game's art stays the player's own).
+# art/logo.png (2335 px wide), not the 700 px logo-launcher.png: the mark is drawn 500 pt wide, 1000+ px on Retina
+cp "$HERE/art/logo.png" "$A/Contents/Resources/timeslip_logo.png"
 
 PB=/usr/libexec/PlistBuddy; P="$A/Contents/Info.plist"
 $PB -c "Set :CFBundleExecutable TimeSplitters 2" "$P"
