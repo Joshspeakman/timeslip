@@ -38,5 +38,9 @@
  {
   "start": "0x004400EC",
   "note": "XNET: a connection's timer callback (stored at +0xC by 0x00440B1C; switches on its state byte at +0x8C8 through the table at 0x0044039E); observed at runtime as an unresolved indirect call once in each copy of a two-copy System Link match. The only XNET/XONLINE code address stored as data that was not lifted."
+ },
+ {
+  "start": "0x002C3500",
+  "note": "Settings > Audio/Video Options: the MUSIC VOLUME and SOUND VOLUME rows' draw callback (the 20-step slider through sub_000814B0), registered by the menu builder sub_002C3E20 at 0x002C3F80 / 0x002C3FF4 (0x002C3610 is the other, chosen when its flag is set); the disassembler ran it into sub_002C3410. Observed at runtime as an unresolved indirect call, about a thousand times a minute on that screen: the volume sliders were never drawn (xemu draws them)."
  }
 ]

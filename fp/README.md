@@ -81,18 +81,15 @@ in this folder.
   Options panel clears only its rectangle's alpha (D3DCLEAR flags 0x80) and is
   translucent over the front end, where a clear of all four channels painted
   it black.
-- Open: the **volume sliders** in Settings > Audio/Video Options (MUSIC
-  VOLUME, SOUND VOLUME) are not drawn, on Windows and the Mac alike. No draw
-  lands beside those labels (every draw of one options frame logged: the
-  labels and the row highlight are there), nothing is skipped or fails, the
-  push-buffer walk never resynchronises, and changing the volume shows
-  nothing. `sub_000204F0` is the panel's frame, not the slider. The game
-  issues no draw for the bar at all: one options frame's every draw on both
-  host paths logged, 134 and no indexed ones, the labels and highlights
-  among them; the 98-vertex fans through 0x000225CF are the backdrop's rings.
-  So it is the menu code deciding not to draw it -- probably on a value it
-  reads (the volume, or something it asks the sound system that the HLE
-  answers otherwise); next, the options screen's slider routine.
+- The **volume sliders** in Settings > Audio/Video Options (MUSIC VOLUME,
+  SOUND VOLUME) are drawn and move, as xemu shows them (26 Nov 2026). The
+  menu builder (`sub_002C3E20`) hands each volume row a draw callback,
+  0x002C3500 on the front end, that the disassembler ran into the function
+  before it, so it was never lifted: every call was an unresolved indirect
+  call and the row drew nothing (about a thousand a minute on that screen).
+  A seed (`config/us/seeds.json`) lifts it. Found by tracing the Controls
+  screen's Turn Speed slider to the slider routine `sub_000814B0` and its
+  callers (`RECOMP_HLE_D3D8_TRACE_DRAW_FRAME`).
 - For Josh: TimeSplitters 2 clears some channels too, on its title and
   player-count screen, and with them honoured the blue swirl behind its logo
   comes out darker and more see-through in the middle. Which is right wants
