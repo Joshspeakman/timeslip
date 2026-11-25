@@ -339,6 +339,21 @@ set `RECOMP_GAME_DIR` when you play.
 
 If you cloned without `--recursive`, run `git submodule update --init --recursive`.
 
+### Installing it, and updates
+
+On Windows, `tools\install_windows.ps1` installs what you built into
+`%LOCALAPPDATA%\Programs\Timeslip` with Start menu and desktop shortcuts (the
+game's own logo as their icon, made from your disc) and an entry in Settings >
+Apps; on a Mac, `mac/install.sh` makes the app. `tools\build_windows.ps1` builds
+again with the same toolchain.
+
+The launcher's **Updates** tile offers the newest
+[release](https://github.com/Joshspeakman/timeslip/releases) (pre-releases
+included) when it is newer than what is installed, and installs it: it moves
+your clone to that release, lifts and builds the game again from your own disc,
+and reinstalls, keeping your saves and settings. It never builds over changes
+of your own, and a clone already past the release stays where it is.
+
 ## Running a build of your own
 
 The controls and settings are the ones in [Play](#play). Every setting is also

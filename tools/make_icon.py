@@ -1,13 +1,18 @@
-"""The game's own Xbox dashboard picture -- the title image in default.xbe's
-$$XTIMAGE section -- as a Windows icon, for the desktop and Start menu
-shortcuts (tools/install_windows.ps1). Made from the player's own disc on
-their own machine: nothing of the game is in this repository.
+"""The game's icon, for the desktop and Start menu shortcuts
+(tools/install_windows.ps1) and the Mac's app (--png --size 1024). Made from
+the player's own disc on their own machine: nothing of the game is in this
+repository.
 
-    py -3 tools/make_icon.py --game <folder with default.xbe> --out <file.ico> [--png <file.png>]
+    py -3 tools/make_icon.py --game <folder with default.xbe> [--art <dir>]
+                             [--out <file.ico>] [--png <file.png> [--size 1024]]
 
-The image is an XPR0 resource holding one texture (DXT1 or DXT3/5,
-128x128 on this disc); the icon carries it at 256, 128, 64, 48, 32 and 16
-pixels. Needs Pillow.
+With --art (the launcher's art from the same disc, tools/make_disc_art.py):
+the title screen's own logo, sharp, across the front end's deep blue in a
+rounded square, at 256, 128 and 64; at 48 and below, where a word cannot be
+read, the Xbox dashboard picture made smaller. Without it, that picture alone
+-- the title image in default.xbe's $$XTIMAGE, an XPR0 holding one DXT1 or
+DXT3/5 texture, 128x128 on this disc, so soft when it is made bigger (Josh,
+25 Nov 2026: "really poor and low res"). Needs Pillow.
 """
 import argparse
 import struct
@@ -93,22 +98,93 @@ def title_image(xbe_path):
     return decode(fmt, w, h, xpr[header + data_off:])
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('--game', required=True)
-    ap.add_argument('--out', required=True, help='the .ico to write')
-    ap.add_argument('--png', help='also the picture itself, at 256')
-    a = ap.parse_args()
-    img = title_image(a.game.rstrip('/\\') + '/default.xbe')
-    big = img.resize((256, 256), Image.LANCZOS)
-    # TS2's is a disc on a white square: outside the disc made clear, so the
-    # icon is the disc on the desktop rather than a white tile.
-    if big.getpixel((2, 2))[:3] >= (235, 235, 235) and big.getpixel((253, 253))[:3] >= (235, 235, 235):
+def rounded(img, radius):
+    from PIL import ImageDraw
+    m = Image.new('L', img.size, 0)
+    ImageDraw.Draw(m).rounded_rectangle((0, 0, img.size[0] - 1, img.size[1] - 1), radius, fill=255)
+    out = img.copy()
+    out.putalpha(m)
+    return out
+
+
+def blue_ground(size):
+    """The front end's deep blue, lighter towards the middle, as a rounded square."""
+    from PIL import ImageDraw
+    g = Image.new('RGBA', (size, size), (12, 19, 40, 255))
+    d = ImageDraw.Draw(g)
+    for r in range(size // 2, 0, -max(1, size // 256)):
+        t = 1.0 - r / (size / 2)
+        d.ellipse((size // 2 - r, size // 2 - r, size // 2 + r, size // 2 + r),
+                  fill=(12 + int(32 * t), 19 + int(42 * t), 40 + int(74 * t), 255))
+    return g
+
+
+def logo_icon(art, size):
+    """The title screen's own logo (tools/make_disc_art.py: logo.png and glow.png,
+    from the player's disc), sharp, across the front end's blue."""
+    logo = Image.open(art + '/logo.png').convert('RGBA')
+    glow = Image.open(art + '/glow.png').convert('RGBA')
+    box = logo.getbbox()
+    lg = logo.crop(box)
+    w = int(size * 0.90)
+    h = int(lg.height * w / lg.width)
+    k = w / lg.width
+    ground = blue_ground(size)
+    gw, gh = int(glow.width * k), int(glow.height * k)
+    top = int(size * 0.50) - h // 2
+    ground.alpha_composite(glow.resize((gw, gh), Image.LANCZOS),
+                           ((size - gw) // 2, top - int(box[1] * k)))
+    ground.alpha_composite(lg.resize((w, h), Image.LANCZOS), ((size - w) // 2, top))
+    return rounded(ground, int(size * 0.18))
+
+
+def emblem(img, size):
+    """The title image at `size`: TS2's is a disc on a white square, so outside
+    the disc is made clear and the icon is the disc on the desktop."""
+    big = img.resize((size, size), Image.LANCZOS)
+    if big.getpixel((1, 1))[:3] >= (235, 235, 235) and big.getpixel((size - 2, size - 2))[:3] >= (235, 235, 235):
         from PIL import ImageDraw, ImageChops
         m = Image.new('L', (1024, 1024), 0)
         ImageDraw.Draw(m).ellipse((6, 6, 1017, 1017), fill=255)
-        m = m.resize((256, 256), Image.LANCZOS)
+        m = m.resize((size, size), Image.LANCZOS)
         big.putalpha(ImageChops.multiply(big.getchannel('A'), m))
+    return big
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--game', required=True)
+    ap.add_argument('--out', help='the .ico to write')
+    ap.add_argument('--png', help='also the picture itself')
+    ap.add_argument('--size', type=int, default=256, help='the picture\'s size (--png); 1024 for a Mac')
+    ap.add_argument('--art', help='the launcher\'s art from this disc (tools/make_disc_art.py); '
+                                  'its logo makes a sharper icon than the 128-pixel title image')
+    a = ap.parse_args()
+    import os
+    if a.art and os.path.exists(a.art + '/logo.png') and os.path.exists(a.art + '/glow.png'):
+        big = logo_icon(a.art, max(a.size, 256))
+        if a.out:
+            # The logo is sharp from 64 up; below that a word cannot be read, and
+            # the title image -- 128 pixels, soft only when made bigger -- is
+            # sharp made smaller, and reads as the game at a glance.
+            icon = big.resize((256, 256), Image.LANCZOS)
+            mid = [big.resize((s, s), Image.LANCZOS) for s in (128, 64)]
+            try:
+                disc = title_image(a.game.rstrip('/\\') + '/default.xbe')
+                small = [emblem(disc, s) for s in (48, 32, 24, 16)]
+            except SystemExit:
+                small = [big.resize((s, s), Image.LANCZOS) for s in (48, 32, 24, 16)]
+            icon.save(a.out, format='ICO', sizes=[(256, 256), (128, 128), (64, 64), (48, 48),
+                                                   (32, 32), (24, 24), (16, 16)],
+                      append_images=mid + small)
+        if a.png:
+            big.resize((a.size, a.size), Image.LANCZOS).save(a.png)
+        print('make_icon: the title logo from %s -> %s' % (a.art, a.out or a.png))
+        return 0
+    if not a.out:
+        raise SystemExit('make_icon: --out is needed without --art')
+    img = title_image(a.game.rstrip('/\\') + '/default.xbe')
+    big = emblem(img, 256)
     big.save(a.out, format='ICO', sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
     if a.png:
         big.save(a.png)
