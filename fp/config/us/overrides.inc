@@ -126,6 +126,29 @@ void sub_000CB3B0(void) { fp_base_fov(sub_000CB3B0_gen, 0x004785CCu); }
 extern void sub_00156D80_gen(void);
 void sub_00156D80(void) { fp_loading_screen_start(sub_00156D80_gen); }
 
+/* viewport_rect is sub_00055D90(vp, x0, y0, x1, y1) (online co-op's whole
+ * screens, fp_viewport_rect). The game's current-viewport word is
+ * 0x007E71C8 (sub_00055D80 sets it); sub_00056050(x0, y0, x1, y1) lays the
+ * current one out through viewport_rect (its call returns to 0x00056070).
+ * Logged in a two-player Story level (RECOMP_FP_VPLOG): the cameras'
+ * viewports (camera + 0x224; the cameras at [0x007B0CE4], 0xFFC apart) are
+ * laid out when the level is set up by the camera layout switch
+ * (sub_0025A570, on the number of players, sub_001CDAE0): 0x0025A62C one
+ * player, the whole screen less a pixel ([0x004E8CF0]-1, [0x004E8CF4]-1);
+ * 0x0025A67A player 1, the top half, 0,0-639,239; 0x0025A65D player 2, the
+ * bottom, 0,240-639,479. In the intro, 0x000CB1BE lays player 1's camera out
+ * whole and both watch it. Every frame each player's pass lays that
+ * player's HUD viewport out from the current one, its camera's
+ * (sub_002F2FF0, returning to 0x002F30EA), the look state [0x007B0C7C]
+ * being that player's. The scissor (sub_0001A010) and the projection are
+ * made from the current viewport. */
+static const FpViews k_fp_views = {
+    0x007E71C8u, 0x00056070u, 0x002F30EAu, { 0x0025A67Au, 0x0025A65Du }, 0x000CB1BEu,
+    0x004E8CF0u, 0x004E8CF4u, 0x007B0C7Cu, 0x006B93C0u, 0x0076B0FCu
+};
+extern void sub_00055D90_gen(void);
+void sub_00055D90(void) { fp_viewport_rect(sub_00055D90_gen, &k_fp_views); }
+
 void sub_000245C0(void)
 {
     uint32_t dst = FP_MEM32(g_esp + 4u);

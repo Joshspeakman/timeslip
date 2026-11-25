@@ -104,9 +104,20 @@ chooses **Host online co-op** and the other **Join online co-op** with the
 host's address; or `RECOMP_LOCKSTEP_NET=host` (UDP 27620) and
 `RECOMP_LOCKSTEP_NET=join RECOMP_LOCKSTEP_PEER=<host>`. Then, as on one
 console: **2 PLAYER**, each player makes or picks a profile (player 2 presses
-START to join), **Story Co-op**. Both copies must be the same build. It is
-the console's split screen on both machines: Future Perfect has no hook yet
-for each player's whole screen.
+START to join), **Story Co-op** (or Arcade). Both copies must be the same
+build.
+
+Each player has the whole screen, as in TimeSplitters 2's: the game lays
+every player's camera out as the whole screen on both machines, and each
+machine draws only its own player's pass (`coop_view = split` keeps the
+console's split screen; both players must choose the same). A level's intro,
+which both players watch through player 1's camera, is shown to both. The
+cameras are laid out when a level is set up, by the camera layout switch
+(USA `sub_0025A570`) through viewport_rect (`sub_00055D90`); each player's
+pass points the current-viewport word (`0x007E71C8`) at that player's
+camera's, and the renderer leaves out the other player's camera and HUD
+(`fp_viewport_rect` in `src/recomp_manual.c`; `RECOMP_FP_VIEW_PORT=0|1`
+shows a local game as that player would see it online).
 
 What it took (`src/recomp_manual.c`, `config/us/overrides.inc`):
 
@@ -133,8 +144,16 @@ joiner each the same as the recording at every frame and as each other at
 every 60-frame check, through frame 14,400, with the Arcade one (and with the
 first Story recording, before the fifth fence word). On the Mac (M1 Pro,
 arm64, Metal, re-lifted at the same commits) the first Story recording
-replayed the same at every frame. Not yet: online between two machines (the
-PC's firewall and the Mac's ask their owner first).
+replayed the same at every frame. Live between this PC and the Mac (26 Nov
+2026, 6 ms, 3 frames of delay): the Arcade one, both machines the same as the
+recording at every frame and as each other at every check.
+
+With each player's whole screen (online, `coop_view` own) the game is laid
+out differently from the recordings, which were made split: the machines
+agree with each other at every check, but not with the recording for a few
+hundred frames after a level is set up (Story from 5,280, Arcade from
+5,520). Replayed locally, or online with `coop_view = split`, they match the
+recording at every frame.
 
 | | |
 | --- | --- |

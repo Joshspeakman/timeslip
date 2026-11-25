@@ -535,6 +535,8 @@ static void fp_memdump(uint32_t tick)
     fprintf(stderr, "[FP] memory dump at tick %u: %s\n", tick, path);
 }
 
+static void fp_coop_frame_start(void);     /* online co-op's views, below */
+
 static void fp_frame_clock(void (*gen)(void), const FpStateRegion *state)
 {
     static int named;
@@ -551,6 +553,7 @@ static void fp_frame_clock(void (*gen)(void), const FpStateRegion *state)
         recomp_lockstep_frame();
         fp_memdump(recomp_lockstep_tick());
     }
+    fp_coop_frame_start();
     gen();
 }
 
@@ -703,6 +706,198 @@ static void fp_base_fov(void (*gen)(void), uint32_t base_va)
     base = *(volatile float *)((uintptr_t)base_va + g_xbox_mem_offset);
     if ((float)g_fp_stack[g_fp_top & 7u] == base)
         g_fp_stack[g_fp_top & 7u] = (double)fov;
+}
+
+/*
+ * Online co-op: each player has the whole screen (as TimeSplitters 2's,
+ * src/recomp_manual.c, and GoldenEye's network co-op). Both machines run the
+ * whole two-player game, so both lay it out alike: every player's camera is
+ * laid out as the whole screen, as in one-player play, on both machines --
+ * the game is then the same on both. Each machine still runs every player's
+ * pass, as the game needs, and draws only its own player's: the renderer
+ * leaves out every draw and clear made while the game's current viewport is
+ * the other player's camera or HUD (xbox_D3D8SetDrawFilter).
+ *
+ * Future Perfect lays a viewport out with viewport_rect(vp, x0, y0, x1, y1)
+ * (USA sub_00055D90; the corners at +0/+4 and +0x14/+0x18, the middles and
+ * half-sizes after them, from which the projection and the scissor are
+ * made). The cameras' are laid out when a level is set up, by the camera
+ * layout switch on the number of players (sub_0025A570: one, the whole
+ * screen; two, player 1 the top half and player 2 the bottom; three or
+ * four, quarters); each player's pass points the current-viewport word at
+ * that player's camera's (camera + 0x224), and every frame lays the
+ * player's HUD viewport out from it (sub_002F2FF0, from pass_caller). In a
+ * level's intro both players watch player 1's camera, laid out whole
+ * (0x000CB1B9): a frame with fewer than two passes is shown as the game
+ * shows it.
+ *
+ *   coop_view = own (default) | split          [RECOMP_COOP_VIEW]
+ *   RECOMP_FP_VIEW_PORT=0|1  plays a local game as that player would see it
+ *                            online (the layout changes, so a replay of a
+ *                            recording made without it can go its own way)
+ *   RECOMP_FP_VPLOG=<tick>   viewport_rect's calls from that frame on, 400
+ *                            lines (RECOMP_FP_VPLOG_SKIP=<va>,... leaves
+ *                            out those return addresses)
+ */
+extern int recomp_lockstep_local_guest_port(void);
+extern const char *recomp_config_lookup(const char *env_name, const char *key);
+extern void xbox_D3D8SetDrawFilter(int (*keep)(void));
+
+typedef struct FpViews {
+    uint32_t current_vp;         /* the game's current-viewport word */
+    uint32_t via_current;        /* sub_00056050's call: lays out the current one */
+    uint32_t pass_caller;        /* each player's HUD viewport, every frame */
+    uint32_t split[2];           /* the camera layout's two-player halves */
+    uint32_t shared_caller;      /* one camera laid out whole for both to watch */
+    uint32_t screen_w, screen_h; /* the screen's size, words */
+    uint32_t state_ptr, port_map, port_direct;   /* as FpLook's */
+} FpViews;
+
+/* This frame's passes, and the other player's viewports, which the next
+ * frame leaves undrawn. */
+static struct { uint32_t port, camera_vp, hud_vp; } g_fp_pass[2];
+static int g_fp_passes;
+static uint32_t g_fp_other_camera, g_fp_other_hud;
+/* The camera the game has laid out whole for both players to watch (a
+ * level's intro), until it splits the screen again: 0 when none. */
+static uint32_t g_fp_shared_camera;
+static const FpViews *g_fp_views;
+
+static int fp_coop_full_views(void)
+{
+    static int on = -1;
+
+    if (on < 0) {
+        const char *v = recomp_config_lookup("RECOMP_COOP_VIEW", "coop_view");
+        const char *t = getenv("RECOMP_FP_VIEW_PORT");
+
+        on = !(v && strcmp(v, "split") == 0) &&
+             (recomp_lockstep_local_guest_port() >= 0 || (t && *t));
+    }
+    return on;
+}
+
+/* This machine's player: online, the session's; for a local check,
+ * RECOMP_FP_VIEW_PORT. -1 when every pass is drawn. */
+static int fp_coop_own_port(void)
+{
+    static int test_port = -2;
+    int port = recomp_lockstep_local_guest_port();
+
+    if (test_port == -2) {
+        const char *t = getenv("RECOMP_FP_VIEW_PORT");
+
+        test_port = t && *t ? atoi(t) : -1;
+    }
+    if (port < 0)
+        port = test_port;
+    return port >= 0 && port <= 1 ? port : -1;
+}
+
+static int fp_coop_keep_draw(void)
+{
+    uint32_t cur;
+
+    if (!g_fp_other_camera)
+        return 1;
+    cur = FP_M32(g_fp_views->current_vp);
+    return cur != g_fp_other_camera && cur != g_fp_other_hud;
+}
+
+/* At a frame's start (fp_frame_clock): whose pass this frame leaves undrawn,
+ * from the last frame's. Only when the last frame had this player's pass and
+ * another's, each its own camera, and neither the one the game shows both
+ * players; otherwise this machine shows what the game shows. */
+static void fp_coop_frame_start(void)
+{
+    int own = fp_coop_own_port(), i;
+
+    g_fp_other_camera = g_fp_other_hud = 0;
+    if (own >= 0 && g_fp_passes == 2 && g_fp_pass[0].camera_vp != g_fp_pass[1].camera_vp &&
+        g_fp_pass[0].port != g_fp_pass[1].port &&
+        g_fp_pass[0].camera_vp != g_fp_shared_camera && g_fp_pass[1].camera_vp != g_fp_shared_camera)
+        for (i = 0; i < 2; i++)
+            if (g_fp_pass[i].port == (uint32_t)own) {
+                g_fp_other_camera = g_fp_pass[1 - i].camera_vp;
+                g_fp_other_hud = g_fp_pass[1 - i].hud_vp;
+            }
+    g_fp_passes = 0;
+}
+
+static uint32_t fp_parse_list(const char *v, uint32_t *out, int max)
+{
+    int n = 0;
+
+    while (v && *v && n < max) {
+        out[n++] = (uint32_t)strtoul(v, (char **)&v, 16);
+        if (*v == ',')
+            v++;
+        else
+            break;
+    }
+    return (uint32_t)n;
+}
+
+static void fp_viewport_rect(void (*gen)(void), const FpViews *fv)
+{
+    static int ready, said;
+    static long log_from = -1;
+    static uint32_t skip[16], nskip;
+    uint32_t from = FP_M32(g_esp), from2 = from == fv->via_current ? FP_M32(g_esp + 0x18) : 0u;
+    uint32_t vp = FP_M32(g_esp + 4);
+    int x0 = (int)FP_M32(g_esp + 8), y0 = (int)FP_M32(g_esp + 12);
+    int x1 = (int)FP_M32(g_esp + 16), y1 = (int)FP_M32(g_esp + 20);
+    uint32_t i;
+
+    if (!ready) {
+        const char *v = getenv("RECOMP_FP_VPLOG");
+
+        ready = 1;
+        g_fp_views = fv;
+        log_from = v && *v ? atol(v) : -1;
+        nskip = fp_parse_list(getenv("RECOMP_FP_VPLOG_SKIP"), skip, 16);
+    }
+    for (i = 0; i < nskip && skip[i] != from && skip[i] != from2; i++)
+        ;
+    if (log_from >= 0 && said < 400 && i == nskip && recomp_lockstep_tick() >= (uint32_t)log_from) {
+        said++;
+        fprintf(stderr, "[FP-VP] tick %u from 0x%08X via 0x%08X vp 0x%08X %d,%d-%d,%d current 0x%08X\n",
+                recomp_lockstep_tick(), from, from2, vp, x0, y0, x1, y1, FP_M32(fv->current_vp));
+    }
+    if (fp_coop_full_views()) {
+        static int told;
+
+        if (!told++) {
+            if (fp_coop_own_port() >= 0)
+                xbox_D3D8SetDrawFilter(fp_coop_keep_draw);
+            fprintf(stderr, "[FP] online co-op: every player's view laid out as the whole "
+                    "screen%s\n", fp_coop_own_port() >= 0 ? "; only this player's drawn" : "");
+        }
+        if (from == fv->shared_caller)
+            g_fp_shared_camera = vp;
+        else if ((from == fv->split[0] || from == fv->split[1]) && vp == g_fp_shared_camera)
+            g_fp_shared_camera = 0;
+        if ((from == fv->split[0] || from == fv->split[1]) && x1 - x0 >= 2 && y1 - y0 >= 2) {
+            FP_M32(g_esp + 8) = 0;
+            FP_M32(g_esp + 12) = 0;
+            FP_M32(g_esp + 16) = FP_M32(fv->screen_w) - 1u;   /* as the one-player layout */
+            FP_M32(g_esp + 20) = FP_M32(fv->screen_h) - 1u;
+        }
+        if (from == fv->pass_caller && g_fp_passes < 2) {
+            uint32_t p = FP_M32(fv->state_ptr), id, port = 4u;
+
+            if (p >= 0x10000u && p < 0x84000000u) {
+                id = FP_M32(p);
+                port = FP_M32(fv->port_direct) ? id
+                       : (id < 16u ? FP_M32(fv->port_map + 4u * id) : 4u);
+            }
+            g_fp_pass[g_fp_passes].port = port;
+            g_fp_pass[g_fp_passes].camera_vp = FP_M32(fv->current_vp);
+            g_fp_pass[g_fp_passes].hud_vp = vp;
+            g_fp_passes++;
+        }
+    }
+    gen();
 }
 
 /* -- TimeSplitters: Future Perfect: where this release's functions are ---- */

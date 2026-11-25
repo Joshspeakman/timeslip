@@ -50,7 +50,13 @@ with it Auto Lookahead is set aside, so a replay with it off plays another
 game -- the Mac's first replays with an older settings file differed from
 tick 6,890), the game's own field of view (`fov = 0`), widescreen off. A
 recording keeps no settings, so a replay at other ones just differs; an
-online session checks them and refuses.
+online session checks them and refuses. Both were recorded split screen; an
+online session lays each player's view out as the whole screen unless
+`coop_view = split`, so replayed online at the default the two machines agree
+with each other at every check but differ from the recording for a few
+hundred frames after the level is set up (the Story one from 5,280, the
+Arcade one from 5,520). Set `coop_view = split` on both to compare one with a
+recording.
 
 Several copies replaying one recording at once find what depends on the
 host's timing fastest. The Arcade one found the fifth GPU fence time the game
