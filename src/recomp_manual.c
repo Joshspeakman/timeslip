@@ -969,19 +969,25 @@ extern int recomp_input_look(unsigned port, float *dx_deg, float *dy_deg);
 /*
  * A PC shooter's number keys and wheel (recompose input_bindings.h).
  *
- * TS2 cycles a player's weapons in one fixed order, measured by handing a
- * player every weapon and tapping the d-pad through them (USA, 24 Nov 2026):
- * the ids below, then 0 (bare hands). A number key picks the n-th weapon the
- * player owns in that order -- 1 the first, as a PC shooter's slots go --
- * through the game's own switch (the wanted weapon, as when one is picked
- * up), from the number key as latched for the frame, so online both
- * machines switch alike. A weapon the game will not take (out of ammo) it
- * switches back from, as it does for one picked up.
+ * TS2 cycles a player's weapons in one fixed order: the game's own table of
+ * all 41 (USA default.xbe, file offset 0x2BABC4, 4 bytes each), then 0 (bare
+ * hands). The arcade's weapons tapped through with the d-pad came in that
+ * order (24 Nov 2026), and story Siberia's sniper rifle (11) and pistol (36)
+ * too, 25 Nov 2026 -- the arcade has neither, and a list measured there
+ * left them out, so a number key skipped them. A number key picks the n-th
+ * weapon the player owns in that order -- 1 the first, as a PC shooter's
+ * slots go -- through the game's own switch (the wanted weapon, as when one
+ * is picked up), from the number key as latched for the frame, so online
+ * both machines switch alike. A weapon the game will not take (out of ammo)
+ * it switches back from, as it does for one picked up.
  *
- * The wheel: holding a weapon that zooms -- 12 (the sniper rifle), 16 and
- * 31, measured the same way; the zoom works while aiming, right mouse,
- * with the d-pad -- it zooms in (away) and out (towards); with any other
- * it swaps weapons, as the d-pad left and right do.
+ * The wheel: aiming (right mouse, which toggles it) a weapon that zooms, it
+ * zooms in (away) and out (towards), as the d-pad up and down do; otherwise
+ * it swaps weapons, as the d-pad left and right do. A weapon that zooms is
+ * one whose aim narrows the camera: the sniper rifles (story 11, arcade 12)
+ * and 16 and 31 do, the rest leave it as it is. Asked of the game rather
+ * than a list of ids, which had only the arcade's and so missed the story's
+ * sniper rifle (Josh, 25 Nov 2026: the wheel did not zoom).
  */
 extern int recomp_input_number_key(unsigned port);
 /* recompose XBOX_GAMEPAD, as far as this needs it */
@@ -989,24 +995,41 @@ typedef struct { uint16_t wButtons; uint8_t bAnalogButtons[8]; int16_t sThumb[4]
 extern void recomp_bindings_set_wheel_filter(void (*fn)(int wheel, Ts2Gamepad *pad));
 
 static const uint8_t k_ts2_weapon_order[] = {
-    1, 2, 5, 6, 3, 4, 7, 8, 12, 32, 33, 9, 16, 28, 29, 18, 17, 22, 31, 10,
-    19, 20, 25, 26, 34, 35, 39, 40, 41
+    1, 2, 5, 6, 3, 4, 7, 8, 37, 12, 11, 13, 32, 33, 9, 15, 16, 28, 29, 18,
+    21, 17, 22, 30, 31, 10, 23, 19, 20, 24, 25, 26, 27, 14, 34, 35, 38, 36, 39, 40,
+    41
 };
-static volatile int g_ts2_p1_held = -1;     /* controller 1's weapon in hand */
-
-static int ts2_weapon_zooms(int id)
-{
-    return id == 12 || id == 16 || id == 31;
-}
+static volatile int g_ts2_p1_zoom;          /* controller 1 aims a weapon that zooms */
 
 static void ts2_wheel_filter(int wheel, Ts2Gamepad *pad)
 {
     if (!wheel)
         return;
-    if (ts2_weapon_zooms(g_ts2_p1_held))
+    if (g_ts2_p1_zoom)
         pad->wButtons |= wheel > 0 ? 0x0001 : 0x0002;   /* d-pad up: in; down: out */
     else
         pad->wButtons |= wheel > 0 ? 0x0004 : 0x0008;   /* d-pad left, right: swap */
+}
+
+/* Whether controller 1's player aims a weapon that zooms: aiming (the aim
+ * word, set by the player update each frame) with the camera narrower than
+ * it was the last time the player was not aiming. Read each frame the player
+ * is updated; the wheel acts on it as the frame's pad is sampled, and that
+ * pad is what is latched, so online every machine acts on the same one. */
+static void ts2_zoom_state(uint32_t ctx)
+{
+    static float unaimed;                   /* tan(fov/2) when last not aiming */
+    uint32_t cam = TS2_MEM32_EARLY(0x004B2F60u);
+    float t = cam >= 0x80000000u && cam < 0x84000000u ? TS2_MEMF(cam + 0x31C) : 0.0f;
+    int aimed = TS2_MEM32_EARLY(ctx + 0x884) != 0u;
+
+    if (!(t > 0.0f && t < 100.0f)) {
+        g_ts2_p1_zoom = 0;
+        return;
+    }
+    if (!aimed)
+        unaimed = t;
+    g_ts2_p1_zoom = aimed && unaimed > 0.0f && t < unaimed * 0.95f;
 }
 
 /* The player's weapons (char+0x124), or 0. */
@@ -1028,12 +1051,12 @@ static void ts2_weapon_keys(uint32_t ctx, uint32_t port)
     int n = recomp_input_number_key(port), seen = 0;
     size_t i;
 
-    if (port == 0u)
+    if (port == 0u) {
         g_ts2_p1_ctx = ctx;
+        ts2_zoom_state(ctx);
+    }
     if (!pw)
         return;
-    if (port == 0u)
-        g_ts2_p1_held = (int)TS2_MEM32_EARLY(pw + 0xCC);
     if (n <= 0)
         return;
     for (i = 0; i < sizeof k_ts2_weapon_order; i++) {
@@ -1141,7 +1164,7 @@ static void ts2_sweep_load(void)
             if (sscanf(p, " %399[^\r\n]", file) == 1 && !g_ts2_sweep_log)
                 g_ts2_sweep_log = fopen(file, "w");
             if (g_ts2_sweep_log)
-                fprintf(g_ts2_sweep_log, "tick,x,y,z,yaw,pitch,wanted,held,ammo,health,fovy\n");
+                fprintf(g_ts2_sweep_log, "tick,x,y,z,yaw,pitch,wanted,held,ammo,health,fovy,aim\n");
             continue;
         }
         if (!strcmp(word, "give") || !strcmp(word, "weapon")) {
@@ -1259,12 +1282,12 @@ static int ts2_sweep(uint32_t ctx, uint32_t port, float *dx, float *dy)
         uint32_t cam = TS2_MEM32_EARLY(0x004B2F60u);
         float t = cam ? TS2_MEMF(cam + 0x31C) : 0.0f;
 
-        fprintf(g_ts2_sweep_log, "%u,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%.3f,%.2f\n", tick,
+        fprintf(g_ts2_sweep_log, "%u,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%.3f,%.2f,%u\n", tick,
                 TS2_MEMF(chr + 0x58), TS2_MEMF(chr + 0x5C), TS2_MEMF(chr + 0x60),
                 TS2_MEMF(ctx + 0x148), TS2_MEMF(ctx + 0x14C),
                 pw ? (int)TS2_MEM32_EARLY(pw + 0xC8) : -1,
                 pw ? (int)TS2_MEM32_EARLY(pw + 0xCC) : -1, ammo, TS2_MEMF(chr + 0x19C),
-                t > 0.0f ? 2.0 * atan((double)t) * 57.29578 : 0.0);
+                t > 0.0f ? 2.0 * atan((double)t) * 57.29578 : 0.0, TS2_MEM32_EARLY(ctx + 0x884));
         fflush(g_ts2_sweep_log);
     }
     return turned;

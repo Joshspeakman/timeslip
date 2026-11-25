@@ -228,30 +228,49 @@ the menus' pointer, an icon from the game, and three things in the picture
 
 | | What the game does | Done |
 | --- | --- | --- |
-| Weapons by number | It cycles a player's weapons in one fixed order, measured by handing a player every weapon (ids 0 to 41; the owned flags at char+0x124+0x984 stop where the ammo at +0xA2C starts) and tapping the d-pad through them: 1, 2, 5, 6, 3, 4, 7, 8, 12, 32, 33, 9, 16, 28, 29, 18, 17, 22, 31, 10, 19, 20, 25, 26, 34, 35, 39, 40, 41, then 0 (bare hands). Others (13, 14, 15, ...) it skips or refuses | A number key picks the n-th weapon owned in that order through the game's own switch (the wanted weapon, +0xC8), in the player update (`ts2_weapon_keys`). The key travels with the latched pad (recompose `RecompLockstepPad.number_key`, a 23rd byte written only when a key is down, so recordings made before read as they were), so online both machines switch alike |
-| Zoom with the wheel | Zooms only while aiming, with the d-pad: 12 (the sniper rifle: 10 degrees aiming, to 4), 16 (40 to 30) and 31 (40 to 18); d-pad up does nothing otherwise | Holding one of those the wheel is d-pad up and down; with any other it swaps weapons as before (`ts2_wheel_filter`, recompose `recomp_bindings_set_wheel_filter`) |
+| Weapons by number | It cycles a player's weapons in one fixed order, its own table of all 41 (USA `default.xbe`, file offset 0x2BABC4, 4 bytes each): 1, 2, 5, 6, 3, 4, 7, 8, 37, 12, 11, 13, 32, 33, 9, 15, 16, 28, 29, 18, 21, 17, 22, 30, 31, 10, 23, 19, 20, 24, 25, 26, 27, 14, 34, 35, 38, 36, 39, 40, 41, then 0 (bare hands). The owned flags are at char+0x124+0x984, ids 0 to 41. Tapping the d-pad through every weapon in the arcade gave the same order without the story's weapons, and a first list measured that way left out story Siberia's sniper rifle (11) and pistol (36) | A number key picks the n-th weapon owned in that order through the game's own switch (the wanted weapon, +0xC8), in the player update (`ts2_weapon_keys`). The key travels with the latched pad (recompose `RecompLockstepPad.number_key`, a 23rd byte written only when a key is down, so recordings made before read as they were), so online both machines switch alike |
+| Zoom with the wheel | Aiming is a toggle (right mouse, the right stick's click). Zooms only while aiming, with the d-pad, and only a weapon whose aim narrows the camera: story Siberia's sniper rifle (11: 17 degrees aiming, to 11), the arcade's (12: 10, to 4), 16 (40 to 30), 31 (40 to 18). Other weapons aim at the field of view they had | Aiming a weapon that narrows the camera (the aim word +0x884 set, the camera narrower than when last not aiming: `ts2_zoom_state`), the wheel is d-pad up and down; otherwise it swaps weapons as before (`ts2_wheel_filter`, recompose `recomp_bindings_set_wheel_filter`). A first version went by a list of the arcade's ids and missed the story's sniper rifle: Josh's wheel swapped weapons there |
 | The crosshair with a mouse | The HUD's crosshair (`sub_000C83B0`, drawn at 0x000C87EC) is skipped while the player's aim word (+0x884, set each frame by the player update) is 0 | For controller 1's player with a mouse the word is set for that call and put back (`ts2_crosshair`): the weapon's own crosshair, in the middle. Setting `crosshair` (on by default; Esc menu > Mouse). Its draws move the game's own D3D bookkeeping, in the hashed memory, so online both machines must have it alike (a session setting, like the field of view) |
 | The icon | The Xbox dashboard's picture of the game: the title image in `default.xbe`'s `$$XTIMAGE` (an XPR0 DXT1, 128x128, the logo in a white ring) | `tools/make_icon.py` makes `timeslip.ico` from the player's own disc at install (`tools/install_windows.ps1`), for the desktop and Start menu shortcuts and Settings > Apps; nothing of the game is in the repository |
 
 Checked: a number key and the wheel by script (`RECOMP_INPUT_FAKE=t<tick>:3,t<tick>:wheel_up`, through the
-real input path and the latch): keys 3, 9, 1, 7 took weapons 5, 12, 1, 7, the wheel zoomed the aimed
-sniper rifle 10 to 7 to 4 and out, and swapped weapons otherwise; the recording replays the same at
-every frame; both gate recordings too.
+real input path and the latch): keys 3, 9, 1, 7 took weapons 5, 12, 1, 7 with the first list (with the
+game's table and every weapon handed out, 9 is 37 now); the wheel zoomed the arcade's aimed sniper
+rifle 10 to 7 to 4 and out, and swapped weapons otherwise. Then in story Siberia: aimed, the sniper
+rifle (11) zoomed 17 to 15 to 11 and back out by the wheel; not aimed, the wheel swapped weapons; keys
+2 and 1 took the pistol (36) and the sniper rifle (11). Both gate recordings replay the same at every
+tick.
 
 Not done: the crosshair as the menus' pointer, choosing what is under it (the front end's item
 rectangles are still to be found), and a launcher row for the crosshair.
 
-**The picture.** Investigated in Siberia (single-player Story, scripted to the fenced yard outside
-the tunnel, frames dumped and a frame captured), and the Plasma Autorifle at Josh's own settings
-(`post_soften = console`, interpolation off, 4x, FOV 80):
+**The picture.** First investigated with interpolation off (Siberia, single-player Story, scripted
+to the fenced yard outside the tunnel; the Plasma Autorifle), where none of it showed: the hut's
+glass is the game's own dark tint (a 16x16 DXT3, black at alpha about 0.7), drawn alike every frame.
+Josh then found it was the frame interpolation (`frame_interp` 2 and up): it flickers in the frames
+drawn between the game's own.
 
-- The hut's window panes: their glass (draw 240 of the frame, 350 triangles) is a 16x16 DXT3 texture
-  whose colour is black and alpha about 0.7, alpha-blended: a dark tint over the room behind, which
-  is the game's own data drawn as given. Not a mip-level problem (the same with every mip level cut
-  off). Standing still facing them and walking past, lockstep and free-running (700 frames of every
-  present), the panes did not change from frame to frame.
-- Dark flicker with the snow, and with the plasma gun: no frame much darker than the ones beside it
-  in any of those runs; the darkest plasma frames (14% under their neighbours) are smoke and dust
-  from the bolt's hits drifting close to the camera. Snow is drawn as quads, not point sprites.
-- So none of the three reproduces in what the game draws; what Josh sees may be on the way to the
-  screen (fullscreen with variable refresh rate is untested). A clip of it is the next step.
+The in-between frames draw the game's frame again from what was kept of it (recompose
+`hle_d3d8_interp.c`). A vertex program from a vertex shader slot has its vertex layout set again
+every time it is selected (recompose `hle_d3d8.c`), so one host program draws with several layouts in
+a frame: TS2's 0x10004 draws 28-byte vertices and 36-byte ones. The layout was not kept, so the
+in-between frames drew every such draw with the frame's last one. The frost over the hut's windows
+(36-byte vertices, drawn over the dark glass) came out invisible there, and the dark glass showed
+through: dark blue panes flickering with the real ones. Fired weapons' effects and the sky went the
+same way (the sky dark blue, the walls flat). Now the layout is kept as any other state, and the
+frame's opening state has the bound program's; palettes too, which were not kept either
+(`hle_d3d8_record.c`). `RECOMP_INTERP_DECL=0` leaves the layouts out again, for comparing.
+
+| At `frame_interp = 3`, Josh's settings otherwise | In-between frames darker than both real frames beside them, over 1% of the picture or more: layouts not kept | Kept |
+| --- | --- | --- |
+| Siberia, at the hut's windows, 120 ticks | 61 of 129 (over the windows 109.8 against 115.1 in the real frames) | 1 of 94, the chain-link fence moving (115.1 against 115.1) |
+| The arcade, each of 29 weapons fired in turn | 12 of 805, up to 21% of the picture | 1 of 761, 1.2% |
+| The front end (Select Profile and the menus after it, 600 ticks) | 0 of 485 | 0 of 547 |
+| The attract mode's cutscene, 1,600 ticks | 0 of 1,822 | 0 of 1,812 |
+
+The menus' dark flash Josh saw did not show in those 600 ticks either way, so whether this fixes it
+is not known yet.
+
+Diagnostics added for this (recompose `hle_d3d8_interp.c`): `RECOMP_INTERP_DRAWS=<tick>` lists every
+draw of that frame and how it was paired; `RECOMP_INTERP_SKIP=<a>-<b>` and `RECOMP_INTERP_ONLY=<a>-<b>`
+leave draws out of the in-between frames, or keep only those.

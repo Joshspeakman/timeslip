@@ -109,14 +109,14 @@ laid out like a modern PC shooter:
 | Move, side step | W A S D |
 | Look | The mouse |
 | Fire | Left mouse button |
-| Aim | Right mouse button |
+| Aim | Right mouse button (on, and again for off) |
 | Alternate fire | G, middle mouse button |
 | Reload | R |
 | Use (activate) | F, E, Space |
 | Crouch | C, left Ctrl |
 | Pick a weapon | 1 to 9: the weapons you carry, in the game's own order |
-| Next / previous weapon | Mouse wheel, Q, left and right arrows |
-| Zoom in / out | With the sniper rifle or another scoped weapon, aiming (right mouse button): the mouse wheel; also Z / X, the mouse's side buttons, up and down arrows |
+| Next / previous weapon | Mouse wheel (except while aiming a scoped weapon), Q, left and right arrows |
+| Zoom in / out | Aiming a sniper rifle or another scoped weapon: the mouse wheel; also Z / X, the mouse's side buttons, up and down arrows |
 | Pause the game, objectives | Enter, Tab |
 | Menus | W A S D or arrows to move, Enter, Space or F to choose, Backspace to go back; or the mouse: the pointer shows in the game's menus, the wheel moves, the left button chooses, the right goes back |
 
