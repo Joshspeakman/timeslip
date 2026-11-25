@@ -9,12 +9,13 @@ the walls on fast mouse turns, and what it found is in
 
 | File | What it is |
 | --- | --- |
-| `corridor.seq` | The controller script (`RECOMP_INPUT_SEQ`): the menus by the clock to Arcade Custom, Deathmatch, Mexican Mission, Recommended; then, by frame (`t<tick>:`), the trigger and the strafes |
+| `corridor.seq` | The controller script (`RECOMP_INPUT_SEQ`): the menus to Arcade Custom, Deathmatch, Mexican Mission, Recommended, then the trigger and the strafes, all by frame (`t<tick>:`). By the clock, as the menus first were, each press landed on whatever frame the loading allowed, and two Mac runs started the match in two other places than the PC's; by frame, every machine starts in the cloister at (-19.245, 0.009, 0.037), facing 90, at tick 4418 |
 | `corridor.sweep` | The test's own script (`RECOMP_TS2_SWEEP`, `src/recomp_manual.c`): weapons given, health kept, the player kept in place, a slow full turn, swings at 5, 15, 30 and 60 degrees a frame, then each weapon fired standing still and swinging |
 | `corridor.ticks` | The frames dumped (`RECOMP_PRESENT_DUMP_TICKS`, three presents from each: frame interpolation's in-between frames are named `...i.bmp`) |
 | `analyze.py` | Sky where the slow turn never shows it (breaks through the walls), and frames much darker than their neighbours, by part of the run |
 | `odd.py` | In-between frames unlike both game frames around them while the player stands still |
 | `run_corridor.ps1` | All of it on Windows |
+| `run_corridor.sh` | All of it on macOS and Linux (the recipe below, with the checks: a game copy without saves, an empty output folder) |
 
 Under lockstep (`RECOMP_LOCKSTEP=1`) the run is the same game on every
 machine and renderer, so a run's recording (`RECOMP_LOCKSTEP_TRACE`) can be
@@ -30,7 +31,12 @@ match the same way every time; the match's five weapons are 6 (two pistols),
 Windows: `tests\sweep\run_corridor.ps1 -Out <folder> -Game <the game folder>
 -Settings <a copy of your settings file, fullscreen = 0>`.
 
-macOS and Linux, by hand: a game folder with an empty `UDATA`, then
+macOS and Linux: `tests/sweep/run_corridor.sh --out <empty folder> --game <a game
+copy with no UDATA> --settings <a settings copy> --python <one with numpy and Pillow>`,
+with any `RECOMP_*` settings (renderer, frame interpolation) in the environment;
+`--replay <out>/corridor.trace` replays an earlier run. The game writes a profile into
+the copy's `UDATA`, so empty it before the next run. Or by hand: a game folder with an
+empty `UDATA`, then
 
 ```bash
 RECOMP_GAME_DIR=<game> RECOMP_SAVE_DIR=<empty folder> RECOMP_MUTE=1 RECOMP_WINDOW_BACKGROUND=1 \
@@ -45,7 +51,9 @@ python3 tests/sweep/analyze.py <out> --jpg
 python3 tests/sweep/odd.py <out>
 ```
 
-where `<out>/corridor.sweep` is `corridor.sweep` with a last line
+(on a Retina Mac `RECOMP_WINDOW_SIZE=800x450`: the size is in points, and 3200x1800 dumps are
+slow enough that in-between frames miss their moment), where `<out>/corridor.sweep` is
+`corridor.sweep` with a last line
 `log <out>/sweep.csv` (every frame's position, turn, weapon and ammo, which
 the analysis reads). Frames are about 6 MB each as BMP; `--jpg` converts them.
 

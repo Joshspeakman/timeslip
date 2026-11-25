@@ -73,8 +73,9 @@ enum { W = 960, H = 660 };
 - (NSRect)arrow:(NSInteger)k right:(BOOL)right { NSRect r = [self tileRect:k]; return NSMakeRect(right ? NSMaxX(r) - 22 : r.origin.x + 1, r.origin.y + 26, 21, 34); }
 - (NSRect)playRect { return NSMakeRect(W - 60 - 200, H - 68, 200, 46); }
 - (NSRect)quitRect { return NSMakeRect(W - 60 - 200 - 20 - 150, H - 68, 150, 46); }
-- (NSRect)panelRect { CGFloat h = 92 + 58 * (CGFloat)self.rows.count; return NSMakeRect(120, MAX(30, 494 - h), 720, h); }
-- (NSRect)rowRect:(NSInteger)k { NSRect p = self.panelRect; return NSMakeRect(p.origin.x + 30, p.origin.y + 72 + 58 * k, p.size.width - 60, 50); }
+- (CGFloat)rowPitch { return self.rows.count > 7 ? 55 : 58; }   /* eight rows still clear the buttons */
+- (NSRect)panelRect { CGFloat h = 92 + self.rowPitch * (CGFloat)self.rows.count; return NSMakeRect(120, MAX(30, 494 - h), 720, h); }
+- (NSRect)rowRect:(NSInteger)k { NSRect p = self.panelRect; return NSMakeRect(p.origin.x + 30, p.origin.y + 72 + self.rowPitch * k, p.size.width - 60, 50); }
 - (NSRect)rowArrow:(NSInteger)k right:(BOOL)right { NSRect r = [self rowRect:k]; return NSMakeRect(right ? NSMaxX(r) - 34 : NSMaxX(r) - 330, r.origin.y + 3, 30, 30); }
 - (NSRect)rowValue:(NSInteger)k { NSRect r = [self rowRect:k]; return NSMakeRect(NSMaxX(r) - 300, r.origin.y + 4, 262, 28); }
 - (BOOL)rowCycles:(NSInteger)k { return self.rows[k].choices.count > 1; }
@@ -478,7 +479,7 @@ static NSString *const kbm_json =
 
 @interface Launcher : NSObject <NSApplicationDelegate>
 @property (strong) NSWindow *window; @property (strong) TSLaunchView *view;
-@property (strong) TSRow *display, *resolution, *widescreen, *filtering, *framerate, *interp, *fps, *scheme, *mouse, *saves, *updates, *controls;
+@property (strong) TSRow *display, *resolution, *widescreen, *filtering, *framerate, *soften, *interp, *fps, *scheme, *mouse, *saves, *updates, *controls;
 @property NSString *dataPath;
 @end
 
@@ -488,7 +489,7 @@ static NSString *const kbm_json =
 {
     NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
     [d registerDefaults:@{@"renderer": @"vulkan", @"fullscreen": @NO, @"scale": @2, @"widescreen": @YES, @"aniso": @8, @"cap": @"adaptive",
-                          @"interp": @0, @"fps": @NO, @"scheme": @"kbm", @"mouse": @80}];
+                          @"interp": @0, @"soften": @"sharp", @"fps": @NO, @"scheme": @"kbm", @"mouse": @80}];
     NSDictionary *infoPlist = NSBundle.mainBundle.infoDictionary;
     self.dataPath = [(infoPlist[@"TS2DataPath"] ?: @"~/Games/TimeSplitters2Native") stringByExpandingTildeInPath];
     if (getenv("TS2_DATA_PATH")) self.dataPath = @(getenv("TS2_DATA_PATH"));   /* development: another game folder (a test copy) */
@@ -518,6 +519,9 @@ static NSString *const kbm_json =
                                                  @{@"value": @4, @"label": @"4x Anisotropic", @"short": @"4x AF", @"note": @"Floors and walls stay sharp at an angle"},
                                                  @{@"value": @8, @"label": @"8x Anisotropic", @"short": @"8x AF", @"note": @"Floors and walls stay sharp at an angle"},
                                                  @{@"value": @16, @"label": @"16x Anisotropic", @"short": @"16x AF", @"note": @"The sharpest; costs a little GPU time"}], @([d integerForKey:@"aniso"]), 2);
+    self.soften = row(@"Post-processing", @[@{@"value": @"sharp", @"label": @"Sharp", @"note": @"The game's soften pass, one screen pixel wide at any resolution"},
+                                            @{@"value": @"console", @"label": @"As the console", @"note": @"The soften pass a console pixel wide: softer, as the game looked on a TV"},
+                                            @{@"value": @"off", @"label": @"Off", @"note": @"No soften pass: the crispest picture"}], [d stringForKey:@"soften"], 0);
     self.framerate = row(@"Frame Rate", @[@{@"value": @"adaptive", @"label": @"Adaptive", @"note": @"60 where the game ran at 60, paced the way the console paced it"},
                                           @{@"value": @"60", @"label": @"60 fps", @"note": @"Every frame at 60"},
                                           @{@"value": @"30", @"label": @"30 fps", @"note": @"Half the work: steadier on a busy or older Mac"}], [d stringForKey:@"cap"], 0);
@@ -527,7 +531,7 @@ static NSString *const kbm_json =
                                                 @{@"value": @4, @"label": @"4x", @"note": @"Four frames for each the game draws"}], @([d integerForKey:@"interp"]), 0);
     self.fps = row(@"FPS Counter", @[@{@"value": @NO, @"label": @"Off", @"note": @"F9 shows it in the game"}, @{@"value": @YES, @"label": @"On", @"note": @"The frame rate in the corner; F9 hides it"}], @([d boolForKey:@"fps"]), 0);
     TSPanel *gp = [TSPanel new]; gp.title = @"GRAPHICS OPTIONS";
-    gp.rows = @[self.display, self.resolution, self.widescreen, self.filtering, self.framerate, self.interp, self.fps];
+    gp.rows = @[self.display, self.resolution, self.widescreen, self.filtering, self.soften, self.framerate, self.interp, self.fps];
 
     /* Controls */
     self.scheme = row(@"Scheme", @[@{@"value": @"kbm", @"label": @"Keyboard & Mouse", @"note": @"WASD and mouse look, with a controller still working beside them"},
@@ -546,7 +550,7 @@ static NSString *const kbm_json =
     v.panels = @[gp, cp];
 
     TSRow *gfx = [TSRow new]; gfx.title = @"Graphics Options"; gfx.wide = YES;
-    gfx.choices = @[@{@"value": @"", @"label": @"", @"note": @"Display, resolution, widescreen, filtering, frame rate, interpolation"}];
+    gfx.choices = @[@{@"value": @"", @"label": @"", @"note": @"Display, resolution, widescreen, filtering, post-processing, frame rate, interpolation"}];
     gfx.summary = ^NSString * {
         Launcher *l = wl; NSMutableArray *a = [NSMutableArray array];
         for (TSRow *t in @[l.display, l.resolution, l.widescreen, l.filtering]) [a addObject:t.choices[t.index][@"short"] ?: t.choices[t.index][@"label"]];
@@ -633,6 +637,7 @@ static NSString *const kbm_json =
     [d setInteger:[self.resolution.value integerValue] forKey:@"scale"];
     [d setBool:[self.widescreen.value boolValue] forKey:@"widescreen"];
     [d setInteger:[self.filtering.value integerValue] forKey:@"aniso"];
+    [d setObject:self.soften.value forKey:@"soften"];
     [d setObject:self.framerate.value forKey:@"cap"];
     [d setInteger:[self.interp.value integerValue] forKey:@"interp"];
     [d setBool:[self.fps.value boolValue] forKey:@"fps"];
@@ -655,6 +660,7 @@ static NSString *const kbm_json =
     setenv("RECOMP_RES_SCALE", [[self.resolution.value stringValue] UTF8String], 1);
     setenv("RECOMP_WIDESCREEN", [self.widescreen.value boolValue] ? "1" : "0", 1);
     setenv("RECOMP_ANISO", [[self.filtering.value stringValue] UTF8String], 1);
+    setenv("RECOMP_POST_SOFTEN", [self.soften.value UTF8String], 1);
     setenv("RECOMP_FPS_CAP", [self.framerate.value UTF8String], 1);
     setenv("RECOMP_FRAME_INTERP", [[self.interp.value stringValue] UTF8String], 1);
     setenv("RECOMP_FPS_OVERLAY", [self.fps.value boolValue] ? "1" : "0", 1);
