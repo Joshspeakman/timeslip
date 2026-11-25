@@ -130,8 +130,9 @@ void sub_000CBD10(void) { fp_player_fov(sub_000CBD10_gen, 0x388u, 1u); }
  * first-person layer, the hands and the weapon (sub_00115F10 and
  * sub_0008CE30 take 0xCA off it to index the players' 0x1584-byte records
  * at [0x007B0C48]); the sky 0xCF, the backdrops 0xD5 (found by the Mac
- * session, 25 Nov). The current camera is [0x007B0CC0], its field of view
- * at +0x388 (sub_00259DF0 puts base_fov's answer there, 0x00259E27), its
+ * session, 25 Nov). The current camera is [0x007B0CC0], the angle it shows
+ * at +0x384 (eased toward +0x388, where sub_00259DF0 puts base_fov's answer,
+ * 0x00259E27), its base at +0x390 (aiming is 0.55 of it), its
  * viewport at +0x224 as viewport_rect (sub_00055D90(vp, x0, y0, x1, y1))
  * lays it out: x0 +0, x1 +4, y0 +0x14, y1 +0x18, inclusive screen pixels.
  *
@@ -143,7 +144,7 @@ void sub_000CBD10(void) { fp_player_fov(sub_000CBD10_gen, 0x388u, 1u); }
  * -0.09, -0.75) in front of the camera; another player's view of the same
  * shot is a world-space one at the gun of the player's body, +0x88). */
 static const FpViewModel k_fp_view_model = {
-    0x007B0CC0u, 0x388u, 0x224u, 0x0u, 0x4u, 0x14u, 0x18u, 0x34u, 0xCAu, 0xCEu, 4u, 0x10u
+    0x007B0CC0u, 0x384u, 0x390u, 0x224u, 0x0u, 0x4u, 0x14u, 0x18u, 0x34u, 0xCAu, 0xCEu, 4u, 0x10u
 };
 extern void sub_000A2740_gen(void);
 void sub_000A2740(void) { fp_object_draw(sub_000A2740_gen, &k_fp_view_model); }

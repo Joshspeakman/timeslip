@@ -728,19 +728,30 @@ static float fp_fov_widen(float angle)
     return (float)(2.0 * atan(tan((double)other * 3.14159265358979 / 360.0) * r) * 180.0 / 3.14159265358979);
 }
 
-/* How much wider a camera at `angle` is than the game's own: tan(fov/2) /
- * tan(55/2) when it is one of the widened angles above, else 1. For the
- * first-person view model, which should stay the size the game drew it. */
-float fp_fov_view_k(float angle)
+/* How much wider a camera showing `angle` is than the game's would be, for
+ * the first-person view model, which should stay the size the game drew it.
+ * `base` is the camera's own angle (player+0x390): the game derives its
+ * other angles from it in proportion -- aiming is 0.55 of it (30.25 at the
+ * game's 55, 44 at a chosen 80) -- and eases between them. When the base is
+ * one the field of view widened (from 55, or 45 in split screen), the angle
+ * the game would show now is angle * game base / base, and k is the ratio of
+ * the two tangents: tan(fov/2) / tan(55/2) at rest, a little less while
+ * aiming. Any other base (no field of view chosen, a cutscene's camera) is 1. */
+float fp_fov_view_k(float angle, float base_now)
 {
     int fov = hle_fov();
-    float base = fp_fov_const(FP_FOV_BASE_VA), other = fp_fov_const(FP_FOV_OTHER_VA);
+    float base = fp_fov_const(FP_FOV_BASE_VA), other = fp_fov_const(FP_FOV_OTHER_VA), game;
 
-    if (fov <= 0 || (float)fov == base || !(base > 0.0f) ||
-        (angle != fp_fov_widen(base) && angle != fp_fov_widen(other)))
+    if (fov <= 0 || (float)fov == base || !(base > 0.0f) || !(angle > 0.0f) || angle >= 180.0f)
         return 1.0f;
-    return (float)(tan((double)fov * 3.14159265358979 / 360.0) /
-                   tan((double)base * 3.14159265358979 / 360.0));
+    if (base_now == fp_fov_widen(base))
+        game = base;
+    else if (base_now == fp_fov_widen(other))
+        game = other;
+    else
+        return 1.0f;
+    return (float)(tan((double)angle * 3.14159265358979 / 360.0) /
+                   tan((double)angle * game / base_now * 3.14159265358979 / 360.0));
 }
 
 static void fp_base_fov(void (*gen)(void), uint32_t base_va)
@@ -751,9 +762,10 @@ static void fp_base_fov(void (*gen)(void), uint32_t base_va)
 }
 
 /*
- * The player's camera angle is a field, player+0x388 (with +0x384, +0x38C
- * and +0x390 beside it, the angles it eases between), that the camera reads
- * every frame. base_fov is only one of its writers (camera_fov, sub_00259DF0,
+ * The player's camera angle is a set of fields: +0x390 its base, +0x38C the
+ * aiming angle (0.55 of the base), +0x388 the one it is heading for, and
+ * +0x384 the one shown, which sub_0025E650 eases toward +0x388 and the
+ * camera and culling read every frame. base_fov is only one of its writers (camera_fov, sub_00259DF0,
  * when the player's view mode changes). Two copies of base_fov's own test
  * are inlined where a player is set up, and write 55 or 45 there directly:
  * player_reset (sub_000CC720(player, mode), all four) at every spawn, and
@@ -788,9 +800,10 @@ static void fp_player_fov(void (*gen)(void), uint32_t first, uint32_t count)
  * camera-space view at 0x007A5900 in place for it, sub_00112120) -- found in
  * an Arcade match at FOV 80, where the gun was put right and its flash came
  * out smaller and nearer the middle, apart from the muzzle. While either is
- * drawn, and while the camera's angle ([0x007B0CC0] +0x388) is one the
- * setting widened (fp_fov_view_k), the renderer draws it tan(fov/2) /
- * tan(55/2) times larger about the middle of the camera's view (recompose
+ * drawn, and while the camera's base ([0x007B0CC0] +0x390) is one the
+ * setting widened (fp_fov_view_k), the renderer draws it tan(shown/2) /
+ * tan(game's/2) times larger -- tan(fov/2) / tan(55/2) at rest, a little
+ * less while aiming -- about the middle of the camera's view (recompose
  * xbox_D3D8SetViewModelZoom): as large, and where, the game's own angle drew
  * it. The middle is the camera's viewport's (+0x224, laid out by
  * viewport_rect), not Direct3D's: split screen keeps a viewport of the whole
@@ -802,7 +815,8 @@ static void fp_player_fov(void (*gen)(void), uint32_t first, uint32_t count)
 extern void xbox_D3D8SetViewModelZoom(float k, float cx, float cy);
 
 typedef struct FpViewModel {
-    uint32_t camera_ptr, fov_off;  /* the current camera, its angle */
+    uint32_t camera_ptr, fov_off;  /* the current camera, the angle it shows */
+    uint32_t base_off;             /* the camera's base angle, which the others follow */
     uint32_t viewport_off;         /* the camera's viewport, viewport_rect's */
     uint32_t vp_x0, vp_x1, vp_y0, vp_y1; /* its corners, inclusive pixels */
     uint32_t layer_off, layer_lo, layer_hi; /* an object's layer, the players' */
@@ -819,7 +833,7 @@ static void fp_view_zoomed(void (*gen)(void), const FpViewModel *m)
     float was = g_fp_view_zoom, was_cx = g_fp_view_cx, was_cy = g_fp_view_cy;
 
     if (cam >= 0x10000u && cam < 0x84000000u) {
-        k = fp_fov_view_k(FP_MF(cam + m->fov_off));
+        k = fp_fov_view_k(FP_MF(cam + m->fov_off), FP_MF(cam + m->base_off));
         vp = cam + m->viewport_off;
         cx = (float)((int32_t)FP_M32(vp + m->vp_x0) + (int32_t)FP_M32(vp + m->vp_x1) + 1) * 0.5f;
         cy = (float)((int32_t)FP_M32(vp + m->vp_y0) + (int32_t)FP_M32(vp + m->vp_y1) + 1) * 0.5f;
