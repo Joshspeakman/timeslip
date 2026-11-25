@@ -467,6 +467,10 @@ void recomp_icall_not_code_log(uint32_t va, uint32_t saved_esp)
 extern float xbox_D3D8ClaimHorPlus(void);
 /* recompose src/hle/hle_menu.h: the title's own menu is up, or play */
 extern void hle_window_title_menu(int on);
+/* recompose src/d3d/d3d8_xbox.h: XBOX_D3D8_SCISSORS_KEEP 0,
+ * _OFF_INBETWEEN 1, _OFF 2 */
+extern void xbox_D3D8SetScissorsOff(int mode);
+#define TS2_SCISSORS_IN_PLAY 2
 /* recompose src/hle/hle_settings.h */
 extern int hle_fov(void);
 extern void  xbox_D3D8SetWideFrames(int wide);
@@ -1269,6 +1273,22 @@ static void ts2_present(void (*present)(void))
         if (menu != shown) {
             shown = menu;
             hle_window_title_menu(menu);
+        }
+    }
+    /* TS2 clips each room it sees through a doorway, and the sky through it,
+     * to the doorway's rectangle on screen; in play that only spares drawing
+     * (its frames are the same without them), and the rectangles cut slabs
+     * of the level out of in-between frames while the player walks and
+     * turns, and leave flickering hairlines of sky and sand at 5x (recompose
+     * xbox_D3D8SetScissorsOff). The front end's list boxes and character
+     * select need theirs: play only. */
+    {
+        static int mode = -1;
+        int want = g_ts2_frame_play ? TS2_SCISSORS_IN_PLAY : 0;
+
+        if (want != mode) {
+            mode = want;
+            xbox_D3D8SetScissorsOff(want);
         }
     }
     g_ts2_frame_camera = g_ts2_frame_front_end = g_ts2_frame_play = 0;

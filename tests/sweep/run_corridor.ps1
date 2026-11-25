@@ -37,6 +37,11 @@ Get-ChildItem $Game -Recurse | Where-Object { $_.FullName -notmatch '\\UDATA(\\|
 $script = Get-Content "$here\corridor.sweep" | Where-Object { $_ -notmatch '^\s*#' }
 ($script + "log $Out\sweep.csv") | Set-Content -Encoding ascii "$Out\corridor.sweep"
 
+# Whatever an earlier run in this shell left set would steer this one (a replay
+# left in RECOMP_LOCKSTEP_REPLAY plays that recording instead of this test).
+foreach ($k in "RECOMP_LOCKSTEP", "RECOMP_LOCKSTEP_REPLAY", "RECOMP_LOCKSTEP_TRACE", "RECOMP_INPUT_SEQ",
+               "RECOMP_INPUT_SEQ_PAD", "RECOMP_DISPLAY_CONFIG", "RECOMP_FRAME_INTERP", "RECOMP_SCISSOR_TEST") {
+    Remove-Item "Env:$k" -ErrorAction SilentlyContinue }
 $env:RECOMP_GAME_DIR = "$Out\game"; $env:RECOMP_SAVE_DIR = "$Out\saves"
 $env:RECOMP_MUTE = "1"; $env:RECOMP_WINDOW_BACKGROUND = "1"; $env:RECOMP_WINDOW_SIZE = "1600x900"
 if ($Settings) { $env:RECOMP_DISPLAY_CONFIG = $Settings }

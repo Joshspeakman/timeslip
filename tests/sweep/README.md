@@ -86,3 +86,26 @@ frames of that part count it too, 8 here); the real ones are a sliver at the
 screen's edge on the frame a swing turns back. At 30 and 60 the game's own
 frames are shown for the turn itself (a flick past 20 degrees a frame is not
 interpolated); the in-between frames left are where the swing turns back.
+
+Second round (24 November 2026, menus by frame): the sweep's one spot hid
+most of the breaks -- they were common while walking and away from it (see
+docs/pc-native.md). With the doorway scissors off in play, the camera's
+motion voted without the gun, and a turn limit of 12 degrees a frame, Windows
+(D3D11, 5x, 16:9, interpolation 3), recorded fresh at each field of view:
+
+| Part | FOV 0 (60) | FOV 80 | FOV 100 |
+| --- | --- | --- | --- |
+| Swinging 5 degrees a frame | 4 of 63 | 2 of 71 | 6 of 78 |
+| 15 | 0 of 14 | 0 of 7 | 0 of 2 |
+| 30 | 0 of 34 | 0 of 10 | 0 of 0 |
+| 60 | 0 of 40 | 0 of 29 | 7 of 41 |
+| Pistols | 2 of 141 | 1 of 149 | 1 of 150 |
+| Fire rifle | 0 of 371 | 0 of 463 | 10 of 481 |
+| Shotgun | 0 of 147 | 1 of 147 | 4 of 147 |
+
+At FOV 100 the sky test also flags game frames (16 in the 15-degree part, 5
+in the fire rifle's), so part of that column is the test, not the picture.
+For breaks while moving, a test that compares each in-between frame with the
+game frames either side is the better judge (Fable's `novel.py`, the Mac's
+walking run); the runner here clears any `RECOMP_LOCKSTEP_REPLAY` and the
+like an earlier run in the same shell left set.
