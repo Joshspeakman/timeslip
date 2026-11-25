@@ -54,6 +54,14 @@ $env:CMAKE_GENERATOR = "Ninja"
 $env:PATH = "$Toolchain\cmake\bin;$Toolchain\ninja\bin;$Toolchain\bin;$env:PATH"
 
 if ($Reconfigure -and (Test-Path $cache)) { Remove-Item $cache }
+# CMake wants the lifted sources to be there: a title never lifted is lifted first.
+$gen = Join-Path $project "src\recomp\gen"
+if (-not (Test-Path $cache) -and -not (Get-ChildItem $gen -Filter *.c -ErrorAction SilentlyContinue | Select-Object -First 1)) {
+    $ErrorActionPreference = "Continue"
+    & $py "$project\scripts\build.py" --config $Config --no-build
+    if ($LASTEXITCODE) { exit $LASTEXITCODE }
+    $ErrorActionPreference = "Stop"
+}
 if (-not (Test-Path $cache)) {
     $cfg = @(
         "-S", $project, "-B", $build, "-G", "Ninja", "-DCMAKE_BUILD_TYPE=$Config",
