@@ -20,3 +20,6 @@ private/
 
 # macOS Finder files, at any depth ("./.DS_Store" matched nothing).
 .DS_Store
+
+# Future Perfect's disc, the same way (fp/README).
+/fp/game
