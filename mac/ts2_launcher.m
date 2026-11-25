@@ -12,7 +12,8 @@
  * Art: <data>/art (or a copy in the app's Resources/art), made from the player's own disc by mac/make_art.sh: the
  * title screen's logo textures and frames the game drew. Nothing from the game is in this repository; without the
  * art the window writes the title in plain type.
- * Updates: install.sh gives the app an updater (Contents/MacOS/update) that rebuilds it from the branch it follows.
+ * Updates: install.sh gives the app an updater (Contents/MacOS/update, mac/update.sh) that rebuilds it from the newest
+ * GitHub release.
  * Development: TS2_LAUNCHER_SHOT=<png> renders the window to an image (TS2_LAUNCHER_HOVER=<code> lights an item,
  * TS2_LAUNCHER_PANEL=<0|1> opens Graphics Options or Controls);
  * TS2_DATA_PATH=<dir> uses another data folder (a test copy of the game: it saves into its folder); TS2_LAUNCHER_PLAY=1
@@ -350,36 +351,38 @@ static NSRect fit_rect(NSImage *img, NSRect r)
 @end
 
 // ---------------------------------------------------------------- updates (the other ports' updater)
-enum { UPD_NONE, UPD_CHECKING, UPD_CURRENT, UPD_AVAILABLE, UPD_ERROR };
+enum { UPD_NONE, UPD_CHECKING, UPD_CURRENT, UPD_AVAILABLE, UPD_NORELEASE, UPD_ERROR };
 static NSString *short_commit(NSString *c) { return c.length > 7 ? [c substringToIndex:7] : (c ?: @""); }
-static NSString *update_check(NSString *updater)     /* the newest commit of the branch on GitHub; nil if it can't be reached */
+/* The updater's answer about GitHub's newest release, as its one line (mac/update.sh --check <installed commit>):
+ * "available <tag> <commit>", "current <tag> <commit>", "none" or "error <why>"; nil if it could not be run. */
+static NSString *update_check(NSString *updater, NSString *built)
 {
-    NSTask *t = [NSTask new]; t.executableURL = [NSURL fileURLWithPath:@"/bin/bash"]; t.arguments = @[updater, @"--check"];
+    NSTask *t = [NSTask new]; t.executableURL = [NSURL fileURLWithPath:@"/bin/bash"]; t.arguments = @[updater, @"--check", built ?: @""];
     NSPipe *p = [NSPipe pipe]; t.standardOutput = p; t.standardError = [NSFileHandle fileHandleWithNullDevice];
     if (![t launchAndReturnError:nil]) return nil;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_SEC), dispatch_get_global_queue(0, 0), ^{ if (t.running) [t terminate]; });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 40 * NSEC_PER_SEC), dispatch_get_global_queue(0, 0), ^{ if (t.running) [t terminate]; });
     NSData *d = [p.fileHandleForReading readDataToEndOfFile]; [t waitUntilExit];
     NSString *out = [[[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    return t.terminationStatus == 0 && out.length >= 40 ? [out substringToIndex:40] : nil;
+    return t.terminationStatus == 0 && out.length ? [out componentsSeparatedByString:@"\n"].lastObject : nil;
 }
-static NSArray<NSDictionary *> *update_choice(int state, NSString *branch, NSString *built, NSString *latest)
+static NSArray<NSDictionary *> *update_choice(int state, NSString *built, NSString *tag, NSString *why)
 {
     NSString *label = @"Unavailable", *note = @"This copy wasn't installed from the repository (mac/install.sh)"; BOOL lit = NO;
     switch (state) {
-    case UPD_CHECKING: label = @"Checking…"; note = [NSString stringWithFormat:@"Asking GitHub for the newest %@", branch]; break;
-    case UPD_CURRENT: label = @"Up to Date"; note = [NSString stringWithFormat:@"%@ %@ · click to check again", branch, short_commit(built)]; break;
-    case UPD_AVAILABLE: label = @"Update Ready"; lit = YES; note = [NSString stringWithFormat:@"%@ → %@: click to install", short_commit(built), short_commit(latest)]; break;
-    case UPD_ERROR: label = @"Can’t Check"; note = @"GitHub unreachable: click to retry"; break;
+    case UPD_CHECKING: label = @"Checking…"; note = @"Asking GitHub for the newest release"; break;
+    case UPD_CURRENT: label = @"Up to Date"; note = built.length ? [NSString stringWithFormat:@"%@ (%@) · click to check again", tag, short_commit(built)]
+                                                                  : [NSString stringWithFormat:@"%@ · click to check again", tag]; break;
+    case UPD_AVAILABLE: label = @"Update Ready"; lit = YES; note = built.length ? [NSString stringWithFormat:@"%@ is out: click to install it (you have %@)", tag, short_commit(built)]
+                                                                               : [NSString stringWithFormat:@"%@ is out: click to install it", tag]; break;
+    case UPD_NORELEASE: label = @"No Release Yet"; note = @"Nothing has been released on GitHub yet · click to check again"; break;
+    case UPD_ERROR: label = @"Can’t Check"; note = why.length ? [NSString stringWithFormat:@"%@ · click to retry", why] : @"GitHub unreachable: click to retry"; break;
     }
     return @[@{@"value": @"", @"label": label, @"note": note, @"accent": @(lit)}];
 }
-static NSString *update_phase(NSString *line, NSString *branch)
+/* What the launcher shows for one of the update's lines: its "== " phases (mac/update.sh), as they are. */
+static NSString *update_phase(NSString *line)
 {
-    if ([line hasPrefix:@"== fetching"]) return @"Downloading the update from GitHub";
-    if ([line hasPrefix:[NSString stringWithFormat:@"== %@:", branch]]) return [@"Got " stringByAppendingString:[line substringFromIndex:branch.length + 4]];
-    if ([line hasPrefix:@"== recompiling"]) return @"Rebuilding from your game: translating it to native code (1 of 2)";
-    if ([line hasPrefix:@"== building"]) return @"Installing the new app (2 of 2)";
-    return nil;
+    return [line hasPrefix:@"== "] ? [line substringFromIndex:3] : nil;
 }
 @interface TSBlockTarget : NSObject
 @property (copy) void (^fire)(void);
@@ -388,11 +391,11 @@ static NSString *update_phase(NSString *line, NSString *branch)
 @implementation TSBlockTarget
 - (void)clicked:(id)b { (void)b; if (self.fire) self.fire(); }
 @end
-static BOOL update_run(NSWindow *parent, NSString *updater, NSString *branch, NSString *logPath)   /* modal progress; YES when rebuilt */
+static BOOL update_run(NSWindow *parent, NSString *updater, NSString *logPath)   /* modal progress; YES when rebuilt */
 {
     NSPanel *pn = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 520, 170) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
     pn.title = @"Updating";
-    NSTextField *title = [NSTextField labelWithString:@"Updating to the newest version"]; title.font = [NSFont boldSystemFontOfSize:14]; title.frame = NSMakeRect(20, 128, 480, 22);
+    NSTextField *title = [NSTextField labelWithString:@"Updating to the newest release"]; title.font = [NSFont boldSystemFontOfSize:14]; title.frame = NSMakeRect(20, 128, 480, 22);
     NSTextField *status = [NSTextField wrappingLabelWithString:@"Starting…"]; status.frame = NSMakeRect(20, 64, 480, 56);
     NSProgressIndicator *spin = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(20, 44, 480, 12)]; spin.indeterminate = YES; [spin startAnimation:nil];
     NSTextField *time = [NSTextField labelWithString:@"This takes a few minutes. Your saves and settings are kept."]; time.font = [NSFont systemFontOfSize:11]; time.textColor = NSColor.secondaryLabelColor; time.frame = NSMakeRect(20, 14, 370, 18);
@@ -413,7 +416,7 @@ static BOOL update_run(NSWindow *parent, NSString *updater, NSString *branch, NS
             while ((nl = [pending rangeOfString:@"\n"]).location != NSNotFound) {
                 NSString *line = [pending substringToIndex:nl.location]; [pending deleteCharactersInRange:NSMakeRange(0, nl.location + 1)];
                 [tail appendFormat:@"%@\n", line]; if (tail.length > 600) [tail deleteCharactersInRange:NSMakeRange(0, tail.length - 600)];
-                NSString *ph = update_phase(line, branch); if (ph) on_main(^{ status.stringValue = ph; });
+                NSString *ph = update_phase(line); if (ph) on_main(^{ status.stringValue = ph; });
             }
         }
     };
@@ -592,32 +595,37 @@ static NSString *const kbm_json =
     NSDictionary *infoPlist = NSBundle.mainBundle.infoDictionary;
     NSString *updater = [NSBundle.mainBundle.executablePath.stringByDeletingLastPathComponent stringByAppendingPathComponent:@"update"];
     if (![[NSFileManager defaultManager] isExecutableFileAtPath:updater]) updater = nil;
-    NSString *branch = infoPlist[@"TS2Branch"] ?: @"mac-local", *built = infoPlist[@"TS2Built"] ?: @"";
+    NSString *built = infoPlist[@"TS2Built"] ?: @"";
     TSRow *u = [TSRow new]; u.title = @"Updates"; self.updates = u;
-    __block int state = updater ? UPD_CHECKING : UPD_NONE; __block NSString *latest = nil;
-    u.choices = update_choice(state, branch, built, nil);
+    __block int state = updater ? UPD_CHECKING : UPD_NONE; __block NSString *tag = nil;
+    u.choices = update_choice(state, built, nil, nil);
     __weak TSRow *wu = u; __weak Launcher *ws = self;
     void (^check)(void) = ^{
         if (!updater) return;
-        state = UPD_CHECKING; wu.choices = update_choice(state, branch, built, nil); ws.view.needsDisplay = YES;
-        void (^done)(NSString *) = ^(NSString *l) {
-            latest = l; state = !l ? UPD_ERROR : [l isEqualToString:built] ? UPD_CURRENT : UPD_AVAILABLE;
-            wu.choices = update_choice(state, branch, built, l); ws.view.needsDisplay = YES;
+        state = UPD_CHECKING; wu.choices = update_choice(state, built, nil, nil); ws.view.needsDisplay = YES;
+        void (^done)(NSString *) = ^(NSString *line) {
+            NSArray<NSString *> *w = [line componentsSeparatedByString:@" "]; NSString *why = nil;
+            if (!line) state = UPD_ERROR;
+            else if ([w[0] isEqual:@"none"]) state = UPD_NORELEASE;
+            else if (w.count >= 3 && [w[0] isEqual:@"current"]) { state = UPD_CURRENT; tag = w[1]; }
+            else if (w.count >= 3 && [w[0] isEqual:@"available"]) { state = UPD_AVAILABLE; tag = w[1]; }
+            else { state = UPD_ERROR; if ([w[0] isEqual:@"error"] && line.length > 6) why = [line substringFromIndex:6]; }
+            wu.choices = update_choice(state, built, tag, why); ws.view.needsDisplay = YES;
         };
-        if (getenv("TS2_LAUNCHER_SHOT")) { done(update_check(updater)); return; }
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ NSString *l = update_check(updater); on_main(^{ done(l); }); });
+        if (getenv("TS2_LAUNCHER_SHOT")) { done(update_check(updater, built)); return; }
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ NSString *l = update_check(updater, built); on_main(^{ done(l); }); });
     };
     check();
     u.activate = ^{
         if (state == UPD_CHECKING || state == UPD_NONE) return;
         if (state != UPD_AVAILABLE) { check(); return; }
         NSAlert *a = [NSAlert new];
-        a.messageText = @"Update to the newest version?";
-        a.informativeText = [NSString stringWithFormat:@"The %@ branch (%@) is downloaded from GitHub and the app is rebuilt from your own copy of the game, "
-                             "which takes a few minutes. Your saves and settings are kept. The app restarts when it is done.", branch, short_commit(latest)];
+        a.messageText = [NSString stringWithFormat:@"Update to %@?", tag];
+        a.informativeText = @"The release is downloaded from GitHub and the app is rebuilt from your own copy of the game, "
+                             "which takes a few minutes. Your saves and settings are kept. The app restarts when it is done.";
         [a addButtonWithTitle:@"Update"]; [a addButtonWithTitle:@"Cancel"];
         if ([a runModal] != NSAlertFirstButtonReturn) return;
-        if (update_run(ws.window, updater, branch, [ws.dataPath stringByAppendingPathComponent:@"update.log"])) {
+        if (update_run(ws.window, updater, [ws.dataPath stringByAppendingPathComponent:@"update.log"])) {
             NSTask *o = [NSTask new]; o.executableURL = [NSURL fileURLWithPath:@"/usr/bin/open"]; o.arguments = @[@"-n", NSBundle.mainBundle.bundlePath];
             [o launchAndReturnError:nil]; [o waitUntilExit];
             exit(0);

@@ -9,7 +9,8 @@
   frame interpolation, FPS counter.
 - **Controls**: Keyboard & Mouse (WASD, mouse look, fire and secondary fire on the mouse buttons; a controller still
   works beside it) or Controller (the toolkit's own mapping), with a key guide.
-- **Saves**, **Updates** (follows this branch on GitHub and rebuilds from your copy).
+- **Saves**, **Updates**: the newest GitHub release (pre-releases included), fetched and rebuilt from your copy
+  (`mac/update.sh`; `tools/update_windows.ps1` is the Windows one, with the same rules).
 
 ## Make it
 
