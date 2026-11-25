@@ -456,6 +456,19 @@ static int title_main(int argc, char **argv)
                                                   const char *const *settings);
         recomp_title_defaults_install(recomp_title_bindings, recomp_title_settings);
     }
+    /* Future Perfect paces on the GPU's fences and the push buffer's GET
+     * (its kick-off spins until the NV2A ack thread answers), so off Windows
+     * the ack thread's busy backoff (recompose xbox_memory_layout.c,
+     * RECOMP_NV2A_ACK_BUSY_US, 50 us there) left it waiting out the sleeps:
+     * on an M1 Pro, stretches of 8 to 55 fps in its story intro and
+     * gameplay, against a steady 60 with the backoff off, at the cost of the
+     * ack thread's core while a level runs (about 60% of one). Windows
+     * already defaults to 0. Before the ack thread starts; a value already
+     * set still wins. */
+#ifndef _WIN32
+    setenv("RECOMP_NV2A_ACK_BUSY_US", "0", 0);
+#endif
+
     /* Mouse look pushes the right stick until Future Perfect's look hook is
      * found (TimeSplitters 2's turns the player by an angle, ts2_mouse_look). */
 
