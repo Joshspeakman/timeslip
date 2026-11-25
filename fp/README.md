@@ -18,8 +18,17 @@ in this folder.
 - **System Link** hosts a match: Xbox Live / System Link > System Link >
   Start New Match, the lobby, team select, an Assault match in the VR arena.
 - **Online co-op** (lockstep, as TimeSplitters 2's: `docs/multiplayer.md`):
-  Story Co-op split screen, the whole game run on both machines and only the
-  controllers sent. See "Online co-op" below.
+  Story Co-op and two-player Arcade, the whole game run on both machines and
+  only the controllers sent, each player with the whole screen. Tried live
+  between this PC and a Mac (26 Nov 2026): online co-op and System Link both
+  ways round. See "Online co-op" below.
+- **Characters and the world drawn as on the console** (recompose f0d5643,
+  26 Nov 2026): Future Perfect loads each draw's vertex program into the slot
+  it has selected rather than selecting again, and every draw was running the
+  one before's -- bots and the player's body as shards, walls dark, the
+  radar's map and the hands missing. Compared with xemu (the same disc and
+  BIOS), an Arcade match's spawn now matches it almost exactly. Its sun and
+  lens flare show at a raised resolution too (recompose 1ac4a42).
 - **Widescreen**, the game's own 16:9 mode (Widescreen in the launcher's
   Graphics or the Esc menu's Display): its camera, front end, cutscenes and
   HUD laid out for 16:9 by the game itself, on the console's widescreen flag.
@@ -48,10 +57,10 @@ in this folder.
 - **The launcher's art** from your disc (`tools/make_disc_art.py --title
   fp`): the logo, the ship over the planet, the cockpit, the canyon, the same
   frames on Windows and the Mac (the run is timed by frame under lockstep).
-- Not yet: the number keys (the held weapon is the look state's +0x58C: 14
-  the Scifi Handgun, 37 the next; what is owned is still to be found), each
-  co-op player's whole screen. The game has its own crosshair options (Settings > Controls
-  > Crosshair).
+- Not yet: the number keys (the held weapon is the character's weapon state's
+  +0x20, written from a wanted weapon at +0x9D0 by the character update
+  sub_002998E0; what is owned is still to be found). The game has its own
+  crosshair options (Settings > Controls > Crosshair).
 - **Field of view**: the launcher's and the Esc menu's FOV setting replaces
   the game's 55 degrees (vertical) where the game asks for it
   (`sub_000CB3B0`), so what is drawn and what is culled widen together; 0,
