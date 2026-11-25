@@ -42,11 +42,15 @@ endif()
 
 add_subdirectory(${XBOXRECOMP_DIR} ${CMAKE_BINARY_DIR}/xboxrecomp)
 
-# Widescreen is not declared yet (recomp_title_widescreen): with the Xbox's
-# widescreen flag the front end and cutscenes lay themselves out wider, but
-# the 3D view and its full-screen passes still come out as a 4:3 band in the
-# middle of the 16:9 frame, NATIVE declared or not (25 Nov 2026). Until that
-# is understood the title defaults to 4:3 (src/title_defaults.c).
+# Future Perfect has a 16:9 mode of its own, on the console's widescreen flag:
+# its camera's projection becomes 16:9 (anamorphic in its 640x480 frame) and
+# its front end lays itself out for it. Its 2D is laid out for that frame as
+# well, so src/main.c tells the renderer to squeeze none of it
+# (xbox_D3D8SetTwoDPlacement STRETCH): its 3D vertex programs copy positions
+# it worked out itself rather than read a projection register, so the
+# renderer took every one of them for 2D and squeezed the whole picture into
+# a 4:3 band.
+recomp_title_widescreen(NATIVE)
 
 # CONFIGURE_DEPENDS so a re-lift that adds or removes a chunk is picked up
 # without a manual re-configure.

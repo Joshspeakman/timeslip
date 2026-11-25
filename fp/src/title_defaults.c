@@ -70,7 +70,5 @@ const char *const recomp_title_settings[] = {
     "mouse_look", "1",
     "mouse_invert", "1",
     "renderer", "vulkan",
-    /* 4:3 until the 16:9 mode draws its whole frame (fp/CMakeLists.txt). */
-    "widescreen", "0",
     NULL
 };

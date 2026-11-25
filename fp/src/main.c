@@ -653,6 +653,17 @@ static int title_main(int argc, char **argv)
      * does nothing while appearing to be set. */
     xbox_WatchdogStart();
 
+    /* Widescreen: Future Perfect's 16:9 mode lays out its 2D for the 16:9
+     * frame itself (fp/CMakeLists.txt, recomp_title_widescreen NATIVE), so
+     * none of it is squeezed back to 4:3. Its 3D programs place vertices
+     * they transformed themselves, which the renderer cannot tell from 2D;
+     * squeezed, the whole picture came out as a 4:3 band. 1 is
+     * XBOX_D3D8_2D_STRETCH (recompose src/d3d/d3d8_xbox.h). */
+    {
+        extern void xbox_D3D8SetTwoDPlacement(int placement, uint32_t tag);
+        xbox_D3D8SetTwoDPlacement(1, 0);
+    }
+
     /* Online co-op (recompose src/kernel/recomp_lockstep.h): a joiner meets
      * its host here -- the session's clock, the host's saves, the settings
      * that change the game checked -- before the game reads anything. Does

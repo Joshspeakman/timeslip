@@ -20,9 +20,12 @@ in this folder.
 - **Online co-op** (lockstep, as TimeSplitters 2's: `docs/multiplayer.md`):
   Story Co-op split screen, the whole game run on both machines and only the
   controllers sent. See "Online co-op" below.
-- **Widescreen** not yet: with the Xbox's widescreen flag the front end and
-  cutscenes lay themselves out wider, but the 3D view comes out as a 4:3 band
-  in the middle; the title defaults to 4:3 until that is understood.
+- **Widescreen**, the game's own 16:9 mode (Widescreen in the launcher's
+  Graphics or the Esc menu's Display): its camera, front end, cutscenes and
+  HUD laid out for 16:9 by the game itself, on the console's widescreen flag.
+  Its 3D vertex programs copy positions it transformed itself, which the
+  renderer took for 2D and squeezed back to a 4:3 band; `src/main.c` has it
+  squeeze none of Future Perfect's 2D (`fp/CMakeLists.txt`).
 - **Installs** on Windows and the Mac, with its own icon from the disc and
   the launcher's Updates tile (see "Building").
 - **Keyboard and mouse** laid out over the game's own Default control layout
