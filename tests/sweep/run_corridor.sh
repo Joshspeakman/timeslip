@@ -51,6 +51,8 @@ export RECOMP_GAME_DIR="$GAME" RECOMP_SAVE_DIR="$OUT/saves"
 WIN=1600x900; [ "$(uname)" = Darwin ] && system_profiler SPDisplaysDataType 2>/dev/null | grep -q Retina && WIN=800x450
 export RECOMP_MUTE=1 RECOMP_WINDOW_BACKGROUND=1 RECOMP_WINDOW_SIZE=${RECOMP_WINDOW_SIZE:-$WIN}
 [ -z "$SETTINGS" ] || export RECOMP_DISPLAY_CONFIG="$SETTINGS"
+# A Mac draws with Metal only: said outright, and the run's log is checked for it below.
+[ "$(uname)" = Darwin ] && export RECOMP_D3D8_BACKEND=metal
 export RECOMP_TS2_SWEEP="$OUT/corridor.sweep" RECOMP_LOCKSTEP_END=7320
 if [ -n "$REPLAY" ]; then
     export RECOMP_LOCKSTEP_REPLAY="$REPLAY"
@@ -64,6 +66,10 @@ RECOMP_PRESENT_DUMP_TICKS=$(tr -d '\r\n' < "$HERE/corridor.ticks"); export RECOM
 export RECOMP_PRESENT_DUMP_FRAMES=3 RECOMP_PRESENT_DUMP_MAX=6000
 # stderr straight to a file: a pipe the reader falls behind on stalls the game
 "$EXE" 2> "$OUT/run.log" || echo "run_corridor: the game exited with $?" >&2
+grep -a '\[RHI\] renderer:' "$OUT/run.log" | head -1 || true
+if [ "$(uname)" = Darwin ] && ! grep -aq '\[RHI\] renderer: metal' "$OUT/run.log"; then
+    die "the run's log does not say Metal ($OUT/run.log)"
+fi
 grep -E 'LOCKSTEP\].*(same|differ|recorded)' "$OUT/run.log" | tail -1 || true
 "$PY" "$HERE/analyze.py" "$OUT" --jpg
 "$PY" "$HERE/odd.py" "$OUT"

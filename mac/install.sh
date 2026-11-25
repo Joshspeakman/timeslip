@@ -7,8 +7,8 @@
 #             (default ~/Games/TimeSplitters2Native; mac/make_art.sh makes the art)
 #
 # The app: Contents/MacOS/"TimeSplitters 2" is the launcher (mac/ts2_launcher.m), which starts the recompiled game
-# (Contents/MacOS/timeslip, bundled by recompose/scripts/make_macos_app.py with its Vulkan loader, MoltenVK and
-# DXC for the Vulkan renderer; the Metal renderer needs none of them) in the same process. Contents/MacOS/update runs
+# (Contents/MacOS/timeslip, bundled by recompose/scripts/make_macos_app.py --metal-only: DXC, which the Metal renderer
+# compiles its shaders with; the Mac draws with Metal only, so no Vulkan loader or MoltenVK) in the same process. Contents/MacOS/update runs
 # mac/update.sh from this checkout. It contains the game's recompiled code: for this Mac only, never distribute it.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd)
@@ -44,7 +44,7 @@ PY=python3; [ -x "$HOME/.venvs/recomp/bin/python" ] && PY=$HOME/.venvs/recomp/bi
 
 echo "== the game"
 VULKAN_SDK=$SDK "$PY" "$HERE/recompose/scripts/make_macos_app.py" "$BIN" --name "TimeSplitters 2" --out "$STAGE" \
-    --bundle-id "$BUNDLE_ID" --no-sign >/dev/null
+    --bundle-id "$BUNDLE_ID" --metal-only --no-sign >/dev/null
 
 echo "== the launcher"
 clang -O2 -fobjc-arc -Wall -Wno-unused-parameter -framework Cocoa -o "$A/Contents/MacOS/TimeSplitters 2" "$HERE/mac/ts2_launcher.m"

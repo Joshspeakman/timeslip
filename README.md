@@ -258,7 +258,8 @@ macOS on Apple Silicon:
 - Xcode's command line tools: `xcode-select --install`
 - CMake, Ninja and OpenSSL from Homebrew: `brew install cmake ninja openssl@3`
 - The [LunarG Vulkan SDK](https://vulkan.lunarg.com/sdk/home#mac), installed
-  system-wide. It provides MoltenVK and the shader compiler.
+  system-wide. It provides the shader compiler and SPIRV-Cross, which the
+  Metal renderer uses; the Mac draws with Metal only.
 - Python 3.10 or newer with `capstone`. Homebrew's Python will not install
   packages globally, so use a virtual environment:
   `python3 -m venv ~/.venvs/recomp && ~/.venvs/recomp/bin/pip install capstone`
@@ -347,7 +348,7 @@ file:
 | --- | --- | --- |
 | Resolution | `resolution_scale` | `RECOMP_RES_SCALE` |
 | Widescreen | `widescreen` | `RECOMP_WIDESCREEN` |
-| Renderer | `renderer` (`auto`, `d3d11`, `vulkan`, `metal`) | `RECOMP_D3D8_BACKEND` |
+| Renderer | `renderer` (`auto`, `d3d11`, `vulkan`; a Mac: always `metal`) | `RECOMP_D3D8_BACKEND` |
 | Texture sharpness | `anisotropy` | `RECOMP_ANISO` |
 | Post-processing (the game's soften pass) | `post_soften` (`sharp`, `console`, `off`) | `RECOMP_POST_SOFTEN` |
 | Crosshair always on with the mouse (Esc menu > Mouse) | `crosshair` (1, 0: only while aiming) | `RECOMP_CROSSHAIR` |

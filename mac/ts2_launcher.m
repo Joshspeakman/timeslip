@@ -1,10 +1,10 @@
 /* TimeSplitters 2 launcher, in the manner of the other native ports' launch windows (Homeworld's, Ghost Recon's):
- * the game's logo over its own Oblask Dam with the project's name, TIMESLIP, as its subtitle, a card for each renderer (native Metal, or Vulkan through MoltenVK), a
+ * the game's logo over its own Oblask Dam with the project's name, TIMESLIP, as its subtitle, the renderer's card (Metal: the Mac draws with Metal only), a
  * row of tiles (Graphics Options, Controls, Saves, Updates) and Quit / Play. Then the recompiled game
  * (Contents/MacOS/timeslip) starts in this process, so the app in the Dock is the game.
  *
  * Settings are remembered here and handed to the game as the toolkit's environment variables, which win over its
- * settings file (README: "Running a build of your own"): RECOMP_D3D8_BACKEND, RECOMP_RES_SCALE, RECOMP_WIDESCREEN,
+ * settings file (README: "Running a build of your own"): RECOMP_D3D8_BACKEND (always metal), RECOMP_RES_SCALE, RECOMP_WIDESCREEN,
  * RECOMP_ANISO, RECOMP_FPS_CAP, RECOMP_FRAME_INTERP, RECOMP_FPS_OVERLAY, RECOMP_FULLSCREEN, and for Keyboard & Mouse
  * a bindings file (RECOMP_INPUT_CONFIG) with mouse look (RECOMP_MOUSE_LOOK, RECOMP_MOUSE_SENSITIVITY) and the
  * crosshair (RECOMP_CROSSHAIR).
@@ -14,7 +14,7 @@
  * art the window writes the title in plain type.
  * Updates: install.sh gives the app an updater (Contents/MacOS/update) that rebuilds it from the branch it follows.
  * Development: TS2_LAUNCHER_SHOT=<png> renders the window to an image (TS2_LAUNCHER_HOVER=<code> lights an item,
- * TS2_LAUNCHER_PANEL=<0|1> opens Graphics Options or Controls, TS2_LAUNCHER_CARD=<0|1> picks a renderer);
+ * TS2_LAUNCHER_PANEL=<0|1> opens Graphics Options or Controls);
  * TS2_DATA_PATH=<dir> uses another data folder (a test copy of the game: it saves into its folder); TS2_LAUNCHER_PLAY=1
  * presses Play at once. */
 #import <Cocoa/Cocoa.h>
@@ -63,7 +63,7 @@ enum { W = 960, H = 660 };
 - (BOOL)acceptsFirstResponder { return YES; }
 - (BOOL)acceptsFirstMouse:(NSEvent *)e { return YES; }
 - (NSArray<TSRow *> *)rows { return self.open >= 0 ? self.panels[self.open].rows : @[]; }
-- (NSRect)cardRect:(NSInteger)i { return NSMakeRect(60 + i * 436, 250, 404, 224); }
+- (NSRect)cardRect:(NSInteger)i { return NSMakeRect(60, 250, 840, 224); }   /* one card: the Mac draws with Metal only */
 - (NSRect)tileRect:(NSInteger)k   /* a row under the cards (a wide tile counts twice) */
 {
     NSInteger units = 0, at = 0, n = (NSInteger)self.tiles.count;
@@ -95,7 +95,7 @@ enum { W = 960, H = 660 };
         }
         return NSPointInRect(p, self.panelRect) ? HIT_NONE : HIT_BACK;    /* a click outside the panel closes it */
     }
-    for (NSInteger i = 0; i < 2; i++) if (NSPointInRect(p, [self cardRect:i])) return HIT_CARD + i;
+    if (NSPointInRect(p, [self cardRect:0])) return HIT_CARD;
     for (NSInteger k = 0; k < (NSInteger)self.tiles.count; k++) {
         if (!NSPointInRect(p, [self tileRect:k])) continue;
         if (self.tiles[k].activate) return HIT_TILE + 10 * k + 1;
@@ -115,7 +115,7 @@ enum { W = 960, H = 660 };
 - (void)mouseDown:(NSEvent *)e
 {
     NSInteger h = [self hit:[self convertPoint:e.locationInWindow fromView:nil]];
-    if (h >= HIT_CARD && h < HIT_CARD + 2 && e.clickCount == 2) { self.card = h - HIT_CARD; if (self.onChange) self.onChange(); if (self.onPlay) self.onPlay(); return; }   /* double-click: play with that one */
+    if (h == HIT_CARD && e.clickCount == 2) { if (self.onPlay) self.onPlay(); return; }   /* double-click: play */
     self.pressed = h; self.needsDisplay = YES;
 }
 - (void)mouseUp:(NSEvent *)e
@@ -126,13 +126,13 @@ enum { W = 960, H = 660 };
     if (h == HIT_QUIT) { if (self.onQuit) self.onQuit(); return; }
     if (h == HIT_BACK) { [self closePanel]; return; }
     if (h >= HIT_ROW) { NSInteger k = (h - HIT_ROW) / 10; self.rowFocus = k; [self stepRow:k by:(h - HIT_ROW) % 10 == 0 ? -1 : 1]; return; }
-    if (h >= HIT_CARD && h < HIT_CARD + 2) { self.card = h - HIT_CARD; self.focus = -1; self.needsDisplay = YES; if (self.onChange) self.onChange(); return; }
+    if (h == HIT_CARD) { self.focus = -1; self.needsDisplay = YES; return; }
     NSInteger k = (h - HIT_TILE) / 10, part = (h - HIT_TILE) % 10; self.focus = k;
     [self step:k by:part == 0 ? -1 : 1];
 }
 - (void)step:(NSInteger)k by:(NSInteger)dir
 {
-    if (k < 0) { self.card = (self.card + 2 + dir) % 2; self.needsDisplay = YES; if (self.onChange) self.onChange(); return; }
+    if (k < 0) return;                                                  /* the card: nothing to choose */
     TSRow *t = self.tiles[k];
     if (t.activate) { t.activate(); self.needsDisplay = YES; return; }
     NSInteger n = (NSInteger)t.choices.count; t.index = (t.index + dir + n) % n;
@@ -227,8 +227,8 @@ static NSRect fit_rect(NSImage *img, NSRect r)
 }
 - (void)drawCard:(NSInteger)i shadow:(NSShadow *)sh
 {
-    static NSString *kicker[] = {@"NATIVE RENDERER", @"THROUGH MOLTENVK"}, *name[] = {@"METAL", @"VULKAN"};
-    static NSString *line[] = {@"Apple's own graphics API, no translation layer", @"The port's original path, translated to Metal"};
+    static NSString *kicker[] = {@"NATIVE RENDERER"}, *name[] = {@"METAL"};
+    static NSString *line[] = {@"Apple's own graphics API, drawn by the port's own renderer: no translation layer"};
     NSRect r = [self cardRect:i]; BOOL sel = self.card == i, hot = self.hover == HIT_CARD + i, foc = sel && self.focus == -1 && self.open < 0;
     if (sel) {                                                           /* the chosen renderer: a glow behind its card */
         NSShadow *glow = [NSShadow new]; glow.shadowColor = [accent() colorWithAlphaComponent:0.55]; glow.shadowBlurRadius = 26; glow.shadowOffset = NSZeroSize;
@@ -243,15 +243,10 @@ static NSRect fit_rect(NSImage *img, NSRect r)
     NSColor *tc = sel || hot ? NSColor.whiteColor : [text_c() colorWithAlphaComponent:0.82];
     draw_text(kicker[i], heading(11), sel || hot ? accent() : dim(), NSMakeRect(r.origin.x + 20, NSMaxY(r) - 100, 360, 16), NSTextAlignmentLeft, sh, 3.5);
     draw_text(name[i], heavy(38), tc, NSMakeRect(r.origin.x + 18, NSMaxY(r) - 84, 360, 50), NSTextAlignmentLeft, sh, 6);
-    draw_text(line[i], body(13, NO), sel || hot ? text_c() : dim(), NSMakeRect(r.origin.x + 20, NSMaxY(r) - 32, 370, 20), NSTextAlignmentLeft, sh, 0.2);
+    draw_text(line[i], body(13, NO), sel || hot ? text_c() : dim(), NSMakeRect(r.origin.x + 20, NSMaxY(r) - 32, r.size.width - 40, 20), NSTextAlignmentLeft, sh, 0.2);
     [(sel ? accent() : hot ? [accent() colorWithAlphaComponent:0.7] : [accent_dim() colorWithAlphaComponent:0.7]) setStroke];
     NSBezierPath *b = [NSBezierPath bezierPathWithRect:NSInsetRect(r, 0.5, 0.5)]; b.lineWidth = sel ? 1.5 : 1; [b stroke];
-    if (sel) {
-        brackets(NSInsetRect(r, -6, -6), foc ? 22 : 16, foc ? 3 : 2.5, accent());
-        NSRect tag = NSMakeRect(NSMaxX(r) - 104, r.origin.y + 12, 92, 22);    /* "SELECTED", top right */
-        [[accent() colorWithAlphaComponent:0.92] setFill]; fill_over(tag);
-        draw_text(@"SELECTED", heading(10.5), ink(1), NSMakeRect(tag.origin.x, tag.origin.y + 4, tag.size.width, 16), NSTextAlignmentCenter, nil, 2.5);
-    }
+    if (sel) brackets(NSInsetRect(r, -6, -6), foc ? 22 : 16, foc ? 3 : 2.5, accent());
 }
 - (void)drawArrow:(NSRect)r right:(BOOL)right lit:(BOOL)lit
 {
@@ -312,8 +307,7 @@ static NSRect fit_rect(NSImage *img, NSRect r)
     NSInteger k = -1;
     if (self.hover >= HIT_TILE && self.hover < HIT_ROW) k = (self.hover - HIT_TILE) / 10; else if (self.hover == HIT_NONE && self.focus >= 0) k = self.focus;
     if (k >= 0 && k < (NSInteger)self.tiles.count) { TSRow *t = self.tiles[k]; return t.choices[t.index][@"note"]; }
-    if (self.hover == HIT_CARD) return @"Metal: drawn by the port's own Metal renderer, nothing in between. Double-click to play.";
-    if (self.hover == HIT_CARD + 1) return @"Vulkan: drawn through MoltenVK, the path the port first shipped with. Double-click to play.";
+    if (self.hover == HIT_CARD) return @"Metal: the port's own renderer, nothing in between. Double-click to play.";
     return self.hint;
 }
 - (void)drawRect:(NSRect)dirty
@@ -340,9 +334,9 @@ static NSRect fit_rect(NSImage *img, NSRect r)
     } else draw_text(@"TIMESPLITTERS 2", heavy(60), text_c(), NSMakeRect(0, 62, W, 80), NSTextAlignmentCenter, sh, 8);
     draw_text(@"TIMESLIP", heavy(22), text_c(), NSMakeRect(0, 150, W, 30), NSTextAlignmentCenter, sh, 14);
     draw_text(@"NATIVE FOR APPLE SILICON  ·  RECOMPILED FROM YOUR XBOX DISC", heading(11.5), accent(), NSMakeRect(0, 184, W, 18), NSTextAlignmentCenter, sh, 4);
-    draw_text(@"CHOOSE YOUR RENDERER", heading(10.5), dim(), NSMakeRect(60, 226, 400, 16), NSTextAlignmentLeft, sh, 3.5);
+    draw_text(@"RENDERER", heading(10.5), dim(), NSMakeRect(60, 226, 400, 16), NSTextAlignmentLeft, sh, 3.5);
     draw_text(@"1990 · SIBERIA · OBLASK DAM", heading(10.5), dim(), NSMakeRect(W - 460, 226, 400, 16), NSTextAlignmentRight, sh, 3.5);
-    for (NSInteger i = 0; i < 2; i++) [self drawCard:i shadow:sh];
+    [self drawCard:0 shadow:sh];
     NSInteger hov = self.hover, foc = self.focus; if (self.open >= 0) self.hover = self.focus = HIT_NONE;   /* under a panel: nothing lit */
     for (NSInteger k = 0; k < (NSInteger)self.tiles.count; k++) [self drawTile:k shadow:sh];
     self.hover = hov; self.focus = foc;
@@ -489,7 +483,7 @@ static NSString *const kbm_json =
 - (void)applicationDidFinishLaunching:(NSNotification *)n
 {
     NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
-    [d registerDefaults:@{@"renderer": @"vulkan", @"fullscreen": @NO, @"scale": @2, @"widescreen": @YES, @"aniso": @8, @"cap": @"adaptive",
+    [d registerDefaults:@{@"fullscreen": @NO, @"scale": @2, @"widescreen": @YES, @"aniso": @8, @"cap": @"adaptive",
                           @"interp": @0, @"soften": @"sharp", @"fps": @NO, @"scheme": @"kbm", @"mouse": @80, @"crosshair": @YES}];
     NSDictionary *infoPlist = NSBundle.mainBundle.infoDictionary;
     self.dataPath = [(infoPlist[@"TS2DataPath"] ?: @"~/Games/TimeSplitters2Native") stringByExpandingTildeInPath];
@@ -498,12 +492,12 @@ static NSString *const kbm_json =
 
     TSLaunchView *v = [[TSLaunchView alloc] initWithFrame:NSMakeRect(0, 0, W, H)]; self.view = v;
     v.hover = v.pressed = HIT_NONE; v.focus = -1; v.open = -1;
-    v.card = [[d stringForKey:@"renderer"] isEqual:@"metal"] ? 0 : 1;
+    v.card = 0;
     v.backdrop = image_at(artDirs, @"backdrop.jpg");
     v.logo = image_at(artDirs, @"logo.png"); v.glow = image_at(artDirs, @"glow.png");
     NSImage *none = [NSImage new];
-    v.shots = @[image_at(artDirs, @"card_metal.jpg") ?: none, image_at(artDirs, @"card_vulkan.jpg") ?: none];
-    v.hint = @"←/→ choose a renderer · ↑/↓ settings · Return plays · Esc quits";
+    v.shots = @[image_at(artDirs, @"card_metal.jpg") ?: none];
+    v.hint = @"↑/↓ settings · ←/→ change · Return plays · Esc quits";
 
     /* Graphics Options */
     self.display = row(@"Display", @[@{@"value": @NO, @"label": @"Window", @"note": @"A window on the desktop; Alt-Return switches in the game"},
@@ -580,7 +574,6 @@ static NSString *const kbm_json =
     const char *shot = getenv("TS2_LAUNCHER_SHOT");
     if (shot) {                                                          /* development: the window as an image */
         if (getenv("TS2_LAUNCHER_HOVER")) v.hover = atoi(getenv("TS2_LAUNCHER_HOVER"));
-        if (getenv("TS2_LAUNCHER_CARD")) v.card = atoi(getenv("TS2_LAUNCHER_CARD"));
         if (getenv("TS2_LAUNCHER_PANEL")) v.open = atoi(getenv("TS2_LAUNCHER_PANEL"));
         NSBitmapImageRep *rep = [v bitmapImageRepForCachingDisplayInRect:v.bounds]; [v cacheDisplayInRect:v.bounds toBitmapImageRep:rep];
         [[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:@(shot) atomically:YES];
@@ -636,7 +629,7 @@ static NSString *const kbm_json =
 - (void)save
 {
     NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
-    [d setObject:self.view.card == 0 ? @"metal" : @"vulkan" forKey:@"renderer"];
+    [d removeObjectForKey:@"renderer"];                                 /* from when the Mac also had Vulkan */
     [d setBool:[self.display.value boolValue] forKey:@"fullscreen"];
     [d setInteger:[self.resolution.value integerValue] forKey:@"scale"];
     [d setBool:[self.widescreen.value boolValue] forKey:@"widescreen"];
@@ -660,7 +653,7 @@ static NSString *const kbm_json =
         [a runModal]; return;
     }
     setenv("RECOMP_GAME_DIR", game.fileSystemRepresentation, 1);
-    setenv("RECOMP_D3D8_BACKEND", self.view.card == 0 ? "metal" : "vulkan", 1);
+    setenv("RECOMP_D3D8_BACKEND", "metal", 1);                         /* the Mac draws with Metal only */
     setenv("RECOMP_FULLSCREEN", [self.display.value boolValue] ? "1" : "0", 1);
     setenv("RECOMP_RES_SCALE", [[self.resolution.value stringValue] UTF8String], 1);
     setenv("RECOMP_WIDESCREEN", [self.widescreen.value boolValue] ? "1" : "0", 1);

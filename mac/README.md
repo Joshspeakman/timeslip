@@ -2,8 +2,9 @@
 
 `TimeSplitters 2.app`: a launch window in the style of the other native Mac ports, then the recompiled game.
 
-- **Renderer**: a card each for **Metal** (the toolkit's native Metal renderer, `recompose/src/d3d/rhi_metal.m`) and
-  **Vulkan** (through MoltenVK, upstream's path). Double-click a card to play with it.
+- **Renderer**: **Metal**, the toolkit's native Metal renderer (`recompose/src/d3d/rhi_metal.m`). The Mac draws with
+  Metal only: no Vulkan or MoltenVK in the app, and an old settings file's `renderer = vulkan` means Metal.
+  Double-click the card to play.
 - **Graphics Options**: window or full screen, resolution 1x–4x, 16:9 or 4:3, texture filtering, frame rate,
   frame interpolation, FPS counter.
 - **Controls**: Keyboard & Mouse (WASD, mouse look, fire and secondary fire on the mouse buttons; a controller still
@@ -27,6 +28,6 @@ draws, from your copy, into `<data>/art`. The app holds the game's recompiled co
 
 ## Development
 
-`TS2_LAUNCHER_SHOT=<png>` renders the window to an image (`TS2_LAUNCHER_PANEL=0|1`, `TS2_LAUNCHER_CARD=0|1`,
+`TS2_LAUNCHER_SHOT=<png>` renders the window to an image (`TS2_LAUNCHER_PANEL=0|1`,
 `TS2_LAUNCHER_HOVER=<code>`); `TS2_DATA_PATH=<dir>` uses a test copy of the game folder (the game saves into it);
 `TS2_LAUNCHER_PLAY=1` presses Play without showing the window. Every other `RECOMP_*` variable passes through to the game.

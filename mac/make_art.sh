@@ -6,7 +6,6 @@
 #   logo.png, glow.png   the title screen's own logo textures (mac/tools/captex.py)
 #   backdrop.jpg         the Oblask Dam establishing shot, replayed at 4x
 #   card_metal.jpg       the time portal hub, 4x
-#   card_vulkan.jpg      Siberia's base, 4x
 # into <data>/art. Takes about three minutes. The captures and the copy of the game
 # it ran from are deleted afterwards (both are game content).
 #
@@ -59,7 +58,6 @@ render() {   # <from swap> <to swap> <name>: the brightest frame in the range, a
 }
 render 3900 5700 backdrop        # the dam: the level's opening shot, snow-bright
 render 3500 3700 card_metal      # the hub, its portal open
-render 6900 8400 card_vulkan     # outside, at the base
 
 mkdir -p "$DATA/art"
 cp "$WORK"/art/* "$DATA/art/"
