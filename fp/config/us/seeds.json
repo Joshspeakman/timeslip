@@ -34,5 +34,9 @@
  {
   "start": "0x0020D810",
   "note": "Object callback (slot 3) pushed for sub_000A5CE0 at 0x002100E4, found statically; decodes as a function body."
+ },
+ {
+  "start": "0x004400EC",
+  "note": "XNET: a connection's timer callback (stored at +0xC by 0x00440B1C; switches on its state byte at +0x8C8 through the table at 0x0044039E); observed at runtime as an unresolved indirect call once in each copy of a two-copy System Link match. The only XNET/XONLINE code address stored as data that was not lifted."
  }
 ]
