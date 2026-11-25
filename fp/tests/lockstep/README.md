@@ -40,8 +40,13 @@ grep LOCKSTEP replay.log | tail -1
 ```
 
 The last line says how many of the recording's ticks differed: 0, or the
-first that did. A replay at other settings than the defaults (widescreen,
-the field of view) differs early on.
+first that did. Both were recorded at Future Perfect's defaults and replay
+the same only at them: mouse look on (`mouse_look = 1`, the title's default;
+with it Auto Lookahead is set aside, so a replay with it off plays another
+game -- the Mac's first replays with an older settings file differed from
+tick 6,890), the game's own field of view (`fov = 0`), widescreen off. A
+recording keeps no settings, so a replay at other ones just differs; an
+online session checks them and refuses.
 
 Several copies replaying one recording at once find what depends on the
 host's timing fastest. The Arcade one found the fifth GPU fence time the game

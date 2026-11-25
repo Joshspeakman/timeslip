@@ -653,6 +653,13 @@ static int title_main(int argc, char **argv)
      * does nothing while appearing to be set. */
     xbox_WatchdogStart();
 
+    /* The field of view can be chosen (recomp_manual.c, fp_base_fov): 55 is
+     * the game's. */
+    {
+        extern void hle_fov_title_default(int degrees);
+        hle_fov_title_default(55);
+    }
+
     /* Widescreen: Future Perfect's 16:9 mode lays out its 2D for the 16:9
      * frame itself (fp/CMakeLists.txt, recomp_title_widescreen NATIVE), so
      * none of it is squeezed back to 4:3. Its 3D programs place vertices

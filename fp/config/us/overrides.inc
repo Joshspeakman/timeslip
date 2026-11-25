@@ -97,6 +97,14 @@ void sub_00022030(void) { fp_vblank_count(sub_00022030_gen); }
 extern void sub_0025D520_gen(void);
 void sub_0025D520(void) { fp_look_step(sub_0025D520_gen, 0x007B0C7Cu, 0x1500u); }
 
+/* base_fov is sub_000CB3B0(player) (fp_base_fov): fld [0x004785CC] (55.0,
+ * the game's vertical field of view), or [0x00478900] while player+0x254
+ * is 0 and +0x258 is 1; called by the look step and the camera and culling
+ * code. Found from the projection a gameplay frame uploads (y scale 1.92 =
+ * cot 27.5 degrees). */
+extern void sub_000CB3B0_gen(void);
+void sub_000CB3B0(void) { fp_base_fov(sub_000CB3B0_gen, 0x004785CCu); }
+
 /* loading_screen_start is sub_00156D80 (fp_loading_screen_start), called
  * from the game loop sub_0003D440 at 0x0003D56A: unless the screen is one
  * that has none, it clears the "stopped" flag at 0x004E7A94 (1 in the XBE)

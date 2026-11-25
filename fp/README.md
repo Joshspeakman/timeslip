@@ -47,9 +47,17 @@ in this folder.
   game's turn acceleration acts on; TimeSplitters 2 turns its camera
   directly, which also changes what online co-op sends. Where to start: the
   look step `sub_0025D520` turns the stick into the look state's angles,
-  [0x007B0C7C] +0x100 and +0x104), the field of view, the number keys, each
-  co-op player's whole screen. The game has its own crosshair options
-  (Settings > Controls > Crosshair).
+  [0x007B0C7C] +0x100 and +0x104), the number keys, each co-op player's
+  whole screen. The game has its own crosshair options (Settings > Controls
+  > Crosshair).
+- **Field of view**: the launcher's and the Esc menu's FOV setting replaces
+  the game's 55 degrees (vertical) where the game asks for it
+  (`sub_000CB3B0`), so what is drawn and what is culled widen together; 0,
+  the default, is the game's own, and a narrower view the game makes is left
+  alone. Not yet: the weapon in hand is drawn through the same projection,
+  so at a wider angle it looks smaller and further off (TimeSplitters 2 draws
+  its weapon pass at the game's own angle; Future Perfect's pass is still to
+  be found).
 - **Clears of some colour channels** as the console does them
   (`xbox_D3D8SetClearChannels(1)` in `src/main.c`; recompose
   `d3d8_xbox.h`, `RECOMP_CLEAR_CHANNELS=0/1` to override): the Audio/Video

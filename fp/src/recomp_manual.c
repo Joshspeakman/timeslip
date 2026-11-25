@@ -626,6 +626,33 @@ static void fp_look_step(void (*gen)(void), uint32_t player_ptr_va,
         *flags = was;
 }
 
+/*
+ * The field of view (the toolkit's fov setting: the launcher's Graphics and
+ * the Esc menu's slider). base_fov (USA sub_000CB3B0) is the player's
+ * vertical field of view in degrees, which the look step and the camera and
+ * culling code ask for: the game's 55, or another constant in one state of
+ * the player. When it answers 55 the chosen angle replaces it, on the x87
+ * stack where the function leaves it; any other answer is left as the game
+ * made it. 0 -- the default -- is the game's own. The setting changes what
+ * is culled as well as what is drawn, so an online co-op session checks it
+ * (src/main.c, as TimeSplitters 2's).
+ */
+extern int hle_fov(void);
+
+static void fp_base_fov(void (*gen)(void), uint32_t base_va)
+{
+    int fov;
+    float base;
+
+    gen();
+    fov = hle_fov();
+    if (fov <= 0)
+        return;
+    base = *(volatile float *)((uintptr_t)base_va + g_xbox_mem_offset);
+    if ((float)g_fp_stack[g_fp_top & 7u] == base)
+        g_fp_stack[g_fp_top & 7u] = (double)fov;
+}
+
 /* -- TimeSplitters: Future Perfect: where this release's functions are ---- */
 
 /*
