@@ -8,6 +8,33 @@ in this folder.
 
 **Work in progress** (Nov 2026): being brought up on Windows and the Mac.
 
+## Where it is (25 November 2026)
+
+- **Plays.** The front end (1-4 players, profiles, storage, the main menu),
+  story mode's first level -- 2401, Time To Split: its briefing, the whole
+  in-engine intro cutscene and the level itself, the handgun in hand and the
+  HUD up -- at 60 fps with no fault, on Windows (Vulkan) and the Mac (Metal).
+  Its movies (XMV) play through FFmpeg on both.
+- **System Link** hosts a match: Xbox Live / System Link > System Link >
+  Start New Match, the lobby, team select, an Assault match in the VR arena.
+- **Widescreen** not yet: with the Xbox's widescreen flag the front end and
+  cutscenes lay themselves out wider, but the 3D view comes out as a 4:3 band
+  in the middle; the title defaults to 4:3 until that is understood.
+- Not yet: the keyboard and mouse checked against the game's own controls,
+  native mouse look, the field of view, the crosshair, online co-op
+  (lockstep), the launcher's art and the installer.
+
+A scripted path to the first level (fresh saves, a game copy without UDATA):
+
+    RECOMP_INPUT_SEQ_PAD=1
+    RECOMP_INPUT_SEQ=20000:a,26000:a,32000:a,38000:a,44000:a,50000:a,56000:a,62000:a
+
+1 PLAYER, Create New Profile, Enter Name (A keeps "Player 1"), the Xbox Hard
+Disk, Story, 2401 Time To Split, Normal, the briefing. To host System Link
+instead: `20000:a,26000:a,32000:a,38000:a,43000:down,44000:down,45000:down,
+47000:a,50000:down,51500:a,56000:a` (with `RECOMP_SYSLINK=host`), which
+leaves the host in its lobby; A starts it.
+
 | | |
 | --- | --- |
 | Title ID | `45410066` ("TimeSplitters FP") |

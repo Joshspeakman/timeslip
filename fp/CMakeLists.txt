@@ -42,6 +42,12 @@ endif()
 
 add_subdirectory(${XBOXRECOMP_DIR} ${CMAKE_BINARY_DIR}/xboxrecomp)
 
+# Widescreen is not declared yet (recomp_title_widescreen): with the Xbox's
+# widescreen flag the front end and cutscenes lay themselves out wider, but
+# the 3D view and its full-screen passes still come out as a 4:3 band in the
+# middle of the 16:9 frame, NATIVE declared or not (25 Nov 2026). Until that
+# is understood the title defaults to 4:3 (src/title_defaults.c).
+
 # CONFIGURE_DEPENDS so a re-lift that adds or removes a chunk is picked up
 # without a manual re-configure.
 file(GLOB RECOMP_GEN_SOURCES CONFIGURE_DEPENDS "src/recomp/gen/*.c")
