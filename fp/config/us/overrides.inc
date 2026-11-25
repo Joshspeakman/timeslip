@@ -86,6 +86,17 @@ void sub_001538C0(void) { fp_frame_clock(sub_001538C0_gen, k_fp_state); }
 extern void sub_00022030_gen(void);
 void sub_00022030(void) { fp_vblank_count(sub_00022030_gen); }
 
+/* look_step is sub_0025D520 (fp_look_step), called from the player update
+ * sub_000D5EB0: for the player whose look state [0x007B0C7C] points at, it
+ * turns the right stick into the look angles (+0x100, +0x104) and, while
+ * +0x108 says there is no look input and bit 3 of byte 2 of the profile's
+ * controls ([state +0x1500]) is set, levels the pitch (+0x104) by a share a
+ * frame (0x0025DB95): Auto Lookahead. The controls' address and that bit
+ * are the same ones the Controls screen changes (the profile slots at
+ * 0x007BEDC0, 0x1F54 apart; sub_00069720 returns a slot's controls). */
+extern void sub_0025D520_gen(void);
+void sub_0025D520(void) { fp_look_step(sub_0025D520_gen, 0x007B0C7Cu, 0x1500u); }
+
 /* loading_screen_start is sub_00156D80 (fp_loading_screen_start), called
  * from the game loop sub_0003D440 at 0x0003D56A: unless the screen is one
  * that has none, it clears the "stopped" flag at 0x004E7A94 (1 in the XBE)

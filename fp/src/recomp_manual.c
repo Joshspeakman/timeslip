@@ -586,6 +586,46 @@ static void fp_loading_screen_start(void (*gen)(void))
     gen();
 }
 
+/*
+ * No look-spring with a mouse (as TimeSplitters 2's ts2_look_spring). The
+ * profile's Auto Lookahead (Settings > Controls, on in a new profile) levels
+ * the view while the player walks with no look input: the look step
+ * (look_step, USA sub_0025D520) takes a share of the pitch each frame while
+ * bit 3 of byte 2 of the profile's controls is set. Right for a stick,
+ * which springs back to the middle; wrong for a mouse, which stays where it
+ * was put: a look up or down was pulled back to the horizon within a second
+ * of walking. With mouse look on, the bit is cleared while that step runs
+ * and put back straight after, so the profile -- and what the game saves of
+ * it -- is untouched. Every machine in a co-op session must do the same, so
+ * mouse_look is one of the settings a session checks (src/main.c).
+ */
+extern int recomp_config_bool(const char *env_name, const char *key, int def);
+
+static void fp_look_step(void (*gen)(void), uint32_t player_ptr_va,
+                         uint32_t controls_off)
+{
+    static int mouse = -1;
+    volatile uint8_t *flags = NULL;
+    uint8_t was = 0;
+    uint32_t p, c;
+
+    if (mouse < 0)
+        mouse = recomp_config_bool("RECOMP_MOUSE_LOOK", "mouse_look", 0);
+    if (mouse) {
+        p = *(volatile uint32_t *)((uintptr_t)player_ptr_va + g_xbox_mem_offset);
+        c = p >= 0x10000u && p < 0x84000000u
+            ? *(volatile uint32_t *)((uintptr_t)(p + controls_off) + g_xbox_mem_offset) : 0;
+        if (c >= 0x10000u && c < 0x84000000u) {
+            flags = (volatile uint8_t *)((uintptr_t)(c + 2u) + g_xbox_mem_offset);
+            was = *flags;
+            *flags = (uint8_t)(was & ~0x08u);
+        }
+    }
+    gen();
+    if (flags)
+        *flags = was;
+}
+
 /* -- TimeSplitters: Future Perfect: where this release's functions are ---- */
 
 /*

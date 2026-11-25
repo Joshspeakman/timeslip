@@ -685,6 +685,14 @@ static int title_main(int argc, char **argv)
          * ts2_viewport_rect): its co-op is the console's split screen on
          * both machines, whatever coop_view says. */
         recomp_lockstep_add_setting("coop_view", "split");
+        /* Mouse look turns Auto Lookahead off while the look step runs
+         * (recomp_manual.c, fp_look_step), which changes the game: both
+         * machines must agree on it. */
+        {
+            extern int recomp_config_bool(const char *env_name, const char *key, int def);
+            recomp_lockstep_add_setting("mouse_look",
+                recomp_config_bool("RECOMP_MOUSE_LOOK", "mouse_look", 0) ? "1" : "0");
+        }
         /* The field of view widens what the game culls as well as what it
          * draws, so both machines must agree on it too. */
         {
