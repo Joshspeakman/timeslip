@@ -172,7 +172,10 @@ try {
     if ($LASTEXITCODE) { throw "could not update the recompose submodule" }
 
     Say "== Recompiling the game from your disc"
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "build_windows.ps1") -Title $Title -RelifFrom lift 2>&1 |
+    # From disassembly, not the lift: a release can bring new seeds, and the
+    # lifter's seeds are read at disassembly (a lift-stage relift keeps the
+    # old function list -- Future Perfect's XNET seed, b9d2ff8, was found so).
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "build_windows.ps1") -Title $Title -RelifFrom disasm 2>&1 |
         ForEach-Object { Say "  $_" }
     if ($LASTEXITCODE) { throw "the build stopped (exit $LASTEXITCODE); see $log" }
 
