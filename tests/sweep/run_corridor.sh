@@ -40,6 +40,11 @@ OUT=$(mkdir -p "$OUT" && cd "$OUT" && pwd)
 mkdir -p "$OUT/saves"
 { grep -v '^[[:space:]]*#' "$HERE/corridor.sweep"; echo "log $OUT/sweep.csv"; } > "$OUT/corridor.sweep"
 
+# Whatever an earlier run left exported would steer this one (a replay left in
+# RECOMP_LOCKSTEP_REPLAY plays that recording instead of this test). The display
+# settings (RECOMP_FRAME_INTERP and the like) are kept: here they are how a run is set.
+unset RECOMP_LOCKSTEP RECOMP_LOCKSTEP_REPLAY RECOMP_LOCKSTEP_TRACE RECOMP_INPUT_SEQ \
+      RECOMP_INPUT_SEQ_PAD RECOMP_DISPLAY_CONFIG
 export RECOMP_GAME_DIR="$GAME" RECOMP_SAVE_DIR="$OUT/saves"
 # 1600x900 pixels, as on Windows: a Retina Mac's window size is in points, two pixels each,
 # and a 3200x1800 dump is slow enough that the in-between frames miss their moment
