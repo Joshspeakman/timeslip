@@ -137,10 +137,11 @@ if(MSVC)
 endif()
 
 # The settings window: video options, input bindings, then starts the game.
-# COOP comes once Future Perfect's frame clock is hooked for lockstep, as
-# TimeSplitters 2's is.
+# COOP: the System Link tab also hosts and joins online co-op, which Future
+# Perfect's build supports (its frame clock is hooked for lockstep,
+# src/recomp_manual.c and config/us/overrides.inc).
 if(COMMAND recomp_add_launcher)
-    recomp_add_launcher(${PROJECT_NAME}_launcher ${PROJECT_NAME}.exe
+    recomp_add_launcher(${PROJECT_NAME}_launcher ${PROJECT_NAME}.exe COOP
         DEFAULTS ${CMAKE_CURRENT_SOURCE_DIR}/src/title_defaults.c
         BRAND "Timeslip" SHOWCASE
         THEME ${CMAKE_CURRENT_SOURCE_DIR}/src/launcher_theme_fp.h)

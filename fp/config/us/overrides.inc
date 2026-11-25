@@ -28,6 +28,64 @@
 #define FP_GUEST(va) ((uint8_t *)((uintptr_t)(uint32_t)(va) + g_xbox_mem_offset))
 #define FP_MEM32(va) (*(volatile uint32_t *)FP_GUEST(va))
 
+/* -- online co-op: the frame clock and the vblank count -------------------
+ *
+ * frame_clock is sub_001538C0 (fp_frame_clock), called once a frame from the
+ * game loops sub_0003D370 and sub_0003D440. It loops on vblank_count,
+ * sub_00022030 (which returns the word at 0x00563918, incremented by the
+ * vblank callback sub_00022020 that 0x0002406C installs with
+ * D3DDevice_SetVerticalBlankCallback), until at least one vblank has passed
+ * since the last frame; stores the vblanks elapsed at 0x004E7940 clamped to
+ * 1..3 and as a float at 0x004E7948. The other reader of vblank_count is the
+ * thread sub_00156CB0. The state hashed for lockstep is .data, 0x004B82C0
+ * for 0x333594 bytes (the section table of this XBE), less the vblank
+ * callback's own count and the GPU fence times the game keeps.
+ *
+ * The fence times: Direct3D's push-buffer time (the device, at
+ * *0x003E3F58 = 0x003E3F60, +0x2C, outside .data) rises with every fence
+ * from the first frame the title draws, and the boot's logos and movies draw
+ * before frame_clock first runs, on the host's clock: a frame more or less
+ * there (about 5 fences a frame) and every fence after differs by as much.
+ * D3DDevice_SetRenderTarget (sub_003D3800) stamps the target it leaves with
+ * that time (a resource's Lock, +8), and the game keeps two such resources in
+ * .data, its copies of the two frame buffers' headers (0x00563120 and
+ * 0x00563154, 0x34 apart, copied from GetBackBuffer's at 0x00023C71); and its
+ * two-part geometry ring (0x0054F128, 0x14 apart, flipped by sub_00018DE0)
+ * keeps the D3DDevice_InsertFence it waits on before reusing a part, at +8.
+ * The game hands those back only to Direct3D's waits, which the kernel's
+ * fence mirror always finds done (recompose hle_d3d8.c, "The GPU time
+ * fence"). Found by replaying one recording on several copies at once: in
+ * about one replay in two everything else was the same at every frame, and
+ * these four words differed by 4 from frame 3 on.
+ */
+static const FpStateRegion k_fp_state[] = {
+    { 0x004B82C0u, 0x00333594u, ".data" },
+    /* Not game state: the vblank callback's count (the game reads the tick
+     * instead, through vblank_count). */
+    { 0x00563918u, 4u, 0 },
+    /* Not game state: GPU fence times (above). */
+    { 0x00563128u, 4u, 0 },             /* the frame buffers' Locks */
+    { 0x0056315Cu, 4u, 0 },
+    { 0x0054F130u, 4u, 0 },             /* the geometry ring's fences */
+    { 0x0054F144u, 4u, 0 },
+    { 0, 0, 0 }
+};
+extern void sub_001538C0_gen(void);
+void sub_001538C0(void) { fp_frame_clock(sub_001538C0_gen, k_fp_state); }
+extern void sub_00022030_gen(void);
+void sub_00022030(void) { fp_vblank_count(sub_00022030_gen); }
+
+/* loading_screen_start is sub_00156D80 (fp_loading_screen_start), called
+ * from the game loop sub_0003D440 at 0x0003D56A: unless the screen is one
+ * that has none, it clears the "stopped" flag at 0x004E7A94 (1 in the XBE)
+ * and tail-jumps to sub_00156D10, which starts the loading screen's thread
+ * sub_00156CB0. Its stops: sub_00156840 (from 0x0003D607), which while
+ * 0x004E7A94 is 0 spins until the thread's fade at 0x00749848 reaches 1.0,
+ * and sub_00155550, which while 0x0074A9AC is set waits for the thread's
+ * end. */
+extern void sub_00156D80_gen(void);
+void sub_00156D80(void) { fp_loading_screen_start(sub_00156D80_gen); }
+
 void sub_000245C0(void)
 {
     uint32_t dst = FP_MEM32(g_esp + 4u);

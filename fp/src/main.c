@@ -661,14 +661,12 @@ static int title_main(int argc, char **argv)
         extern void recomp_lockstep_start(void);
         extern void recomp_lockstep_add_setting(const char *name, const char *value);
         extern const char *recomp_config_lookup(const char *env_name, const char *key);
-        /* Every player's view as the whole screen changes how the game lays
-         * its views out, so both machines must agree on it: split, or own
-         * (anything else, as recomp_manual.c reads it). */
-        {
-            const char *view = recomp_config_lookup("RECOMP_COOP_VIEW", "coop_view");
-            recomp_lockstep_add_setting("coop_view",
-                                        view && strcmp(view, "split") == 0 ? "split" : "own");
-        }
+        /* Every player's view as the whole screen would change how the game
+         * lays its views out, so both machines would have to agree on it.
+         * Future Perfect has no such hook yet (TimeSplitters 2's is
+         * ts2_viewport_rect): its co-op is the console's split screen on
+         * both machines, whatever coop_view says. */
+        recomp_lockstep_add_setting("coop_view", "split");
         /* The field of view widens what the game culls as well as what it
          * draws, so both machines must agree on it too. */
         {

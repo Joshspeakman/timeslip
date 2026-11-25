@@ -428,13 +428,89 @@ void recomp_icall_not_code_log(uint32_t va, uint32_t saved_esp)
 }
 
 
-/* ?? TimeSplitters: Future Perfect: where this release's functions are ?? */
+/* -- Online co-op: one step per frame on every machine -------------------- */
 
 /*
- * The rest of this file is Recompose's template (templates/new-game), the
- * runtime glue every title has. Future Perfect's hooks go above this, the
- * same in every release; where they attach is in fp/config/<region>/
- * overrides.inc, as TimeSplitters 2 does it (src/recomp_manual.c). The
+ * Online co-op runs the whole game on every machine and sends only the
+ * controllers (recompose src/kernel/recomp_lockstep.h), so every copy must
+ * step the game by the same amount each frame. Future Perfect steps as
+ * TimeSplitters 2 does (src/recomp_manual.c, ts2_frame_clock): its frame
+ * clock (frame_clock, USA sub_001538C0) waits for its vblank counter to move,
+ * then steps by the vblanks elapsed since the last frame, 1 at 60 fps and
+ * clamped to 3. Two machines would step differently whenever one ran a frame
+ * late. With lockstep on, the counter's reader (vblank_count, USA
+ * sub_00022030) answers the lockstep tick instead, and frame_clock's entry is
+ * the frame boundary where the tick advances and the controllers are
+ * latched: every frame is one step everywhere.
+ *
+ * The state hashed each tick is the release's data section, named in
+ * overrides.inc, less what is not game state (entries with no name).
+ */
+typedef struct FpStateRegion { uint32_t va, size; const char *name; } FpStateRegion;
+extern void recomp_lockstep_ignore(uint32_t va, uint32_t size);
+extern int recomp_lockstep_active(void);
+extern void recomp_lockstep_frame(void);
+extern uint32_t recomp_lockstep_tick(void);
+extern void recomp_lockstep_add_region(uint32_t va, uint32_t size, const char *name);
+
+static void fp_frame_clock(void (*gen)(void), const FpStateRegion *state)
+{
+    static int named;
+
+    if (recomp_lockstep_active()) {
+        if (!named) {
+            named = 1;
+            for (; state->size; state++)
+                if (state->name)
+                    recomp_lockstep_add_region(state->va, state->size, state->name);
+                else
+                    recomp_lockstep_ignore(state->va, state->size);
+        }
+        recomp_lockstep_frame();
+    }
+    gen();
+}
+
+static void fp_vblank_count(void (*gen)(void))
+{
+    if (recomp_lockstep_active()) {
+        g_eax = recomp_lockstep_tick();
+        g_esp += 4;                        /* ret */
+        return;
+    }
+    gen();
+}
+
+/*
+ * The loading screen has a thread of its own (USA sub_00156CB0): while the
+ * frame's thread loads, it draws and presents the loading screen once a
+ * vblank, spinning on vblank_count until the count moves, and fades it out;
+ * the stop (sub_00156840) busy-waits for that fade before it ends the thread
+ * and waits for it. Under lockstep the count is the tick, which no load
+ * moves, so the thread would spin holding the guest lock and the load would
+ * never finish; and a thread drawing on the host's clock would touch the
+ * game at a different moment on every machine. So in a co-op session the
+ * game is never let start it (loading_screen_start, sub_00156D80, returns
+ * before it writes anything): the stops find it stopped and return, and a
+ * loading screen holds still on every machine alike.
+ */
+static void fp_loading_screen_start(void (*gen)(void))
+{
+    if (recomp_lockstep_active()) {
+        g_esp += 4;                        /* ret */
+        return;
+    }
+    gen();
+}
+
+/* -- TimeSplitters: Future Perfect: where this release's functions are ---- */
+
+/*
+ * Everything above the co-op hooks is Recompose's template
+ * (templates/new-game), the runtime glue every title has. Future Perfect's
+ * hooks go between, the same in every release; where they attach is in
+ * fp/config/<region>/overrides.inc, as TimeSplitters 2 does it
+ * (src/recomp_manual.c). The
  * lifter reads this file as text and does not follow the #include, so
  * fp/scripts/build.py hands it this file and the release's overrides.inc as
  * one. Which release fp/src/recomp/gen was lifted from is in
