@@ -274,3 +274,23 @@ is not known yet.
 Diagnostics added for this (recompose `hle_d3d8_interp.c`): `RECOMP_INTERP_DRAWS=<tick>` lists every
 draw of that frame and how it was paired; `RECOMP_INTERP_SKIP=<a>-<b>` and `RECOMP_INTERP_ONLY=<a>-<b>`
 leave draws out of the in-between frames, or keep only those.
+
+## The sound on Windows (25 November 2026)
+
+Josh: the music and every sound effect wrong from the start, on the PC only (the Mac was fine), and a
+loud sound every couple of seconds; still so with interpolation and the crosshair off.
+
+The game's sound was right: the menu music as the game hands it to the output is the disc's own track
+decoded (an independent Xbox ADPCM decode matches it), byte for byte the same on Vulkan and on D3D11.
+What went wrong was after it, in XAudio2 (Windows' output; the Mac uses SDL and the toolkit's own
+reverb). With `RECOMP_AUDIO_METER=1` the mix went to infinity a few seconds into most runs: 4 of 5
+title-screen runs on Vulkan (Josh had just switched to it), the Siberia replay on D3D11 too. The source
+was XAudio2's reverb, which Recompose made at start-up and kept silent until a game describes a room.
+TS2 never does (the only room it gives is -10000, none), yet the silent reverb still blew up, with
+every send into it at 0 as well, and with valid parameters given it as well. Through its volume of 0
+(infinity times 0) it made the whole mix NaN. With it gone every run was clean (10 of 10).
+
+Fix (recompose `audio_output_xaudio2.cpp`): the reverb is made only when a game first describes a room,
+and what already plays is sent to it then; for TS2 it is never made. Checked with the meter: the title
+on Vulkan 6 of 6 runs at -13 dBFS, Siberia on both renderers and the arcade finite throughout. The
+loudest moments left are the game's own gunfire, a few dB over full scale, which the limiter takes.
