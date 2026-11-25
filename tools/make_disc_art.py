@@ -17,7 +17,8 @@ copy of the game it ran from are deleted afterwards (both are game content); not
 the player's -- settings, saves -- is read or written.
 
 --title fp, TimeSplitters: Future Perfect (fp/scripts/build.py first): down the story path
-to 2401's canyon, about four minutes; logo.png is the front end's own logo texture (DXT3,
+to 2401's canyon under lockstep, timed by frame so every machine picks the same frames,
+about five minutes; logo.png is the front end's own logo texture (DXT3,
 1024x512, clear around the letters) and glow.png a soft halo made from its outline;
 backdrop.jpg the ship over the planet, card_metal.jpg the cockpit, card_vulkan.jpg the
 canyon. The art folder's default is .../art/45410066.
@@ -48,20 +49,26 @@ TS2_SEQ = ('12000:start,16000:start,20000:start,24000:start,28000:a,34000:a,4000
 TITLES = {
     'ts2': dict(
         title_id='4553000A', exe='timeslip', build=os.path.join(HERE, 'build', 'Release'),
-        game=os.path.join(HERE, 'game'), seq=TS2_SEQ, pad=False, seconds=170,
+        game=os.path.join(HERE, 'game'), seq=TS2_SEQ, pad=False, lockstep_end=0, seconds=170,
         capture=('600', '300', '28'), logo='ts2',
         pictures=[('backdrop', 3900, 5700),       # the dam: the level's opening shot, snow-bright
                   ('card_metal', 3500, 3700),     # the hub, its portal open
                   ('card_vulkan', 6900, 8400)]),  # outside, at the base
     'fp': dict(
         title_id='45410066', exe='timeslip_fp', build=os.path.join(HERE, 'fp', 'build', 'Release'),
-        game=os.path.join(HERE, 'fp', 'game'), pad=True, seconds=225,
-        # 1 PLAYER, a new profile, its name, the hard disk, Story, 2401, Normal, the briefing
-        seq='20000:a,26000:a,32000:a,38000:a,44000:a,50000:a,56000:a,62000:a',
-        capture=('600', '300', '32'), logo='fp',   # 600: the title logo screen, the logo's texture
-        pictures=[('backdrop', 5550, 5850),       # the ship over the planet
-                  ('card_metal', 5250, 5550),     # the cockpit
-                  ('card_vulkan', 9150, 10500)]),  # the canyon, 2401's first ground
+        game=os.path.join(HERE, 'fp', 'game'), pad=False, seconds=330,
+        # Under lockstep, timed by frame, so every machine reaches each scene at the same
+        # swap (a load presents nothing then; free-running, the PC's loading screen
+        # presents at 60 while it loads and the Mac's did not, ~1,650 swaps apart by the
+        # canyon). 1 PLAYER, a new profile, its name, the hard disk, Story, 2401, Normal,
+        # the briefing; the run ends itself at tick 13,000, in the canyon.
+        seq='t1231:a:200,t1591:a:200,t1951:a:200,t2311:a:200,t2671:a:200,t3031:a:200,'
+            't3391:a:200,t3750:a:200',
+        lockstep_end=13000,
+        capture=('600', '300', '42'), logo='fp',   # 600: the title logo screen, the logo's texture
+        pictures=[('backdrop', 7650, 7950),       # the ship over the planet
+                  ('card_metal', 7050, 7350),     # the cockpit
+                  ('card_vulkan', 11550, 13000)]),  # the canyon, 2401's first ground
 }
 
 
@@ -197,10 +204,14 @@ def main():
                    RECOMP_D3D8_CAPTURE=os.path.join(work, 'caps', 'a.d3dcap'),
                    RECOMP_D3D8_CAPTURE_SWAP=t['capture'][0], RECOMP_D3D8_CAPTURE_EVERY=t['capture'][1],
                    RECOMP_D3D8_CAPTURE_MAX=t['capture'][2])
+        for k in ('RECOMP_LOCKSTEP_REPLAY', 'RECOMP_LOCKSTEP', 'RECOMP_LOCKSTEP_TRACE', 'RECOMP_LOCKSTEP_END',
+                  'RECOMP_INPUT_FAKE', 'RECOMP_MOUSE_FAKE', 'RECOMP_INPUT_SEQ_PAD', 'RECOMP_INPUT_SEQ_P2'):
+            env.pop(k, None)
         if t['pad']:
             env['RECOMP_INPUT_SEQ_PAD'] = '1'
-        for k in ('RECOMP_LOCKSTEP_REPLAY', 'RECOMP_LOCKSTEP', 'RECOMP_INPUT_FAKE', 'RECOMP_MOUSE_FAKE'):
-            env.pop(k, None)
+        if t['lockstep_end']:
+            env['RECOMP_LOCKSTEP'] = '1'
+            env['RECOMP_LOCKSTEP_END'] = str(t['lockstep_end'])
         print('== playing down the scripted path (about %d minutes)' % round(t['seconds'] / 60), flush=True)
         log = open(os.path.join(work, 'game.log'), 'wb')
         proc = subprocess.Popen([game_exe], cwd=a.build, env=env, stdout=log, stderr=log)
