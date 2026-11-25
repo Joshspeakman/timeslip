@@ -25,10 +25,19 @@ in this folder.
   in the middle; the title defaults to 4:3 until that is understood.
 - **Installs** on Windows and the Mac, with its own icon from the disc and
   the launcher's Updates tile (see "Building").
-- Not yet: the keyboard and mouse checked against the game's own controls,
-  native mouse look, the field of view, the crosshair, each co-op player's
-  whole screen; the launcher's three pictures land on the same scenes on
-  every machine only once the art run is timed by frame.
+- **Keyboard and mouse** laid out over the game's own Default control layout
+  (Settings > Controls): W A S D, the mouse to look (turned over for the
+  game's default Inverse Look), left button fire, right button aim, G
+  grenade, R reload, V melee, F/E/Space activate, C/Ctrl crouch, the wheel
+  and Q change weapon, the middle button or Z toggle the weapon's mode (zoom
+  in while aiming), X change grenades (zoom out). All of it in
+  `src/title_defaults.c`; any of it rebound in the launcher.
+- **The launcher's art** from your disc (`tools/make_disc_art.py --title
+  fp`): the logo, the ship over the planet, the cockpit, the canyon, the same
+  frames on Windows and the Mac (the run is timed by frame under lockstep).
+- Not yet: native mouse look (the mouse moves the right stick; TimeSplitters
+  2 turns its camera directly), the field of view, the crosshair, the number
+  keys, each co-op player's whole screen.
 
 A scripted path to the first level (fresh saves, a game copy without UDATA):
 
