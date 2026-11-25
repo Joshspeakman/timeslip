@@ -94,6 +94,12 @@ add_custom_target(ts2_build_id
     BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/ts2_build_id.h
     COMMENT "Naming the build by its commits")
 add_dependencies(${PROJECT_NAME} ts2_build_id)
+# main.c depends on the header itself, not only on its target running first:
+# without this a build after a commit rewrote the header but kept the main.c
+# compiled with the old name, and a host refused a joiner of the same commit
+# (Future Perfect, 26 Nov 2026).
+set_source_files_properties(src/main.c PROPERTIES
+    OBJECT_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/ts2_build_id.h)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
