@@ -6,7 +6,8 @@
  * Settings are remembered here and handed to the game as the toolkit's environment variables, which win over its
  * settings file (README: "Running a build of your own"): RECOMP_D3D8_BACKEND, RECOMP_RES_SCALE, RECOMP_WIDESCREEN,
  * RECOMP_ANISO, RECOMP_FPS_CAP, RECOMP_FRAME_INTERP, RECOMP_FPS_OVERLAY, RECOMP_FULLSCREEN, and for Keyboard & Mouse
- * a bindings file (RECOMP_INPUT_CONFIG) with mouse look (RECOMP_MOUSE_LOOK, RECOMP_MOUSE_SENSITIVITY).
+ * a bindings file (RECOMP_INPUT_CONFIG) with mouse look (RECOMP_MOUSE_LOOK, RECOMP_MOUSE_SENSITIVITY) and the
+ * crosshair (RECOMP_CROSSHAIR).
  *
  * Art: <data>/art (or a copy in the app's Resources/art), made from the player's own disc by mac/make_art.sh: the
  * title screen's logo textures and frames the game drew. Nothing from the game is in this repository; without the
@@ -479,7 +480,7 @@ static NSString *const kbm_json =
 
 @interface Launcher : NSObject <NSApplicationDelegate>
 @property (strong) NSWindow *window; @property (strong) TSLaunchView *view;
-@property (strong) TSRow *display, *resolution, *widescreen, *filtering, *framerate, *soften, *interp, *fps, *scheme, *mouse, *saves, *updates, *controls;
+@property (strong) TSRow *display, *resolution, *widescreen, *filtering, *framerate, *soften, *interp, *fps, *scheme, *mouse, *crosshair, *saves, *updates, *controls;
 @property NSString *dataPath;
 @end
 
@@ -489,7 +490,7 @@ static NSString *const kbm_json =
 {
     NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
     [d registerDefaults:@{@"renderer": @"vulkan", @"fullscreen": @NO, @"scale": @2, @"widescreen": @YES, @"aniso": @8, @"cap": @"adaptive",
-                          @"interp": @0, @"soften": @"sharp", @"fps": @NO, @"scheme": @"kbm", @"mouse": @80}];
+                          @"interp": @0, @"soften": @"sharp", @"fps": @NO, @"scheme": @"kbm", @"mouse": @80, @"crosshair": @YES}];
     NSDictionary *infoPlist = NSBundle.mainBundle.infoDictionary;
     self.dataPath = [(infoPlist[@"TS2DataPath"] ?: @"~/Games/TimeSplitters2Native") stringByExpandingTildeInPath];
     if (getenv("TS2_DATA_PATH")) self.dataPath = @(getenv("TS2_DATA_PATH"));   /* development: another game folder (a test copy) */
@@ -539,14 +540,17 @@ static NSString *const kbm_json =
     NSMutableArray *ms = [NSMutableArray array];
     for (NSNumber *m in @[@40, @60, @80, @100]) [ms addObject:@{@"value": m, @"label": m.intValue == 80 ? @"80 (default)" : m.stringValue, @"note": @"How far the view turns for the mouse's travel"}];
     self.mouse = row(@"Mouse Speed", ms, @([d integerForKey:@"mouse"]), 2);
+    self.crosshair = row(@"Crosshair", @[@{@"value": @YES, @"label": @"Always", @"note": @"With the mouse, the aiming crosshair stays in the middle of the screen"},
+                                         @{@"value": @NO, @"label": @"While Aiming", @"note": @"Only while aiming, as the game drew it; online, both players need the same"}],
+                         @([d boolForKey:@"crosshair"]), 0);
     __weak Launcher *wl = self;
     TSRow *move = info(@"Move · Look", ^{ return wl.kbm ? @"W A S D  ·  Mouse" : @"Left Stick  ·  Right Stick"; }, nil);
     TSRow *fire = info(@"Fire · Secondary", ^{ return wl.kbm ? @"Left Click  ·  Right Click" : @"Right Trigger  ·  Left Trigger"; }, nil);
     TSRow *abxy = info(@"A · B · X · Y", ^{ return wl.kbm ? @"Space  ·  C  ·  R  ·  F" : @"Pad  (keyboard: Z · X · A · S)"; }, nil);
     TSRow *wb = info(@"White · Black · Sticks", ^{ return wl.kbm ? @"Q  ·  E  ·  Shift / V" : @"Shoulders  ·  Stick Clicks"; }, nil);
     TSRow *menus = info(@"Start · Back · Menus", ^{ return wl.kbm ? @"Return  ·  Tab  ·  Arrows" : @"Start  ·  Back  ·  D-Pad"; }, nil);
-    TSPanel *cp = [TSPanel new]; cp.title = @"CONTROLS"; cp.rows = @[self.scheme, self.mouse, move, fire, abxy, wb, menus];
-    cp.footnote = @"In the game: F9 frame rate · F10 frame cap · F11 screenshot · Alt-Return full screen";
+    TSPanel *cp = [TSPanel new]; cp.title = @"CONTROLS"; cp.rows = @[self.scheme, self.mouse, self.crosshair, move, fire, abxy, wb, menus];
+    cp.footnote = @"In the game: 1-9 weapons · wheel zooms while aiming · F9 frame rate · F10 cap · F11 screenshot · Alt-Return full screen";
     v.panels = @[gp, cp];
 
     TSRow *gfx = [TSRow new]; gfx.title = @"Graphics Options"; gfx.wide = YES;
@@ -643,6 +647,7 @@ static NSString *const kbm_json =
     [d setBool:[self.fps.value boolValue] forKey:@"fps"];
     [d setObject:self.scheme.value forKey:@"scheme"];
     [d setInteger:[self.mouse.value integerValue] forKey:@"mouse"];
+    [d setBool:[self.crosshair.value boolValue] forKey:@"crosshair"];
     [d synchronize];
 }
 - (void)play
@@ -670,8 +675,9 @@ static NSString *const kbm_json =
         setenv("RECOMP_INPUT_CONFIG", path.fileSystemRepresentation, 1);
         setenv("RECOMP_MOUSE_LOOK", "1", 1);
         setenv("RECOMP_MOUSE_SENSITIVITY", [[self.mouse.value stringValue] UTF8String], 1);
+        setenv("RECOMP_CROSSHAIR", [self.crosshair.value boolValue] ? "1" : "0", 1);
     } else {
-        unsetenv("RECOMP_INPUT_CONFIG"); unsetenv("RECOMP_MOUSE_LOOK"); unsetenv("RECOMP_MOUSE_SENSITIVITY");   /* the player's own bindings */
+        unsetenv("RECOMP_INPUT_CONFIG"); unsetenv("RECOMP_MOUSE_LOOK"); unsetenv("RECOMP_MOUSE_SENSITIVITY"); unsetenv("RECOMP_CROSSHAIR");   /* the player's own bindings */
     }
     [self.window orderOut:nil];
     NSString *exe = [NSBundle.mainBundle.executablePath.stringByDeletingLastPathComponent stringByAppendingPathComponent:@"timeslip"];
