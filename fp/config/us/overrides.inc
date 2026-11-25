@@ -115,6 +115,15 @@ void sub_0025D520(void) { fp_look_step(sub_0025D520_gen, &k_fp_look); }
 extern void sub_000CB3B0_gen(void);
 void sub_000CB3B0(void) { fp_base_fov(sub_000CB3B0_gen, 0x004785CCu); }
 
+/* player_reset is sub_000CC720(player, mode) and player_place sub_000CBD10
+ * (player, ...): each has base_fov's test inlined (fp_player_fov) and writes
+ * the player's camera angle itself -- +0x384..+0x390 in reset (55 when mode
+ * is 0, else 55 or 45 as base_fov would), +0x388 in place (55 or 45). */
+extern void sub_000CC720_gen(void);
+void sub_000CC720(void) { fp_player_fov(sub_000CC720_gen, 0x384u, 4u); }
+extern void sub_000CBD10_gen(void);
+void sub_000CBD10(void) { fp_player_fov(sub_000CBD10_gen, 0x388u, 1u); }
+
 /* weapon_change is sub_001BF140 (fp_weapon_change), called from the player's
  * weapon update sub_001C4400 (0x001C4593) each frame the player may change
  * weapon: for the player whose look state [0x007B0C7C] points at, it reads

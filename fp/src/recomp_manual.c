@@ -23,6 +23,7 @@
 #include <stddef.h>   /* ptrdiff_t: not in stdlib.h off MSVC */
 #include <stdlib.h>   /* getenv, exit: the spin verdict below */
 #include <string.h>   /* strcmp: RECOMP_ICALL_FATAL */
+#include <math.h>     /* tan, atan: the field of view */
 
 /* One diagnostic report, one piece.
  *
@@ -696,18 +697,83 @@ static void fp_look_step(void (*gen)(void), const FpLook *l)
  */
 extern int hle_fov(void);
 
+/* The game's two angles: 55 (its field of view) and 45 (the one it gives a
+ * player with +0x254 == 0 and +0x258 == 1, which every player in split
+ * screen is: Arcade with two or more, story co-op). */
+#define FP_FOV_BASE_VA  0x004785CCu
+#define FP_FOV_OTHER_VA 0x00478900u
+
+static float fp_fov_const(uint32_t va)
+{
+    return *(volatile float *)((uintptr_t)va + g_xbox_mem_offset);
+}
+
+/* An angle the game chose, as the chosen field of view makes it: 55
+ * becomes the chosen angle, 45 widens by as much (tan(new/2) = tan(45/2) *
+ * tan(fov/2) / tan(55/2)), anything else -- a scope's zoom, a cutscene's --
+ * is left as it is. */
+static float fp_fov_widen(float angle)
+{
+    int fov = hle_fov();
+    float base = fp_fov_const(FP_FOV_BASE_VA), other = fp_fov_const(FP_FOV_OTHER_VA);
+    double r;
+
+    if (fov <= 0 || (float)fov == base || !(base > 0.0f))
+        return angle;
+    if (angle == base)
+        return (float)fov;
+    if (angle != other)
+        return angle;
+    r = tan((double)fov * 3.14159265358979 / 360.0) / tan((double)base * 3.14159265358979 / 360.0);
+    return (float)(2.0 * atan(tan((double)other * 3.14159265358979 / 360.0) * r) * 180.0 / 3.14159265358979);
+}
+
+/* How much wider a camera at `angle` is than the game's own: tan(fov/2) /
+ * tan(55/2) when it is one of the widened angles above, else 1. For the
+ * first-person view model, which should stay the size the game drew it. */
+float fp_fov_view_k(float angle)
+{
+    int fov = hle_fov();
+    float base = fp_fov_const(FP_FOV_BASE_VA), other = fp_fov_const(FP_FOV_OTHER_VA);
+
+    if (fov <= 0 || (float)fov == base || !(base > 0.0f) ||
+        (angle != fp_fov_widen(base) && angle != fp_fov_widen(other)))
+        return 1.0f;
+    return (float)(tan((double)fov * 3.14159265358979 / 360.0) /
+                   tan((double)base * 3.14159265358979 / 360.0));
+}
+
 static void fp_base_fov(void (*gen)(void), uint32_t base_va)
 {
-    int fov;
-    float base;
+    (void)base_va;
+    gen();
+    g_fp_stack[g_fp_top & 7u] = (double)fp_fov_widen((float)g_fp_stack[g_fp_top & 7u]);
+}
+
+/*
+ * The player's camera angle is a field, player+0x388 (with +0x384, +0x38C
+ * and +0x390 beside it, the angles it eases between), that the camera reads
+ * every frame. base_fov is only one of its writers (camera_fov, sub_00259DF0,
+ * when the player's view mode changes). Two copies of base_fov's own test
+ * are inlined where a player is set up, and write 55 or 45 there directly:
+ * player_reset (sub_000CC720(player, mode), all four) at every spawn, and
+ * player_place (sub_000CBD10(player, ...), +0x388). Without these the chosen
+ * field of view took hold only at the player's first view change, and in
+ * split screen not at all. Each is followed by the same widening, on the
+ * fields it wrote, of the player its first argument names.
+ */
+static void fp_player_fov(void (*gen)(void), uint32_t first, uint32_t count)
+{
+    uint32_t pl = *(volatile uint32_t *)((uintptr_t)g_esp + 4u + g_xbox_mem_offset);
+    uint32_t i;
 
     gen();
-    fov = hle_fov();
-    if (fov <= 0)
+    if (!pl || hle_fov() <= 0)
         return;
-    base = *(volatile float *)((uintptr_t)base_va + g_xbox_mem_offset);
-    if ((float)g_fp_stack[g_fp_top & 7u] == base)
-        g_fp_stack[g_fp_top & 7u] = (double)fov;
+    for (i = 0; i < count; i++) {
+        volatile float *a = (volatile float *)((uintptr_t)pl + first + 4u * i + g_xbox_mem_offset);
+        *a = fp_fov_widen(*a);
+    }
 }
 
 /*
