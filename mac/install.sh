@@ -1,10 +1,14 @@
 #!/bin/bash
-# Builds "TimeSplitters 2.app" from this checkout's build (scripts/build.py first) and installs it.
+# Builds a game of the Timeslip collection as an app from this checkout's build and installs it:
+# "TimeSplitters 2.app" (scripts/build.py first), or with --title fp "TimeSplitters Future Perfect.app"
+# (fp/scripts/build.py first).
 #
-#   mac/install.sh [--app <path.app>] [--data <dir>]
-#     --app   where the app goes (default /Applications/TimeSplitters 2.app)
+#   mac/install.sh [--title ts2|fp] [--app <path.app>] [--data <dir>]
+#     --title which game (default ts2)
+#     --app   where the app goes (default /Applications/<the game's name>.app)
 #     --data  the game's folder: <data>/game holds the disc's files, <data>/art the launcher's art
-#             (default ~/Games/TimeSplitters2Native; mac/make_art.sh makes the art)
+#             (default ~/Games/TimeSplitters2Native, or ~/Games/TimeSplittersFPNative; mac/make_art.sh makes
+#             TimeSplitters 2's art)
 #
 # The app: Contents/MacOS/"TimeSplitters 2" is the launcher (mac/ts2_launcher.m), which starts the recompiled game
 # (Contents/MacOS/timeslip, bundled by recompose/scripts/make_macos_app.py --metal-only: DXC, which the Metal renderer
@@ -12,43 +16,53 @@
 # mac/update.sh from this checkout. It contains the game's recompiled code: for this Mac only, never distribute it.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd)
-APP="/Applications/TimeSplitters 2.app"
-DATA="$HOME/Games/TimeSplitters2Native"
+TITLE=ts2 APP="" DATA=""
 while [ $# -gt 0 ]; do
     case "$1" in
+    --title) TITLE=$2; shift 2 ;;
     --app) APP=$2; shift 2 ;;
     --data) DATA=$2; shift 2 ;;
-    *) echo "usage: mac/install.sh [--app <path.app>] [--data <dir>]" >&2; exit 2 ;;
+    *) echo "usage: mac/install.sh [--title ts2|fp] [--app <path.app>] [--data <dir>]" >&2; exit 2 ;;
     esac
 done
-BUNDLE_ID=io.github.joshspeakman.timesplitters2
-SDK=${VULKAN_SDK:-$HOME/VulkanSDK/1.4.357.1/macOS}
-BIN=$HERE/build/Release/timeslip
 die() { echo "install: $*" >&2; exit 1; }
+case "$TITLE" in
+ts2) NAME="TimeSplitters 2"; BUNDLE_ID=io.github.joshspeakman.timesplitters2; EXE=timeslip
+     BIN=$HERE/build/Release/timeslip; BUILD_CMD=scripts/build.py; DEF_DATA="$HOME/Games/TimeSplitters2Native" ;;
+fp)  NAME="TimeSplitters Future Perfect"; BUNDLE_ID=io.github.joshspeakman.timesplitters-fp; EXE=timeslip_fp
+     BIN=$HERE/fp/build/Release/timeslip_fp; BUILD_CMD=fp/scripts/build.py; DEF_DATA="$HOME/Games/TimeSplittersFPNative" ;;
+*)   die "--title is ts2 or fp, not $TITLE" ;;
+esac
+APP=${APP:-/Applications/$NAME.app}
+DATA=${DATA:-$DEF_DATA}
+SDK=${VULKAN_SDK:-$HOME/VulkanSDK/1.4.357.1/macOS}
 
-[ -x "$BIN" ] || die "no build: run scripts/build.py first"
+[ -x "$BIN" ] || die "no build: run $BUILD_CMD first"
 [ -f "$DATA/game/default.xbe" ] || echo "install: note: no game in $DATA/game yet; the launcher will say so" >&2
 pgrep -f "$APP/Contents/MacOS/" >/dev/null && die "$APP is running; quit it first"
 if [ -e "$APP" ]; then   # replace only this app, never something else at that path
     old=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist" 2>/dev/null || true)
     case "$old" in
-    "$BUNDLE_ID"|org.xboxrecomp.split2_recomp) ;;
+    "$BUNDLE_ID") ;;
+    org.xboxrecomp.split2_recomp) [ "$TITLE" = ts2 ] || die "$APP is TimeSplitters 2's; not replacing it" ;;
     *) die "$APP exists and is not this app (bundle id '${old:-none}'); not replacing it" ;;
     esac
 fi
 
 STAGE=$(mktemp -d "${TMPDIR:-/tmp}/ts2app.XXXXXX")
 trap 'rm -rf "${STAGE:?}"' EXIT
-A="$STAGE/TimeSplitters 2.app"
+A="$STAGE/$NAME.app"
 PY=python3; [ -x "$HOME/.venvs/recomp/bin/python" ] && PY=$HOME/.venvs/recomp/bin/python
 
 echo "== the game"
-VULKAN_SDK=$SDK "$PY" "$HERE/recompose/scripts/make_macos_app.py" "$BIN" --name "TimeSplitters 2" --out "$STAGE" \
+VULKAN_SDK=$SDK "$PY" "$HERE/recompose/scripts/make_macos_app.py" "$BIN" --name "$NAME" --out "$STAGE" \
     --bundle-id "$BUNDLE_ID" --metal-only --no-sign >/dev/null
 
 echo "== the launcher"
-clang -O2 -fobjc-arc -Wall -Wno-unused-parameter -framework Cocoa -o "$A/Contents/MacOS/TimeSplitters 2" "$HERE/mac/ts2_launcher.m"
-printf '#!/bin/bash\nexec /bin/bash %q "$@"\n' "$HERE/mac/update.sh" > "$A/Contents/MacOS/update"
+clang -O2 -fobjc-arc -Wall -Wno-unused-parameter -framework Cocoa -o "$A/Contents/MacOS/$NAME" "$HERE/mac/ts2_launcher.m"
+# the updater rebuilds this game, from this data folder (mac/update.sh)
+printf '#!/bin/bash\nTIMESLIP_TITLE=%q TIMESLIP_DATA=%q exec /bin/bash %q "$@"\n' "$TITLE" "$DATA" "$HERE/mac/update.sh" \
+    > "$A/Contents/MacOS/update"
 chmod +x "$A/Contents/MacOS/update"
 
 echo "== the icon"
@@ -82,9 +96,9 @@ echo "== the art"
 mkdir -p "$A/Contents/Resources/art"
 if [ -d "$DATA/art" ]; then cp "$DATA"/art/* "$A/Contents/Resources/art/"; else echo "install: note: no art yet (mac/make_art.sh)" >&2; fi
 PB=/usr/libexec/PlistBuddy; P="$A/Contents/Info.plist"
-$PB -c "Set :CFBundleExecutable TimeSplitters 2" "$P"
+$PB -c "Set :CFBundleExecutable $NAME" "$P"
 $PB -c "Add :CFBundleIconFile string AppIcon" "$P" 2>/dev/null || $PB -c "Set :CFBundleIconFile AppIcon" "$P"
-for kv in "TS2DataPath:$DATA" "TS2Branch:$(git -C "$HERE" rev-parse --abbrev-ref HEAD)" "TS2Built:$(git -C "$HERE" rev-parse HEAD)"; do
+for kv in "TS2DataPath:$DATA" "TS2DisplayName:$NAME" "TS2Exe:$EXE" "TS2Branch:$(git -C "$HERE" rev-parse --abbrev-ref HEAD)" "TS2Built:$(git -C "$HERE" rev-parse HEAD)"; do
     $PB -c "Add :${kv%%:*} string ${kv#*:}" "$P" 2>/dev/null || $PB -c "Set :${kv%%:*} ${kv#*:}" "$P"
 done
 

@@ -56,6 +56,7 @@ enum { W = 960, H = 660 };
 @property NSArray<TSRow *> *tiles; @property NSArray<TSPanel *> *panels;
 @property NSInteger card, hover, pressed, focus, open, rowFocus;   /* focus: -1 the cards, else a tile; open: a panel, or -1 */
 @property NSImage *backdrop, *logo, *glow; @property NSArray<NSImage *> *shots; @property NSString *hint;
+@property NSString *titleText, *place;   /* the game's name without its logo art; where the backdrop is */
 @property (copy) void (^onPlay)(void); @property (copy) void (^onQuit)(void); @property (copy) void (^onChange)(void);
 @end
 
@@ -332,11 +333,15 @@ static NSRect fit_rect(NSImage *img, NSRect r)
         [NSGraphicsContext saveGraphicsState]; [halo set];
         [self.logo drawInRect:lr fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1 respectFlipped:YES hints:@{NSImageHintInterpolation: @(NSImageInterpolationHigh)}];
         [NSGraphicsContext restoreGraphicsState];
-    } else draw_text(@"TIMESPLITTERS 2", heavy(60), text_c(), NSMakeRect(0, 62, W, 80), NSTextAlignmentCenter, sh, 8);
+    } else {                                                            /* no logo art yet: the name in type, made to fit */
+        NSString *name = self.titleText.uppercaseString; CGFloat pt = 60;
+        while (pt > 24 && [name sizeWithAttributes:@{NSFontAttributeName: heavy(pt), NSKernAttributeName: @8}].width > W - 80) pt -= 2;
+        draw_text(name, heavy(pt), text_c(), NSMakeRect(0, 62 + (60 - pt) * 0.6, W, 80), NSTextAlignmentCenter, sh, 8);
+    }
     draw_text(@"TIMESLIP", heavy(22), text_c(), NSMakeRect(0, 150, W, 30), NSTextAlignmentCenter, sh, 14);
     draw_text(@"NATIVE FOR APPLE SILICON  ·  RECOMPILED FROM YOUR XBOX DISC", heading(11.5), accent(), NSMakeRect(0, 184, W, 18), NSTextAlignmentCenter, sh, 4);
     draw_text(@"RENDERER", heading(10.5), dim(), NSMakeRect(60, 226, 400, 16), NSTextAlignmentLeft, sh, 3.5);
-    draw_text(@"1990 · SIBERIA · OBLASK DAM", heading(10.5), dim(), NSMakeRect(W - 460, 226, 400, 16), NSTextAlignmentRight, sh, 3.5);
+    draw_text(self.place.uppercaseString, heading(10.5), dim(), NSMakeRect(W - 460, 226, 400, 16), NSTextAlignmentRight, sh, 3.5);
     [self drawCard:0 shadow:sh];
     NSInteger hov = self.hover, foc = self.focus; if (self.open >= 0) self.hover = self.focus = HIT_NONE;   /* under a panel: nothing lit */
     for (NSInteger k = 0; k < (NSInteger)self.tiles.count; k++) [self drawTile:k shadow:sh];
@@ -478,7 +483,7 @@ static NSString *const kbm_json =
 @interface Launcher : NSObject <NSApplicationDelegate>
 @property (strong) NSWindow *window; @property (strong) TSLaunchView *view;
 @property (strong) TSRow *display, *resolution, *widescreen, *filtering, *framerate, *soften, *interp, *fps, *scheme, *mouse, *crosshair, *saves, *updates, *controls;
-@property NSString *dataPath;
+@property NSString *dataPath, *gameName, *gameExe;
 @end
 
 @implementation Launcher
@@ -490,6 +495,10 @@ static NSString *const kbm_json =
                           @"interp": @0, @"soften": @"sharp", @"fps": @NO, @"scheme": @"kbm", @"mouse": @80, @"crosshair": @YES}];
     NSDictionary *infoPlist = NSBundle.mainBundle.infoDictionary;
     self.dataPath = [(infoPlist[@"TS2DataPath"] ?: @"~/Games/TimeSplitters2Native") stringByExpandingTildeInPath];
+    /* Which game of the collection this app is (mac/install.sh --title): its name, the recompiled game's executable
+     * beside the launcher, and the place its backdrop shows. TimeSplitters 2's when the app does not say. */
+    self.gameName = infoPlist[@"TS2DisplayName"] ?: @"TimeSplitters 2";
+    self.gameExe = infoPlist[@"TS2Exe"] ?: @"timeslip";
     if (getenv("TS2_DATA_PATH")) self.dataPath = @(getenv("TS2_DATA_PATH"));   /* development: another game folder (a test copy) */
     NSArray *artDirs = @[[self.dataPath stringByAppendingPathComponent:@"art"], [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"art"] ?: @""];
 
@@ -501,6 +510,8 @@ static NSString *const kbm_json =
     NSImage *none = [NSImage new];
     v.shots = @[image_at(artDirs, @"card_metal.jpg") ?: none];
     v.hint = @"↑/↓ settings · ←/→ change · Return plays · Esc quits";
+    v.titleText = self.gameName;
+    v.place = infoPlist[@"TS2Place"] ?: (infoPlist[@"TS2DisplayName"] ? @"" : @"1990 · Siberia · Oblask Dam");
 
     /* Graphics Options */
     self.display = row(@"Display", @[@{@"value": @NO, @"label": @"Window", @"note": @"A window on the desktop; Alt-Return switches in the game"},
@@ -586,7 +597,7 @@ static NSString *const kbm_json =
     NSWindow *w = [[NSWindow alloc] initWithContentRect:v.frame styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskFullSizeContentView
                                                 backing:NSBackingStoreBuffered defer:NO];
     w.releasedWhenClosed = NO; w.titlebarAppearsTransparent = YES; w.titleVisibility = NSWindowTitleHidden; w.movableByWindowBackground = YES;
-    w.title = @"TimeSplitters 2"; w.backgroundColor = NSColor.blackColor; w.contentView = v;
+    w.title = self.gameName; w.backgroundColor = NSColor.blackColor; w.contentView = v;
     self.window = w; [w center]; [w makeKeyAndOrderFront:nil]; [w makeFirstResponder:v];
     [NSApp activateIgnoringOtherApps:YES];
 }
@@ -681,7 +692,7 @@ static NSString *const kbm_json =
         unsetenv("RECOMP_INPUT_CONFIG"); unsetenv("RECOMP_MOUSE_LOOK"); unsetenv("RECOMP_MOUSE_SENSITIVITY"); unsetenv("RECOMP_CROSSHAIR");   /* the player's own bindings */
     }
     [self.window orderOut:nil];
-    NSString *exe = [NSBundle.mainBundle.executablePath.stringByDeletingLastPathComponent stringByAppendingPathComponent:@"timeslip"];
+    NSString *exe = [NSBundle.mainBundle.executablePath.stringByDeletingLastPathComponent stringByAppendingPathComponent:self.gameExe];
     char *const av[] = {(char *)exe.fileSystemRepresentation, NULL};
     execv(av[0], av);
     NSAlert *a = [NSAlert new]; a.messageText = @"The game did not start"; a.informativeText = exe; [a runModal];

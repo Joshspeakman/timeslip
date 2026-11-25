@@ -17,6 +17,8 @@
 # checkout's. A checkout already past the release stays where it is: nothing ever moves back or detaches.
 #
 # The update's "== " lines are the phases the launcher shows; the other lines are its detail.
+# Which game the update rebuilds: TIMESLIP_TITLE (ts2, the default, or fp) and its data folder TIMESLIP_DATA, both
+# set by the app's Contents/MacOS/update (mac/install.sh).
 # For testing: TIMESLIP_UPDATE_RELEASES=<file> reads that JSON instead of GitHub's releases list (and the release
 # tags are the checkout's own), and TIMESLIP_UPDATE_INSTALLED=<commit> stands for the installed build.
 set -uo pipefail
@@ -112,9 +114,15 @@ git_ submodule update --init recompose || stop "could not update the recompose s
 
 echo "== Recompiling the game from your disc"
 PY=python3; [ -x "$HOME/.venvs/recomp/bin/python" ] && PY=$HOME/.venvs/recomp/bin/python
-VULKAN_SDK=${VULKAN_SDK:-$HOME/VulkanSDK/1.4.357.1/macOS} "$PY" scripts/build.py --relift || stop "the build stopped"
+TITLE=${TIMESLIP_TITLE:-ts2}
+case "$TITLE" in
+ts2) build=(scripts/build.py --relift) ;;
+fp)  build=(fp/scripts/build.py --relift ${TIMESLIP_DATA:+--game "$TIMESLIP_DATA/game"}) ;;
+*)   stop "no game called $TITLE" ;;
+esac
+VULKAN_SDK=${VULKAN_SDK:-$HOME/VulkanSDK/1.4.357.1/macOS} "$PY" "${build[@]}" || stop "the build stopped"
 
 echo "== Installing"
-"$HERE/mac/install.sh" || stop "the install stopped"
+"$HERE/mac/install.sh" --title "$TITLE" ${TIMESLIP_DATA:+--data "$TIMESLIP_DATA"} || stop "the install stopped"
 echo "== Updated to $tag"
 exit 0
