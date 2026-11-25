@@ -34,13 +34,20 @@ in this folder.
   grenade, R reload, V melee, F/E/Space activate, C/Ctrl crouch, the wheel
   and Q change weapon, the middle button or Z toggle the weapon's mode (zoom
   in while aiming), X change grenades (zoom out). All of it in
-  `src/title_defaults.c`; any of it rebound in the launcher.
+  `src/title_defaults.c`; any of it rebound in the launcher. With the mouse,
+  turn **Auto Lookahead** off in the game's own Settings > Controls: it
+  levels the view as you walk, so a look up or down with the mouse is pulled
+  back to the horizon within a second of moving (tried in 2401). Native mouse
+  look, below, is the real answer.
 - **The launcher's art** from your disc (`tools/make_disc_art.py --title
   fp`): the logo, the ship over the planet, the cockpit, the canyon, the same
   frames on Windows and the Mac (the run is timed by frame under lockstep).
-- Not yet: native mouse look (the mouse moves the right stick; TimeSplitters
-  2 turns its camera directly), the field of view, the crosshair, the number
-  keys, each co-op player's whole screen.
+- Not yet: native mouse look (the mouse moves the right stick, which the
+  game's Auto Lookahead and turn acceleration act on; TimeSplitters 2 turns
+  its camera directly, and that also changes what online co-op sends, so its
+  recordings are made again with it), the field of view, the number keys,
+  each co-op player's whole screen. The game has its own crosshair options
+  (Settings > Controls > Crosshair).
 - **Clears of some colour channels** as the console does them
   (`xbox_D3D8SetClearChannels(1)` in `src/main.c`; recompose
   `d3d8_xbox.h`, `RECOMP_CLEAR_CHANNELS=0/1` to override): the Audio/Video
