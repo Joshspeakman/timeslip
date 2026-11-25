@@ -23,3 +23,6 @@ private/
 
 # Future Perfect's disc, the same way (fp/README).
 /fp/game
+# ...and its lifted code (fp/scripts/build.py writes gen/ and fp_region.h): game code, never committed.
+# "src/recomp/" above is anchored to the root, so it does not reach this one.
+/fp/src/recomp/
