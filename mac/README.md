@@ -9,6 +9,8 @@
   frame interpolation, FPS counter.
 - **Controls**: Keyboard & Mouse (WASD, mouse look, fire and secondary fire on the mouse buttons; a controller still
   works beside it) or Controller (the toolkit's own mapping), with a key guide.
+- **Play Together**: System Link (host or join) and online co-op (host or join, for a game whose build has it), the
+  host's address, whether to open the router (UPnP) when hosting, and this Mac's own address to give the other player.
 - **Saves**, **Updates**: the newest GitHub release (pre-releases included), fetched and rebuilt from your copy
   (`mac/update.sh`; `tools/update_windows.ps1` is the Windows one, with the same rules).
 

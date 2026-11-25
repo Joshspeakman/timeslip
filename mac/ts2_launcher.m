@@ -20,6 +20,10 @@
  * presses Play at once. */
 #import <Cocoa/Cocoa.h>
 #include <unistd.h>
+#include <ifaddrs.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <net/if.h>
 
 static NSColor *accent(void) { return [NSColor colorWithSRGBRed:0.47 green:0.70 blue:1.00 alpha:1]; }       /* the logo's blue 2 */
 static NSColor *accent_dim(void) { return [NSColor colorWithSRGBRed:0.22 green:0.35 blue:0.62 alpha:1]; }
@@ -81,7 +85,7 @@ enum { W = 960, H = 660 };
 - (NSRect)rowRect:(NSInteger)k { NSRect p = self.panelRect; return NSMakeRect(p.origin.x + 30, p.origin.y + 72 + self.rowPitch * k, p.size.width - 60, 50); }
 - (NSRect)rowArrow:(NSInteger)k right:(BOOL)right { NSRect r = [self rowRect:k]; return NSMakeRect(right ? NSMaxX(r) - 34 : NSMaxX(r) - 330, r.origin.y + 3, 30, 30); }
 - (NSRect)rowValue:(NSInteger)k { NSRect r = [self rowRect:k]; return NSMakeRect(NSMaxX(r) - 300, r.origin.y + 4, 262, 28); }
-- (BOOL)rowCycles:(NSInteger)k { return self.rows[k].choices.count > 1; }
+- (BOOL)rowCycles:(NSInteger)k { return self.rows[k].choices.count > 1 || self.rows[k].activate != nil; }   /* cycles, or runs something */
 - (void)openPanel:(NSInteger)i { self.open = i; self.rowFocus = 0; self.hover = HIT_NONE; self.needsDisplay = YES; }
 - (void)closePanel { self.open = -1; self.hover = HIT_NONE; self.needsDisplay = YES; }
 - (NSInteger)hit:(NSPoint)p
@@ -142,7 +146,9 @@ enum { W = 960, H = 660 };
 }
 - (void)stepRow:(NSInteger)k by:(NSInteger)dir
 {
-    TSRow *t = self.rows[k]; NSInteger n = (NSInteger)t.choices.count; if (n < 2) return;
+    TSRow *t = self.rows[k]; NSInteger n = (NSInteger)t.choices.count;
+    if (t.activate) { t.activate(); self.needsDisplay = YES; return; }       /* e.g. typing the host's address */
+    if (n < 2) return;
     t.index = (t.index + dir + n) % n;
     self.needsDisplay = YES; if (self.onChange) self.onChange();
 }
@@ -269,7 +275,9 @@ static NSRect fit_rect(NSImage *img, NSRect r)
     if (foc) brackets(NSInsetRect(r, -4, -4), 8, 2, accent());
     draw_text(t.title.uppercaseString, heading(10.5), (hot || foc) ? accent() : dim(), NSMakeRect(r.origin.x, r.origin.y + 11, r.size.width, 16), NSTextAlignmentCenter, nil, 3);
     NSColor *vc = special ? accent() : self.hover == HIT_TILE + 10 * k + 1 ? NSColor.whiteColor : text_c();
-    draw_text(t.summary ? t.summary() : c[@"label"], body(15, YES), vc, NSMakeRect(r.origin.x + 17, r.origin.y + 34, r.size.width - 34, 24), NSTextAlignmentCenter, sh, 0.2);
+    NSString *val = t.summary ? t.summary() : c[@"label"]; CGFloat pt = 15;      /* made to fit a narrow tile */
+    while (pt > 12 && [val sizeWithAttributes:@{NSFontAttributeName: body(pt, YES)}].width > r.size.width - 34) pt -= 0.5;
+    draw_text(val, body(pt, YES), vc, NSMakeRect(r.origin.x + 17, r.origin.y + 34 + (15 - pt) / 2, r.size.width - 34, 24), NSTextAlignmentCenter, sh, 0.2);
     if (!t.activate && t.choices.count > 1) {
         [self drawArrow:[self arrow:k right:NO] right:NO lit:self.hover == HIT_TILE + 10 * k];
         [self drawArrow:[self arrow:k right:YES] right:YES lit:self.hover == HIT_TILE + 10 * k + 2];
@@ -292,7 +300,7 @@ static NSRect fit_rect(NSImage *img, NSRect r)
         if (foc || hot) { [[accent() colorWithAlphaComponent:foc ? 0.12 : 0.07] setFill]; fill_over(NSInsetRect(r, -10, -2));
                           if (foc) { [accent() setFill]; NSRectFill(NSMakeRect(r.origin.x - 10, r.origin.y - 2, 3, r.size.height + 4)); } }
         draw_text(t.title.uppercaseString, heading(15), foc || hot ? accent() : cycles ? text_c() : dim(), NSMakeRect(r.origin.x + 6, r.origin.y + 8, 300, 24), NSTextAlignmentLeft, sh, 3);
-        if (cycles) {
+        if (cycles && t.choices.count > 1) {                                  /* a row that runs something has no arrows */
             [self drawArrow:[self rowArrow:k right:NO] right:NO lit:self.hover == HIT_ROW + 10 * k];
             [self drawArrow:[self rowArrow:k right:YES] right:YES lit:self.hover == HIT_ROW + 10 * k + 2];
         }
@@ -459,6 +467,20 @@ static TSRow *row(NSString *title, NSArray<NSDictionary *> *choices, id current,
 {
     TSRow *r = [TSRow new]; r.title = title; r.choices = choices; r.index = index_of(choices, current, dflt); return r;
 }
+/* This Mac on its network: the first IPv4 address of an interface that is up, not loopback (en0 first). */
+static NSString *lan_address(void)
+{
+    struct ifaddrs *list = NULL, *i; NSString *best = nil;
+    if (getifaddrs(&list) != 0) return @"Not on a network";
+    for (i = list; i; i = i->ifa_next) {
+        if (!i->ifa_addr || i->ifa_addr->sa_family != AF_INET || !(i->ifa_flags & IFF_UP) || (i->ifa_flags & IFF_LOOPBACK)) continue;
+        char buf[INET_ADDRSTRLEN]; inet_ntop(AF_INET, &((struct sockaddr_in *)i->ifa_addr)->sin_addr, buf, sizeof buf);
+        if (!best || !strcmp(i->ifa_name, "en0")) best = @(buf);
+        if (!strcmp(i->ifa_name, "en0")) break;
+    }
+    freeifaddrs(list);
+    return best ?: @"Not on a network";
+}
 static TSRow *info(NSString *title, NSString *(^value)(void), NSString *note)
 {
     TSRow *r = [TSRow new]; r.title = title; r.choices = @[@{@"value": @"", @"label": @"", @"note": note ?: @""}]; r.summary = value; return r;
@@ -482,8 +504,8 @@ static NSString *const kbm_json =
 
 @interface Launcher : NSObject <NSApplicationDelegate>
 @property (strong) NSWindow *window; @property (strong) TSLaunchView *view;
-@property (strong) TSRow *display, *resolution, *widescreen, *filtering, *framerate, *soften, *interp, *fps, *scheme, *mouse, *crosshair, *saves, *updates, *controls;
-@property NSString *dataPath, *gameName, *gameExe;
+@property (strong) TSRow *display, *resolution, *widescreen, *filtering, *framerate, *soften, *interp, *fps, *scheme, *mouse, *crosshair, *link, *router, *saves, *updates, *controls;
+@property NSString *dataPath, *gameName, *gameExe, *peerAddr;
 @end
 
 @implementation Launcher
@@ -492,7 +514,7 @@ static NSString *const kbm_json =
 {
     NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
     [d registerDefaults:@{@"fullscreen": @NO, @"scale": @2, @"widescreen": @YES, @"aniso": @8, @"cap": @"adaptive",
-                          @"interp": @0, @"soften": @"sharp", @"fps": @NO, @"scheme": @"kbm", @"mouse": @80, @"crosshair": @YES}];
+                          @"interp": @0, @"soften": @"sharp", @"fps": @NO, @"scheme": @"kbm", @"mouse": @80, @"crosshair": @YES, @"link": @"off", @"peer": @"", @"upnp": @NO}];
     NSDictionary *infoPlist = NSBundle.mainBundle.infoDictionary;
     self.dataPath = [(infoPlist[@"TS2DataPath"] ?: @"~/Games/TimeSplitters2Native") stringByExpandingTildeInPath];
     /* Which game of the collection this app is (mac/install.sh --title): its name, the recompiled game's executable
@@ -559,7 +581,27 @@ static NSString *const kbm_json =
     TSRow *menus = info(@"Start · Back · Menus", ^{ return wl.kbm ? @"Return  ·  Tab  ·  Arrows" : @"Start  ·  Back  ·  D-Pad"; }, nil);
     TSPanel *cp = [TSPanel new]; cp.title = @"CONTROLS"; cp.rows = @[self.scheme, self.mouse, self.crosshair, move, fire, abxy, wb, menus];
     cp.footnote = @"In the game: 1-9 weapons · wheel zooms while aiming · F9 frame rate · F10 cap · F11 screenshot · Alt-Return full screen";
-    v.panels = @[gp, cp];
+    /* Play Together: System Link (the game's own LAN play, over the network or the internet) and, for a game whose
+     * build has it, online co-op (each machine runs the whole game and sends only its controller). The game reads
+     * RECOMP_SYSLINK / RECOMP_SYSLINK_HOST / RECOMP_SYSLINK_UPNP and RECOMP_LOCKSTEP_NET / RECOMP_LOCKSTEP_PEER. */
+    self.link = row(@"Mode", @[@{@"value": @"off", @"label": @"Off", @"note": @"Play on this Mac alone"},
+                               @{@"value": @"host", @"label": @"System Link: Host", @"short": @"Link Host", @"note": @"Others join this Mac's System Link game (UDP 27610)"},
+                               @{@"value": @"join", @"label": @"System Link: Join", @"short": @"Link Join", @"note": @"Join the System Link game at the host's address below"},
+                               @{@"value": @"coop-host", @"label": @"Co-op: Host", @"short": @"Co-op Host", @"note": @"Story co-op online: this Mac plays controller 1, the other machine joins (UDP 27620)"},
+                               @{@"value": @"coop-join", @"label": @"Co-op: Join", @"short": @"Co-op Join", @"note": @"Story co-op online: join the host below as controller 2"}],
+                    [d stringForKey:@"link"], 0);
+    self.peerAddr = [d stringForKey:@"peer"] ?: @"";
+    TSRow *peer = [TSRow new]; peer.title = @"Host's Address";
+    peer.choices = @[@{@"value": @"", @"label": @"", @"note": @"When joining: the hosting machine's address, with :port if not the usual one"}];
+    peer.summary = ^NSString * { return wl.peerAddr.length ? wl.peerAddr : @"Click to Type It"; };
+    peer.activate = ^{ [wl askPeer]; };
+    self.router = row(@"Router", @[@{@"value": @NO, @"label": @"Leave It", @"note": @"Hosting on your own network: nothing to open"},
+                                   @{@"value": @YES, @"label": @"Open the Port (UPnP)", @"short": @"UPnP", @"note": @"Hosting for friends on the internet: the router is asked to forward the port"}],
+                      @([d boolForKey:@"upnp"]), 0);
+    TSRow *me = info(@"This Mac", ^{ return lan_address(); }, @"When hosting, the other player joins this address");
+    TSPanel *np = [TSPanel new]; np.title = @"PLAY TOGETHER"; np.rows = @[self.link, peer, self.router, me];
+    np.footnote = @"Both machines need this same version. The first time you host, macOS asks to allow incoming connections.";
+    v.panels = @[gp, cp, np];
 
     TSRow *gfx = [TSRow new]; gfx.title = @"Graphics Options"; gfx.wide = YES;
     gfx.choices = @[@{@"value": @"", @"label": @"", @"note": @"Display, resolution, widescreen, filtering, post-processing, frame rate, interpolation"}];
@@ -573,13 +615,19 @@ static NSString *const kbm_json =
     self.controls.choices = @[@{@"value": @"", @"label": @"", @"note": @"Keyboard & Mouse or a controller, and which key does what"}];
     self.controls.summary = ^NSString * { return wl.kbm ? @"Keys & Mouse" : @"Controller"; };
     self.controls.activate = ^{ [wv openPanel:1]; };
-    NSString *saves = [self.dataPath stringByAppendingPathComponent:@"game/UDATA/4553000a"];
+    TSRow *net = [TSRow new]; net.title = @"Play Together";
+    net.choices = @[@{@"value": @"", @"label": @"", @"note": @"System Link and online co-op with another Mac or PC"}];
+    net.summary = ^NSString * { NSDictionary *c = wl.link.choices[wl.link.index]; return c[@"short"] ?: c[@"label"]; };
+    net.activate = ^{ [wv openPanel:2]; };
+    /* the game's own save folder: UDATA/<its title id> */
+    NSString *tid = [(infoPlist[@"TS2TitleID"] ?: @"4553000A") lowercaseString];
+    NSString *saves = [self.dataPath stringByAppendingPathComponent:[@"game/UDATA" stringByAppendingPathComponent:tid]];
     self.saves = [TSRow new]; self.saves.title = @"Saves";
     self.saves.choices = @[@{@"value": @"", @"label": @"Open", @"note": [@"Your profiles and story progress: " stringByAppendingString:[saves stringByAbbreviatingWithTildeInPath]]}];
     self.saves.activate = ^{ [[NSFileManager defaultManager] createDirectoryAtPath:saves withIntermediateDirectories:YES attributes:nil error:nil];
                              [[NSWorkspace sharedWorkspace] openURL:[NSURL fileURLWithPath:saves isDirectory:YES]]; };
     [self setupUpdates];
-    v.tiles = @[gfx, self.controls, self.saves, self.updates];
+    v.tiles = @[gfx, self.controls, net, self.saves, self.updates];
     __weak Launcher *ws = self;
     v.onPlay = ^{ [ws play]; };
     v.onQuit = ^{ [NSApp terminate:nil]; };
@@ -660,11 +708,30 @@ static NSString *const kbm_json =
     [d setObject:self.scheme.value forKey:@"scheme"];
     [d setInteger:[self.mouse.value integerValue] forKey:@"mouse"];
     [d setBool:[self.crosshair.value boolValue] forKey:@"crosshair"];
+    [d setObject:self.link.value forKey:@"link"];
+    [d setObject:self.peerAddr ?: @"" forKey:@"peer"];
+    [d setBool:[self.router.value boolValue] forKey:@"upnp"];
     [d synchronize];
+}
+- (void)askPeer
+{
+    NSAlert *a = [NSAlert new]; a.messageText = @"The host's address";
+    a.informativeText = @"The address of the machine that is hosting (its launcher shows it under This Mac), with :port if it is not the usual one.";
+    NSTextField *f = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 260, 24)]; f.stringValue = self.peerAddr ?: @""; f.placeholderString = @"192.168.1.20";
+    a.accessoryView = f; [a addButtonWithTitle:@"OK"]; [a addButtonWithTitle:@"Cancel"];
+    [a.window setInitialFirstResponder:f];
+    if ([a runModal] != NSAlertFirstButtonReturn) return;
+    self.peerAddr = [f.stringValue stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    [self save]; self.view.needsDisplay = YES;
 }
 - (void)play
 {
     [self save];
+    NSString *mode = self.link.value;
+    if (([mode isEqual:@"join"] || [mode isEqual:@"coop-join"]) && !self.peerAddr.length) {
+        [self.view openPanel:2]; [self askPeer];
+        if (!self.peerAddr.length) return;
+    }
     NSString *game = [self.dataPath stringByAppendingPathComponent:@"game"];
     if (![[NSFileManager defaultManager] fileExistsAtPath:[game stringByAppendingPathComponent:@"default.xbe"]]) {
         NSAlert *a = [NSAlert new]; a.messageText = @"The game files are missing";
@@ -681,6 +748,13 @@ static NSString *const kbm_json =
     setenv("RECOMP_FPS_CAP", [self.framerate.value UTF8String], 1);
     setenv("RECOMP_FRAME_INTERP", [[self.interp.value stringValue] UTF8String], 1);
     setenv("RECOMP_FPS_OVERLAY", [self.fps.value boolValue] ? "1" : "0", 1);
+    /* Play Together: the launcher decides, so a setting left in the settings file does not */
+    BOOL coop = [mode hasPrefix:@"coop-"], hosts = [mode hasSuffix:@"host"], joins = [mode hasSuffix:@"join"];
+    setenv("RECOMP_SYSLINK", coop || [mode isEqual:@"off"] ? "off" : mode.UTF8String, 1);
+    setenv("RECOMP_LOCKSTEP_NET", coop ? (hosts ? "host" : "join") : "off", 1);
+    setenv("RECOMP_SYSLINK_UPNP", hosts && [self.router.value boolValue] ? "1" : "0", 1);
+    unsetenv("RECOMP_SYSLINK_HOST"); unsetenv("RECOMP_LOCKSTEP_PEER");
+    if (joins) setenv(coop ? "RECOMP_LOCKSTEP_PEER" : "RECOMP_SYSLINK_HOST", self.peerAddr.UTF8String, 1);
     if (self.kbm) {
         NSString *path = [self.dataPath stringByAppendingPathComponent:@"keyboard_mouse.json"];
         [kbm_json writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];

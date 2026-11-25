@@ -27,9 +27,9 @@ while [ $# -gt 0 ]; do
 done
 die() { echo "install: $*" >&2; exit 1; }
 case "$TITLE" in
-ts2) NAME="TimeSplitters 2"; BUNDLE_ID=io.github.joshspeakman.timesplitters2; EXE=timeslip
+ts2) NAME="TimeSplitters 2"; BUNDLE_ID=io.github.joshspeakman.timesplitters2; EXE=timeslip; TITLE_ID=4553000A
      BIN=$HERE/build/Release/timeslip; BUILD_CMD=scripts/build.py; DEF_DATA="$HOME/Games/TimeSplitters2Native" ;;
-fp)  NAME="TimeSplitters Future Perfect"; BUNDLE_ID=io.github.joshspeakman.timesplitters-fp; EXE=timeslip_fp
+fp)  NAME="TimeSplitters Future Perfect"; BUNDLE_ID=io.github.joshspeakman.timesplitters-fp; EXE=timeslip_fp; TITLE_ID=45410066
      BIN=$HERE/fp/build/Release/timeslip_fp; BUILD_CMD=fp/scripts/build.py; DEF_DATA="$HOME/Games/TimeSplittersFPNative" ;;
 *)   die "--title is ts2 or fp, not $TITLE" ;;
 esac
@@ -98,7 +98,7 @@ if [ -d "$DATA/art" ]; then cp "$DATA"/art/* "$A/Contents/Resources/art/"; else 
 PB=/usr/libexec/PlistBuddy; P="$A/Contents/Info.plist"
 $PB -c "Set :CFBundleExecutable $NAME" "$P"
 $PB -c "Add :CFBundleIconFile string AppIcon" "$P" 2>/dev/null || $PB -c "Set :CFBundleIconFile AppIcon" "$P"
-for kv in "TS2DataPath:$DATA" "TS2DisplayName:$NAME" "TS2Exe:$EXE" "TS2Branch:$(git -C "$HERE" rev-parse --abbrev-ref HEAD)" "TS2Built:$(git -C "$HERE" rev-parse HEAD)"; do
+for kv in "TS2DataPath:$DATA" "TS2DisplayName:$NAME" "TS2Exe:$EXE" "TS2TitleID:$TITLE_ID" "TS2Branch:$(git -C "$HERE" rev-parse --abbrev-ref HEAD)" "TS2Built:$(git -C "$HERE" rev-parse HEAD)"; do
     $PB -c "Add :${kv%%:*} string ${kv#*:}" "$P" 2>/dev/null || $PB -c "Set :${kv%%:*} ${kv#*:}" "$P"
 done
 
