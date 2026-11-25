@@ -536,6 +536,7 @@ static void fp_memdump(uint32_t tick)
 }
 
 static void fp_coop_frame_start(void);     /* online co-op's views, below */
+static void fp_weapon_keys_frame(void);    /* the number keys, below */
 
 static void fp_frame_clock(void (*gen)(void), const FpStateRegion *state)
 {
@@ -554,6 +555,7 @@ static void fp_frame_clock(void (*gen)(void), const FpStateRegion *state)
         fp_memdump(recomp_lockstep_tick());
     }
     fp_coop_frame_start();
+    fp_weapon_keys_frame();
     gen();
 }
 
@@ -898,6 +900,137 @@ static void fp_viewport_rect(void (*gen)(void), const FpViews *fv)
         }
     }
     gen();
+}
+
+/*
+ * The number keys (as TimeSplitters 2's ts2_weapon_keys): 1 to 9 take the
+ * player's first, second, ... weapon, in the order the d-pad steps through
+ * them. Future Perfect keeps a player's weapon as a slot (weapons +0x94)
+ * in its slot table, and several slots are one weapon -- the pistol, its
+ * other mode and a pair are three slots of one category (+0x38) -- so a key
+ * counts categories, as the d-pad does: the d-pad's next weapon (USA
+ * sub_001BAAF0) walks the weapon order for the first slot of another
+ * category that the category picks (sub_001BAA70: the one last held in it,
+ * if it still can be) and the player can hold now (sub_001BA410(weapons,
+ * slot, 1): has it, has ammo, the mode allows it). This asks the same two
+ * of the game, so a key lands on the slot the d-pad would, and a weapon the
+ * player has not got, or that is out of ammo, is not counted. The key of
+ * the weapon already held does nothing.
+ *
+ * It runs where the d-pad is read (weapon_change, sub_001BF140, each frame
+ * the player may change weapon), before it, and changes the weapon as the
+ * d-pad's next weapon does: the change's sound, select (sub_001BA130, which
+ * also keeps the slot as the category's last held), the HUD's weapon panel.
+ * The key is the controller's for the frame, as recompose latches it
+ * (recomp_input_number_key), so online every machine changes alike. A key
+ * pressed while no player can change weapon (a menu, a cutscene) is let go
+ * at the next frame, not kept for the next match.
+ */
+extern int recomp_input_number_key(unsigned port);
+
+typedef struct FpWeaponKeys {
+    uint32_t look_ptr;            /* the look state being updated, a pointer */
+    uint32_t char_off, weapons_off; /* look state -> character -> weapons */
+    uint32_t port_map, port_direct; /* as FpLook's */
+    uint32_t humans;              /* the number of human players */
+    uint32_t order, order_count;  /* the weapon order: slots, as the d-pad steps */
+    uint32_t humans_from;         /* the first entry a human's next weapon takes */
+    uint32_t table, stride, category_off; /* the slots */
+    uint32_t slot_off;            /* weapons: the slot held */
+    uint32_t player_off;          /* weapons: the player's number */
+    void (*pick)(void);           /* (weapons, slot): its category gives it */
+    void (*usable)(void);         /* (weapons, slot, 1): can be held now */
+    void (*select)(void);         /* (weapons, slot) */
+    void (*cue)(void);            /* (0x3E, player, 1.0f): the change's sound */
+    void (*shown)(void);          /* (): the HUD's weapon panel */
+} FpWeaponKeys;
+
+static volatile int g_fp_weapon_keys_ran;   /* weapon_change ran this frame */
+
+/* Call a lifted cdecl function: the arguments, then a return address for
+ * its ret to pop (none), as the lifted call sites push them. */
+static uint32_t fp_call(void (*fn)(void), int n, const uint32_t *arg)
+{
+    int i;
+
+    for (i = n - 1; i >= 0; i--) {
+        g_esp -= 4;
+        FP_M32(g_esp) = arg[i];
+    }
+    g_esp -= 4;
+    FP_M32(g_esp) = 0;
+    fn();
+    g_esp += 4u * (uint32_t)n;            /* the callee popped the return */
+    return g_eax;
+}
+
+static void fp_weapon_key(const FpWeaponKeys *k, uint32_t weapons, uint32_t player, int n)
+{
+    uint32_t held = FP_M32(weapons + k->slot_off), held_cat, i, count = 0;
+    uint8_t seen[256];
+
+    if (held >= 256u)
+        return;
+    held_cat = FP_M32(k->table + held * k->stride + k->category_off);
+    memset(seen, 0, sizeof seen);
+    for (i = k->humans_from; i < k->order_count; i++) {
+        uint32_t slot = FP_M32(k->order + 4u * i), cat, a[3];
+
+        if (slot >= 256u)
+            continue;
+        cat = FP_M32(k->table + slot * k->stride + k->category_off);
+        if (cat >= 256u || seen[cat])
+            continue;
+        if (cat == held_cat) {
+            seen[cat] = 1;
+            if (++count == (uint32_t)n)
+                return;                   /* already held */
+            continue;
+        }
+        a[0] = weapons;
+        a[1] = slot;
+        a[2] = 1u;
+        if (!fp_call(k->pick, 2, a) || !fp_call(k->usable, 3, a))
+            continue;
+        seen[cat] = 1;
+        if (++count == (uint32_t)n) {
+            uint32_t cue[3] = { 0x3Eu, player, 0x3F800000u };   /* 1.0f */
+
+            fp_call(k->cue, 3, cue);
+            fp_call(k->select, 2, a);
+            fp_call(k->shown, 0, NULL);
+            return;
+        }
+    }
+}
+
+static void fp_weapon_change(void (*gen)(void), const FpWeaponKeys *k)
+{
+    uint32_t look = FP_M32(k->look_ptr), chr, weapons, id, port, player;
+    int n;
+
+    g_fp_weapon_keys_ran = 1;
+    if (look >= 0x10000u && look < 0x84000000u && !(look & 3u)) {
+        chr = FP_M32(look + k->char_off);
+        weapons = chr >= 0x10000u && chr < 0x84000000u ? FP_M32(chr + k->weapons_off) : 0u;
+        id = FP_M32(look);
+        port = FP_M32(k->port_direct) ? id : (id < 16u ? FP_M32(k->port_map + 4u * id) : 4u);
+        if (weapons >= 0x10000u && weapons < 0x84000000u && port < 4u &&
+            (player = FP_M32(weapons + k->player_off)) < FP_M32(k->humans) &&
+            (n = recomp_input_number_key(port)) > 0)
+            fp_weapon_key(k, weapons, player, n);
+    }
+    gen();
+}
+
+/* Once a frame (fp_frame_clock): a number key no player took last frame is
+ * let go. Off the keyboard only; online the key is the latched one, given
+ * once a tick, and nothing is kept. */
+static void fp_weapon_keys_frame(void)
+{
+    if (!recomp_lockstep_active() && !g_fp_weapon_keys_ran)
+        (void)recomp_input_number_key(0);
+    g_fp_weapon_keys_ran = 0;
 }
 
 /* -- TimeSplitters: Future Perfect: where this release's functions are ---- */

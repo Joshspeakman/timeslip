@@ -25,6 +25,8 @@
  *                      while aiming, zoom out     Down
  *   D-pad left/right   Change weapon              the mouse wheel, Q, Left/Right
  *   Start              Pause (objectives)         Enter, Tab
+ *   (none)             A weapon by its place      1 to 9 (src/recomp_manual.c,
+ *                                                 fp_weapon_change)
  *
  * The mouse turns the player directly, as an angle (native mouse look,
  * src/recomp_manual.c, fp_look_step, as TimeSplitters 2's): the game's own

@@ -115,6 +115,31 @@ void sub_0025D520(void) { fp_look_step(sub_0025D520_gen, &k_fp_look); }
 extern void sub_000CB3B0_gen(void);
 void sub_000CB3B0(void) { fp_base_fov(sub_000CB3B0_gen, 0x004785CCu); }
 
+/* weapon_change is sub_001BF140 (fp_weapon_change), called from the player's
+ * weapon update sub_001C4400 (0x001C4593) each frame the player may change
+ * weapon: for the player whose look state [0x007B0C7C] points at, it reads
+ * the d-pad (the masks at +0x3C/+0x38, next and last weapon; +0x44/+0x40,
+ * the weapon's next and last mode) and changes the player's weapons (look
+ * state +0x14 -> character, +0x7C -> weapons; the player's number at +8,
+ * the slot held at +0x94). Next weapon (0x001BF164): the sound
+ * sub_00238510(0x3E, player, 1.0f), select sub_001BA130(weapons,
+ * sub_001BAAF0(weapons, 1, 1)), the HUD's panel sub_00142820(). The order
+ * the d-pad steps through is the 70 slots at 0x004FC888, from the second
+ * for a human (sub_001BAAF0's wrap: [weapons +8] < [0x00790950], the human
+ * players); a slot is 0x3C bytes in the table at 0x004FA128, its category
+ * at +0x38. Found by watching the slot through d-pad changes in an Arcade
+ * match (pistols 10, fists 1: their slots; pistols, the other mode and a
+ * pair are slots 8, 9, 10, all category 4). */
+extern void sub_001BAA70(void), sub_001BA410(void), sub_001BA130(void);
+extern void sub_00238510(void), sub_00142820(void);
+static const FpWeaponKeys k_fp_weapon_keys = {
+    0x007B0C7Cu, 0x14u, 0x7Cu, 0x006B93C0u, 0x0076B0FCu, 0x00790950u,
+    0x004FC888u, 70u, 1u, 0x004FA128u, 0x3Cu, 0x38u, 0x94u, 8u,
+    sub_001BAA70, sub_001BA410, sub_001BA130, sub_00238510, sub_00142820
+};
+extern void sub_001BF140_gen(void);
+void sub_001BF140(void) { fp_weapon_change(sub_001BF140_gen, &k_fp_weapon_keys); }
+
 /* loading_screen_start is sub_00156D80 (fp_loading_screen_start), called
  * from the game loop sub_0003D440 at 0x0003D56A: unless the screen is one
  * that has none, it clears the "stopped" flag at 0x004E7A94 (1 in the XBE)

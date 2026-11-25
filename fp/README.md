@@ -63,10 +63,21 @@ in this folder.
 - **The launcher's art** from your disc (`tools/make_disc_art.py --title
   fp`): the logo, the ship over the planet, the cockpit, the canyon, the same
   frames on Windows and the Mac (the run is timed by frame under lockstep).
-- Not yet: the number keys (the held weapon is the character's weapon state's
-  +0x20, written from a wanted weapon at +0x9D0 by the character update
-  sub_002998E0; what is owned is still to be found). The game has its own
-  crosshair options (Settings > Controls > Crosshair).
+- **The number keys** 1 to 9 take your first, second, ... weapon, in the
+  order the d-pad steps through them (fists, then the pistols, then what you
+  pick up), as TimeSplitters 2's do. A weapon is counted once however many
+  of its slots you hold (the pistol, its other mode and a pair are three
+  slots of one weapon), one you have not got or cannot hold now is not
+  counted, and the key of the weapon in hand does nothing. The game is asked
+  as its own d-pad asks it (`fp_weapon_change` on `sub_001BF140`, the
+  d-pad's weapon change: `sub_001BAA70` and `sub_001BA410` for each slot of
+  the order at 0x004FC888, then the change itself, `sub_001BA130`), so a key
+  lands where the d-pad would, with its sound and the HUD's weapon panel;
+  online the key is latched with the controller. Tried in an Arcade match
+  under lockstep: 1 fists, 2 the pair of pistols, 3 nothing (no third
+  weapon); and with two more weapons given for the test, 3 and 4 took them
+  and 4 again did nothing. The game has its own crosshair options
+  (Settings > Controls > Crosshair).
 - **Field of view**: the launcher's and the Esc menu's FOV setting replaces
   the game's 55 degrees (vertical) where the game asks for it
   (`sub_000CB3B0`), so what is drawn and what is culled widen together; 0,
