@@ -28,7 +28,13 @@ in this folder.
   one before's -- bots and the player's body as shards, walls dark, the
   radar's map and the hands missing. Compared with xemu (the same disc and
   BIOS), an Arcade match's spawn now matches it almost exactly. Its sun and
-  lens flare show at a raised resolution too (recompose 1ac4a42).
+  lens flare show at a raised resolution too (recompose 1ac4a42), and its
+  muzzle flashes are soft clouds of fire rather than stacks of fog-coloured
+  squares (recompose 0a52b3a: with fog off the combiners' FOG reads zero).
+  Five Arcade maps looked at in play (Vietnam, the Hotel, Venice, the jungle
+  temple, the nightclub): whole characters, effects and lighting as xemu
+  shows them; TimeSplitters 2's Arcade recording renders to the same pixels
+  before and after.
 - **Widescreen**, the game's own 16:9 mode (Widescreen in the launcher's
   Graphics or the Esc menu's Display): its camera, front end, cutscenes and
   HUD laid out for 16:9 by the game itself, on the console's widescreen flag.
