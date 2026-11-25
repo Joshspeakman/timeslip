@@ -95,22 +95,24 @@ What it took (`src/recomp_manual.c`, `config/us/overrides.inc`):
   (`sub_00156D80`): it draws while the game loads, spinning on the vblank
   count, which no load moves under lockstep, so the game froze at its first
   load. In co-op a loading screen holds still.
-- The state checked is `.data`, less the vblank count and four GPU fence
-  times the game keeps there: the boot's movies play before the first frame
-  on the host's clock, so about one boot in two makes a frame more or less of
-  fences, and those words differ forever after, though the game only hands
-  them back to Direct3D's waits.
+- The state checked is `.data`, less the vblank count and five GPU fence
+  times the game keeps there. Direct3D's fence time follows the host's
+  timing -- the boot's movies play before the first frame on the host's
+  clock, and Direct3D fences as its push buffer fills, as fast as the host's
+  GPU thread empties it -- so those words differ between machines, though the
+  game only hands them back to Direct3D's waits.
 
-`tests/lockstep/coop-2401-us.trace` is the check: 2 PLAYER, both profiles,
-Story Co-op, 2401 on Normal, then both players walking, turning, strafing and
-firing, 13,770 frames. Measured 25 November 2026 (Windows, Vulkan): three
-copies replaying it at once the same as it at every frame (one of them had
-booted with the fences 4 apart); online between two copies on one PC (1 ms,
-3 frames of delay), host and joiner each the same as the recording at every
-frame and as each other at every 60-frame check, through frame 14,400. On
-the Mac (M1 Pro, arm64, Metal, re-lifted at the same commits) the recording
-replays the same at every frame too. Not yet: online between two machines
-(the PC's firewall and the Mac's ask their owner first).
+`tests/lockstep/` holds the checks (its README): Story Co-op in 2401, and a
+2-player Arcade Deathmatch in Vietnam against six bots with a pause. Measured
+26 November 2026 (Windows, Vulkan): four copies replaying the Arcade one at
+once and three the Story one, each the same as its recording at every frame;
+online between two copies on one PC (1 ms, 3 frames of delay), host and
+joiner each the same as the recording at every frame and as each other at
+every 60-frame check, through frame 14,400, with the Arcade one (and with the
+first Story recording, before the fifth fence word). On the Mac (M1 Pro,
+arm64, Metal, re-lifted at the same commits) the first Story recording
+replayed the same at every frame. Not yet: online between two machines (the
+PC's firewall and the Mac's ask their owner first).
 
 | | |
 | --- | --- |

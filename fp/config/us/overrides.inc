@@ -57,6 +57,16 @@
  * fence"). Found by replaying one recording on several copies at once: in
  * about one replay in two everything else was the same at every frame, and
  * these four words differed by 4 from frame 3 on.
+ *
+ * It is not only the boot: started from one value at the session's first
+ * frame (tried, 26 Nov), two copies' times still came apart by 4 in an
+ * Arcade match, because Direct3D also fences as its push buffer fills and
+ * wraps, which goes as fast as the host's GPU thread empties it. A fence
+ * time is the host's timing, so every word in .data that keeps one is left
+ * out: the four above, and a fifth an Arcade match stamps from its first
+ * fight (0x006654E8's Lock, at 0x006654F0), found the same way with a
+ * recording of two players and six bots. A word still missing here shows
+ * as a report that the machines differ, not as a game that does.
  */
 static const FpStateRegion k_fp_state[] = {
     { 0x004B82C0u, 0x00333594u, ".data" },
@@ -68,6 +78,7 @@ static const FpStateRegion k_fp_state[] = {
     { 0x0056315Cu, 4u, 0 },
     { 0x0054F130u, 4u, 0 },             /* the geometry ring's fences */
     { 0x0054F144u, 4u, 0 },
+    { 0x006654F0u, 4u, 0 },             /* an Arcade resource's Lock */
     { 0, 0, 0 }
 };
 extern void sub_001538C0_gen(void);
