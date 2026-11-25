@@ -126,7 +126,10 @@ def logo_icon(art, size):
     glow = Image.open(art + '/glow.png').convert('RGBA')
     box = logo.getbbox()
     lg = logo.crop(box)
-    w = int(size * 0.90)
+    # Nearly edge to edge: the logo is about 4:1, so at 90% it filled only a
+    # quarter of the height and read thin at the Dock's 128 (the Mac session,
+    # 25 Nov 2026).
+    w = int(size * 0.97)
     h = int(lg.height * w / lg.width)
     k = w / lg.width
     ground = blue_ground(size)
@@ -135,7 +138,7 @@ def logo_icon(art, size):
     ground.alpha_composite(glow.resize((gw, gh), Image.LANCZOS),
                            ((size - gw) // 2, top - int(box[1] * k)))
     ground.alpha_composite(lg.resize((w, h), Image.LANCZOS), ((size - w) // 2, top))
-    return rounded(ground, int(size * 0.18))
+    return rounded(ground, int(size * 0.16))
 
 
 def emblem(img, size):
