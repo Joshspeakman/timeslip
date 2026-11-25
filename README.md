@@ -114,8 +114,9 @@ laid out like a modern PC shooter:
 | Reload | R |
 | Use (activate) | F, E, Space |
 | Crouch | C, left Ctrl |
+| Pick a weapon | 1 to 9: the weapons you carry, in the game's own order |
 | Next / previous weapon | Mouse wheel, Q, left and right arrows |
-| Zoom in / out | Z / X, the mouse's side buttons, up and down arrows |
+| Zoom in / out | With the sniper rifle or another scoped weapon, aiming (right mouse button): the mouse wheel; also Z / X, the mouse's side buttons, up and down arrows |
 | Pause the game, objectives | Enter, Tab |
 | Menus | W A S D or arrows to move, Enter, Space or F to choose, Backspace to go back; or the mouse: the pointer shows in the game's menus, the wheel moves, the left button chooses, the right goes back |
 
@@ -349,6 +350,7 @@ file:
 | Renderer | `renderer` (`auto`, `d3d11`, `vulkan`, `metal`) | `RECOMP_D3D8_BACKEND` |
 | Texture sharpness | `anisotropy` | `RECOMP_ANISO` |
 | Post-processing (the game's soften pass) | `post_soften` (`sharp`, `console`, `off`) | `RECOMP_POST_SOFTEN` |
+| Crosshair always on with the mouse (Esc menu > Mouse) | `crosshair` (1, 0: only while aiming) | `RECOMP_CROSSHAIR` |
 | Frame rate | `frame_cap` (0 for uncapped) | `RECOMP_FPS_CAP` |
 | Show frame rate | `fps_overlay` | `RECOMP_FPS_OVERLAY` |
 | Fullscreen | `fullscreen` | `RECOMP_FULLSCREEN` |

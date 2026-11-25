@@ -37,6 +37,13 @@ void sub_00032D90(void) { ts2_camera_setup(sub_00032D90_gen, 0x00035A16u); }
 extern void sub_000AF8A0_gen(void);
 void sub_000AF8A0(void) { ts2_view_model(sub_000AF8A0_gen); }
 
+/* The HUD's aiming crosshair is sub_000C83B0 (drawn at 0x000C87EC while the
+ * player's aim word +0x884 is set), found by its 2D call site
+ * (RECOMP_TS2_UI_SITES) first drawing the frame aiming began (24 Nov 2026).
+ * Wrapped so a mouse player sees it all the time (ts2_crosshair). */
+extern void sub_000C83B0_gen(void);
+void sub_000C83B0(void) { ts2_crosshair(sub_000C83B0_gen); }
+
 /* build_projection is sub_000E6A00 (PAL 0x000E6E30), wrapped so every
  * projection but the in-game camera's is widened as that one is. 0x00032DF6
  * is camera_setup's call of it, which is widened already. The others, logged

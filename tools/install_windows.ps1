@@ -74,13 +74,24 @@ if (-not $NoArt -and -not (Test-Path (Join-Path $art "backdrop.jpg")) -and -not 
     } else { "No Python here: the launcher writes the game's name until tools\make_disc_art.py is run." }
 }
 
-# Shortcuts, with the launcher's own icon.
+# The icon: the game's own Xbox dashboard picture, from this copy of the game
+# (tools\make_icon.py), or the launcher's own when there is no Python or game.
+$icon = (Join-Path $Dest "timeslip_launcher.exe") + ",0"
+$py = (Get-Command py -ErrorAction SilentlyContinue).Source
+if (-not $py) { $py = (Get-Command python -ErrorAction SilentlyContinue).Source }
+if ($py -and (Test-Path (Join-Path $Game "default.xbe"))) {
+    $ico = Join-Path $Dest "timeslip.ico"
+    & $py (Join-Path $repo "tools\make_icon.py") --game $Game --out $ico 2>&1 | Out-Null
+    if (Test-Path $ico) { $icon = "$ico,0" }
+}
+
+# Shortcuts, with that icon.
 $shell = New-Object -ComObject WScript.Shell
 foreach ($l in $startMenu, $desktop) {
     $s = $shell.CreateShortcut($l)
     $s.TargetPath = Join-Path $Dest "timeslip_launcher.exe"
     $s.WorkingDirectory = $Dest
-    $s.IconLocation = (Join-Path $Dest "timeslip_launcher.exe") + ",0"
+    $s.IconLocation = $icon
     $s.Description = "TimeSplitters 2, recompiled to run natively"
     $s.Save()
 }
@@ -90,7 +101,7 @@ $ver = (git -C $repo rev-parse --short HEAD 2>$null)
 New-Item -Path $uninstKey -Force | Out-Null
 $props = @{
     DisplayName = "Timeslip"; DisplayVersion = "$ver"; Publisher = "Timeslip";
-    InstallLocation = $Dest; DisplayIcon = (Join-Path $Dest "timeslip_launcher.exe");
+    InstallLocation = $Dest; DisplayIcon = ($icon -replace ',0$', '');
     UninstallString = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $Dest 'uninstall.ps1')`" -Uninstall -Dest `"$Dest`"";
     NoModify = 1; NoRepair = 1
 }

@@ -966,6 +966,86 @@ static void ts2_viewport_rect(void (*viewport_rect)(void), uint32_t player_calle
  */
 extern int recomp_input_look(unsigned port, float *dx_deg, float *dy_deg);
 
+/*
+ * A PC shooter's number keys and wheel (recompose input_bindings.h).
+ *
+ * TS2 cycles a player's weapons in one fixed order, measured by handing a
+ * player every weapon and tapping the d-pad through them (USA, 24 Nov 2026):
+ * the ids below, then 0 (bare hands). A number key picks the n-th weapon the
+ * player owns in that order -- 1 the first, as a PC shooter's slots go --
+ * through the game's own switch (the wanted weapon, as when one is picked
+ * up), from the number key as latched for the frame, so online both
+ * machines switch alike. A weapon the game will not take (out of ammo) it
+ * switches back from, as it does for one picked up.
+ *
+ * The wheel: holding a weapon that zooms -- 12 (the sniper rifle), 16 and
+ * 31, measured the same way; the zoom works while aiming, right mouse,
+ * with the d-pad -- it zooms in (away) and out (towards); with any other
+ * it swaps weapons, as the d-pad left and right do.
+ */
+extern int recomp_input_number_key(unsigned port);
+/* recompose XBOX_GAMEPAD, as far as this needs it */
+typedef struct { uint16_t wButtons; uint8_t bAnalogButtons[8]; int16_t sThumb[4]; } Ts2Gamepad;
+extern void recomp_bindings_set_wheel_filter(void (*fn)(int wheel, Ts2Gamepad *pad));
+
+static const uint8_t k_ts2_weapon_order[] = {
+    1, 2, 5, 6, 3, 4, 7, 8, 12, 32, 33, 9, 16, 28, 29, 18, 17, 22, 31, 10,
+    19, 20, 25, 26, 34, 35, 39, 40, 41
+};
+static volatile int g_ts2_p1_held = -1;     /* controller 1's weapon in hand */
+
+static int ts2_weapon_zooms(int id)
+{
+    return id == 12 || id == 16 || id == 31;
+}
+
+static void ts2_wheel_filter(int wheel, Ts2Gamepad *pad)
+{
+    if (!wheel)
+        return;
+    if (ts2_weapon_zooms(g_ts2_p1_held))
+        pad->wButtons |= wheel > 0 ? 0x0001 : 0x0002;   /* d-pad up: in; down: out */
+    else
+        pad->wButtons |= wheel > 0 ? 0x0004 : 0x0008;   /* d-pad left, right: swap */
+}
+
+/* The player's weapons (char+0x124), or 0. */
+static uint32_t ts2_player_weapons(uint32_t ctx)
+{
+    uint32_t chr = TS2_MEM32_EARLY(ctx + 0x1BC), pw;
+
+    if (chr < 0x80000000u || chr >= 0x84000000u)
+        return 0;
+    pw = TS2_MEM32_EARLY(chr + 0x124);
+    return pw >= 0x80000000u && pw < 0x84000000u ? pw : 0;
+}
+
+static uint32_t g_ts2_p1_ctx;               /* controller 1's player context */
+
+static void ts2_weapon_keys(uint32_t ctx, uint32_t port)
+{
+    uint32_t pw = ts2_player_weapons(ctx);
+    int n = recomp_input_number_key(port), seen = 0;
+    size_t i;
+
+    if (port == 0u)
+        g_ts2_p1_ctx = ctx;
+    if (!pw)
+        return;
+    if (port == 0u)
+        g_ts2_p1_held = (int)TS2_MEM32_EARLY(pw + 0xCC);
+    if (n <= 0)
+        return;
+    for (i = 0; i < sizeof k_ts2_weapon_order; i++) {
+        uint32_t id = k_ts2_weapon_order[i];
+
+        if (TS2_MEM32_EARLY(pw + 0x984 + 4u * id) && ++seen == n) {
+            TS2_MEM32_EARLY(pw + 0xC8) = id;
+            return;
+        }
+    }
+}
+
 #define TS2_PITCH_LIMIT 40.0f
 
 /* A controller whose mouse has turned its player: from then on that player
@@ -1061,7 +1141,7 @@ static void ts2_sweep_load(void)
             if (sscanf(p, " %399[^\r\n]", file) == 1 && !g_ts2_sweep_log)
                 g_ts2_sweep_log = fopen(file, "w");
             if (g_ts2_sweep_log)
-                fprintf(g_ts2_sweep_log, "tick,x,y,z,yaw,pitch,wanted,held,ammo,health\n");
+                fprintf(g_ts2_sweep_log, "tick,x,y,z,yaw,pitch,wanted,held,ammo,health,fovy\n");
             continue;
         }
         if (!strcmp(word, "give") || !strcmp(word, "weapon")) {
@@ -1176,11 +1256,15 @@ static int ts2_sweep(uint32_t ctx, uint32_t port, float *dx, float *dy)
 
         for (k = 1; pw && k <= 22; k++)
             ammo += (int)TS2_MEM32_EARLY(pw + 0xA2C + 4u * (uint32_t)k);
-        fprintf(g_ts2_sweep_log, "%u,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%.3f\n", tick,
+        uint32_t cam = TS2_MEM32_EARLY(0x004B2F60u);
+        float t = cam ? TS2_MEMF(cam + 0x31C) : 0.0f;
+
+        fprintf(g_ts2_sweep_log, "%u,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%.3f,%.2f\n", tick,
                 TS2_MEMF(chr + 0x58), TS2_MEMF(chr + 0x5C), TS2_MEMF(chr + 0x60),
                 TS2_MEMF(ctx + 0x148), TS2_MEMF(ctx + 0x14C),
                 pw ? (int)TS2_MEM32_EARLY(pw + 0xC8) : -1,
-                pw ? (int)TS2_MEM32_EARLY(pw + 0xCC) : -1, ammo, TS2_MEMF(chr + 0x19C));
+                pw ? (int)TS2_MEM32_EARLY(pw + 0xCC) : -1, ammo, TS2_MEMF(chr + 0x19C),
+                t > 0.0f ? 2.0 * atan((double)t) * 57.29578 : 0.0);
         fflush(g_ts2_sweep_log);
     }
     return turned;
@@ -1207,6 +1291,7 @@ static void ts2_mouse_look(uint32_t current_player, uint32_t player_controller)
         log_pending = 0;
     }
     g_ts2_frame_play = 1;                  /* a player was updated: play (ts2_present) */
+    ts2_weapon_keys(ctx, port);
     scripted = ts2_sweep(ctx, port, &sx, &sy);
     if (!recomp_input_look(port, &dx, &dy) && !scripted)
         return;
@@ -1237,6 +1322,33 @@ static void ts2_mouse_look(uint32_t current_player, uint32_t player_controller)
     }
     TS2_MEMF(ctx + 0x148) = yaw;
     TS2_MEMF(ctx + 0x14C) = pitch;
+}
+
+/*
+ * The aiming crosshair always on for a mouse player (recompose's crosshair
+ * setting, Esc menu > Mouse). The HUD's crosshair (USA sub_000C83B0, drawn
+ * at 0x000C87EC through the 2D sprite call 0x001B75E0) is skipped while the
+ * player's aim word (+0x884) is 0; the player update sets that word each
+ * frame, before it reads the sticks, from whether the player aims. For a
+ * mouse player not aiming it is set for this call and put back after, so
+ * the crosshair is drawn as it is while aiming: the weapon's own, at the
+ * aim offset (+0x894, +0x898), which is 0 -- the middle -- when not aiming.
+ * Controller 1's player only (its context, from the player update).
+ */
+extern int hle_crosshair_always(void);
+
+static void ts2_crosshair(void (*crosshair)(void))
+{
+    uint32_t ctx = TS2_MEM32_EARLY(0x00497100u);
+
+    if (ctx && ctx == g_ts2_p1_ctx && g_ts2_mouse_player[0] && hle_crosshair_always() &&
+        TS2_MEM32_EARLY(ctx + 0x884) == 0u) {
+        TS2_MEM32_EARLY(ctx + 0x884) = 1u;
+        crosshair();
+        TS2_MEM32_EARLY(ctx + 0x884) = 0u;
+        return;
+    }
+    crosshair();
 }
 
 /*
@@ -1294,6 +1406,7 @@ static void ts2_present(void (*present)(void))
     if (!interp_said) {
         interp_said = 1;
         xbox_D3D8SetInterpRegisters(60, 64, 12);
+        recomp_bindings_set_wheel_filter(ts2_wheel_filter);
     }
     present();
     xbox_D3D8SetWideFrames(ts2_menus_wide() ||

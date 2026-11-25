@@ -218,3 +218,40 @@ the plasma grenades (alternate fire) untested; strafing frames cannot be
 judged by the sky test; a scope's view at a wider field of view (no scoped
 weapon in this match). Fable's recordings and scripts:
 `I:\Development\scratch\ts2-sweep\fable-review` on the PC (not in the repo).
+
+## The number keys, the wheel, the crosshair, the icon (25 November 2026)
+
+Josh's next list: zoom with the wheel holding the sniper rifle, 1 to 9 to
+pick a weapon, the aiming crosshair kept on with a mouse, that crosshair as
+the menus' pointer, an icon from the game, and three things in the picture
+(below).
+
+| | What the game does | Done |
+| --- | --- | --- |
+| Weapons by number | It cycles a player's weapons in one fixed order, measured by handing a player every weapon (ids 0 to 41; the owned flags at char+0x124+0x984 stop where the ammo at +0xA2C starts) and tapping the d-pad through them: 1, 2, 5, 6, 3, 4, 7, 8, 12, 32, 33, 9, 16, 28, 29, 18, 17, 22, 31, 10, 19, 20, 25, 26, 34, 35, 39, 40, 41, then 0 (bare hands). Others (13, 14, 15, ...) it skips or refuses | A number key picks the n-th weapon owned in that order through the game's own switch (the wanted weapon, +0xC8), in the player update (`ts2_weapon_keys`). The key travels with the latched pad (recompose `RecompLockstepPad.number_key`, a 23rd byte written only when a key is down, so recordings made before read as they were), so online both machines switch alike |
+| Zoom with the wheel | Zooms only while aiming, with the d-pad: 12 (the sniper rifle: 10 degrees aiming, to 4), 16 (40 to 30) and 31 (40 to 18); d-pad up does nothing otherwise | Holding one of those the wheel is d-pad up and down; with any other it swaps weapons as before (`ts2_wheel_filter`, recompose `recomp_bindings_set_wheel_filter`) |
+| The crosshair with a mouse | The HUD's crosshair (`sub_000C83B0`, drawn at 0x000C87EC) is skipped while the player's aim word (+0x884, set each frame by the player update) is 0 | For controller 1's player with a mouse the word is set for that call and put back (`ts2_crosshair`): the weapon's own crosshair, in the middle. Setting `crosshair` (on by default; Esc menu > Mouse). Its draws move the game's own D3D bookkeeping, in the hashed memory, so online both machines must have it alike (a session setting, like the field of view) |
+| The icon | The Xbox dashboard's picture of the game: the title image in `default.xbe`'s `$$XTIMAGE` (an XPR0 DXT1, 128x128, the logo in a white ring) | `tools/make_icon.py` makes `timeslip.ico` from the player's own disc at install (`tools/install_windows.ps1`), for the desktop and Start menu shortcuts and Settings > Apps; nothing of the game is in the repository |
+
+Checked: a number key and the wheel by script (`RECOMP_INPUT_FAKE=t<tick>:3,t<tick>:wheel_up`, through the
+real input path and the latch): keys 3, 9, 1, 7 took weapons 5, 12, 1, 7, the wheel zoomed the aimed
+sniper rifle 10 to 7 to 4 and out, and swapped weapons otherwise; the recording replays the same at
+every frame; both gate recordings too.
+
+Not done: the crosshair as the menus' pointer, choosing what is under it (the front end's item
+rectangles are still to be found), and a launcher row for the crosshair.
+
+**The picture.** Investigated in Siberia (single-player Story, scripted to the fenced yard outside
+the tunnel, frames dumped and a frame captured), and the Plasma Autorifle at Josh's own settings
+(`post_soften = console`, interpolation off, 4x, FOV 80):
+
+- The hut's window panes: their glass (draw 240 of the frame, 350 triangles) is a 16x16 DXT3 texture
+  whose colour is black and alpha about 0.7, alpha-blended: a dark tint over the room behind, which
+  is the game's own data drawn as given. Not a mip-level problem (the same with every mip level cut
+  off). Standing still facing them and walking past, lockstep and free-running (700 frames of every
+  present), the panes did not change from frame to frame.
+- Dark flicker with the snow, and with the plasma gun: no frame much darker than the ones beside it
+  in any of those runs; the darkest plasma frames (14% under their neighbours) are smoke and dust
+  from the bolt's hits drifting close to the camera. Snow is drawn as quads, not point sprites.
+- So none of the three reproduces in what the game draws; what Josh sees may be on the way to the
+  screen (fullscreen with variable refresh rate is untested). A clip of it is the next step.

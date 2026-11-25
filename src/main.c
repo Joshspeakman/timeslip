@@ -682,6 +682,12 @@ static int title_main(int argc, char **argv)
             snprintf(fov, sizeof fov, "%d", hle_fov());
             recomp_lockstep_add_setting("fov", fov);
         }
+        /* The always-on crosshair draws through the game's own D3D, whose
+         * bookkeeping is in the hashed memory: both machines alike. */
+        {
+            extern int hle_crosshair_always(void);
+            recomp_lockstep_add_setting("crosshair", hle_crosshair_always() ? "1" : "0");
+        }
         recomp_lockstep_start();
     }
 

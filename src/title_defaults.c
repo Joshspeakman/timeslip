@@ -18,10 +18,15 @@
  *   Y                  Manual reload        R
  *   left stick         Run, side step       W A S D
  *   right stick        Look, turn           the mouse (mouse_look)
- *   D-pad left/right   Swap weapon          mouse wheel, Q, arrows
+ *   D-pad left/right   Swap weapon          Q, arrows (and the wheel, below)
  *   D-pad up/down      Zoom in/out          Z / X, mouse side buttons, arrows
  *   Start              Pause (objectives)   Enter, Tab
  *   B                  Back, in menus       Backspace
+ *
+ * The mouse wheel swaps weapons, or with a weapon that zooms zooms in and
+ * out (while aiming, as the d-pad does), and 1 to 9 pick a weapon: both in
+ * src/recomp_manual.c (ts2_wheel_filter, ts2_weapon_keys), since what they
+ * do depends on the weapon in hand.
  *
  * In the menus W A S D and the arrows move, Enter, Space or F choose (Start
  * chooses too) and Backspace goes back. Esc is the PC menu (the toolkit's),
@@ -42,8 +47,8 @@ const char *const recomp_title_bindings[] = {
     "y",            "key:R",
     "b",            "key:BACK",
     "start",        "key:RETURN key:TAB",
-    "dpad_left",    "mouse:wheel_up key:LEFT",
-    "dpad_right",   "mouse:wheel_down key:Q key:RIGHT",
+    "dpad_left",    "key:LEFT",
+    "dpad_right",   "key:Q key:RIGHT",
     "dpad_up",      "key:Z mouse:x2 key:UP",
     "dpad_down",    "key:X mouse:x1 key:DOWN",
     NULL
