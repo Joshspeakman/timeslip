@@ -41,6 +41,26 @@ in this folder.
 - Not yet: native mouse look (the mouse moves the right stick; TimeSplitters
   2 turns its camera directly), the field of view, the crosshair, the number
   keys, each co-op player's whole screen.
+- **Clears of some colour channels** as the console does them
+  (`xbox_D3D8SetClearChannels(1)` in `src/main.c`; recompose
+  `d3d8_xbox.h`, `RECOMP_CLEAR_CHANNELS=0/1` to override): the Audio/Video
+  Options panel clears only its rectangle's alpha (D3DCLEAR flags 0x80) and is
+  translucent over the front end, where a clear of all four channels painted
+  it black.
+- Open: the **volume sliders** in Settings > Audio/Video Options (MUSIC
+  VOLUME, SOUND VOLUME) are not drawn, on Windows and the Mac alike. No draw
+  lands beside those labels (every draw of one options frame logged: the
+  labels and the row highlight are there), nothing is skipped or fails, the
+  push-buffer walk never resynchronises, and changing the volume shows
+  nothing. `sub_000204F0` is the panel's frame, not the slider. Left to look
+  at: the vertex-program triangle fans drawn on that screen (98 vertices,
+  through 0x000225CF <- 0x003D4FD6 <- 0x00023070), in object space, one of
+  which may be the bar placed off the panel or scaled to nothing.
+- For Josh: TimeSplitters 2 clears some channels too, on its title and
+  player-count screen, and with them honoured the blue swirl behind its logo
+  comes out darker and more see-through in the middle. Which is right wants
+  a look at the console or footage; if the darker one is, TimeSplitters 2
+  turns the clears on as Future Perfect does.
 
 A scripted path to the first level (fresh saves, a game copy without UDATA):
 

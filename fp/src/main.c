@@ -663,6 +663,13 @@ static int title_main(int argc, char **argv)
         extern void xbox_D3D8SetTwoDPlacement(int placement, uint32_t tag);
         xbox_D3D8SetTwoDPlacement(1, 0);
     }
+    /* Clears of only some colour channels, as the NV2A does (recompose
+     * d3d8_xbox.h, xbox_D3D8SetClearChannels): the options panel clears only
+     * its rectangle's alpha and is translucent over the front end, not black. */
+    {
+        extern void xbox_D3D8SetClearChannels(int on);
+        xbox_D3D8SetClearChannels(1);
+    }
 
     /* Online co-op (recompose src/kernel/recomp_lockstep.h): a joiner meets
      * its host here -- the session's clock, the host's saves, the settings
