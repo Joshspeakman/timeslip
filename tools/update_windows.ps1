@@ -11,6 +11,10 @@ checkout the install was built from.
     update_windows.ps1 -Dest <install>          to the newest release: fetch it, lift and build
                                                 again from the player's own disc, reinstall
 
+-Title ts2|fp is the game the install holds (TimeSplitters 2 by default, or Future Perfect);
+install_windows.ps1 writes it into update.ps1. The collection's games share one repository
+and its releases.
+
 The release is the newest of the repository's GitHub releases (its origin's): drafts left
 out, pre-releases in, the highest version tag (v1.0.0-alpha.1 < v1.0.0-alpha.2 < v1.0.0-beta
 < v1.0.0 < v1.0.1). Git tags that are not releases do not count. "Installed" is the commit
@@ -25,6 +29,7 @@ list, and TIMESLIP_UPDATE_INSTALLED=<commit> stands for the installed build.
 #>
 param(
     [Parameter(Mandatory)][string]$Dest,
+    [ValidateSet("ts2", "fp")][string]$Title = "ts2",
     [switch]$Check,
     [string]$Game = "",
     [switch]$NoShortcuts
@@ -99,11 +104,12 @@ function Release-Commit([string]$tag) {
     return $c.Trim()
 }
 
-# The commit the installed game was built from: its build id, "ts2 <commit> xbr <commit>".
+# The commit the installed game was built from: its build id, "ts2 <commit> xbr <commit>"
+# (Future Perfect's, "fp ts2 <commit> xbr <commit> USA", has the same in it).
 function Installed-Commit {
     if ($env:TIMESLIP_UPDATE_INSTALLED) { $short = $env:TIMESLIP_UPDATE_INSTALLED }
     else {
-        $exe = Join-Path $Dest "timeslip.exe"
+        $exe = Join-Path $Dest $(if ($Title -eq "fp") { "timeslip_fp.exe" } else { "timeslip.exe" })
         if (-not (Test-Path $exe)) { return $null }
         $m = Select-String -LiteralPath $exe -Pattern 'ts2 ([0-9a-f]{12}) xbr [0-9a-f]{12}' -List
         if (-not $m) { return $null }
@@ -166,7 +172,7 @@ try {
     if ($LASTEXITCODE) { throw "could not update the recompose submodule" }
 
     Say "== Recompiling the game from your disc"
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "build_windows.ps1") -RelifFrom lift 2>&1 |
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "build_windows.ps1") -Title $Title -RelifFrom lift 2>&1 |
         ForEach-Object { Say "  $_" }
     if ($LASTEXITCODE) { throw "the build stopped (exit $LASTEXITCODE); see $log" }
 
@@ -176,7 +182,7 @@ try {
         if (Test-Path $j) { $Game = (Get-Item $j).Target | Select-Object -First 1 }
     }
     $inst = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $PSScriptRoot "install_windows.ps1"),
-              "-Dest", $Dest, "-KeepLauncher", "-NoArt")
+              "-Title", $Title, "-Dest", $Dest, "-KeepLauncher", "-NoArt")
     if ($Game) { $inst += @("-Game", $Game) }
     if ($NoShortcuts) { $inst += "-NoShortcuts" }
     & powershell.exe @inst 2>&1 | ForEach-Object { Say "  $_" }

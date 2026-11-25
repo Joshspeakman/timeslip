@@ -346,7 +346,12 @@ On Windows, `tools\install_windows.ps1` installs what you built into
 `%LOCALAPPDATA%\Programs\Timeslip` with Start menu and desktop shortcuts (the
 game's own logo as their icon, made from your disc) and an entry in Settings >
 Apps; on a Mac, `mac/install.sh` makes the app. `tools\build_windows.ps1` builds
-again with the same toolchain.
+again with the same toolchain. Future Perfect (`fp/`) installs beside it with
+`-Title fp` on both (`tools\build_windows.ps1 -Title fp`, then
+`tools\install_windows.ps1 -Title fp`, into
+`%LOCALAPPDATA%\Programs\Timeslip Future Perfect` as "TimeSplitters Future
+Perfect"; `mac/install.sh --title fp`), with its own shortcuts, icon and
+updater.
 
 The launcher's **Updates** tile offers the newest
 [release](https://github.com/Joshspeakman/timeslip/releases) (pre-releases

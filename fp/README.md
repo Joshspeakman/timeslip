@@ -23,9 +23,12 @@ in this folder.
 - **Widescreen** not yet: with the Xbox's widescreen flag the front end and
   cutscenes lay themselves out wider, but the 3D view comes out as a 4:3 band
   in the middle; the title defaults to 4:3 until that is understood.
+- **Installs** on Windows and the Mac, with its own icon from the disc and
+  the launcher's Updates tile (see "Building").
 - Not yet: the keyboard and mouse checked against the game's own controls,
   native mouse look, the field of view, the crosshair, each co-op player's
-  whole screen, the launcher's art and the installer.
+  whole screen; the launcher's three pictures land on the same scenes on
+  every machine only once the art run is timed by frame.
 
 A scripted path to the first level (fresh saves, a game copy without UDATA):
 
@@ -72,8 +75,10 @@ firing, 13,770 frames. Measured 25 November 2026 (Windows, Vulkan): three
 copies replaying it at once the same as it at every frame (one of them had
 booted with the fences 4 apart); online between two copies on one PC (1 ms,
 3 frames of delay), host and joiner each the same as the recording at every
-frame and as each other at every 60-frame check, through frame 14,400. Not
-yet: between two machines, and on the Mac.
+frame and as each other at every 60-frame check, through frame 14,400. On
+the Mac (M1 Pro, arm64, Metal, re-lifted at the same commits) the recording
+replays the same at every frame too. Not yet: online between two machines
+(the PC's firewall and the Mac's ask their owner first).
 
 | | |
 | --- | --- |
@@ -94,6 +99,14 @@ committed), then:
 On Windows with the zig toolchain, `tools\build_windows.ps1 -Title fp -Vulkan`.
 The executable is `fp/build/Release/timeslip_fp(.exe)`, with
 `timeslip_fp_launcher` beside it.
+
+To install it as a program: `tools\install_windows.ps1 -Title fp` on Windows
+(`%LOCALAPPDATA%\Programs\Timeslip Future Perfect`, Start menu and desktop
+shortcuts named "TimeSplitters Future Perfect", an entry in Settings > Apps,
+FFmpeg's three libraries beside the game for its movies, the launcher's art
+made once from your disc by `tools/make_disc_art.py --title fp` and the icon
+from it), or `mac/install.sh --title fp` on a Mac. The launcher's Updates tile
+updates it from the collection's releases as it does TimeSplitters 2.
 
 ## Layout
 
