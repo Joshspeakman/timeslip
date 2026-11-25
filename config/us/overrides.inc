@@ -29,15 +29,25 @@ extern void sub_00032D90_gen(void);
  * path): the call whose field of view the fov setting replaces. */
 void sub_00032D90(void) { ts2_camera_setup(sub_00032D90_gen, 0x00035A16u); }
 
+/* view_model is sub_000AF8A0: the first-person hands and weapon, called from
+ * the frame's drawing at 0x000DE8AD. Found by the guest stack of the
+ * pistols' draws (24 Nov 2026), which all pass 0x000AF99B. Wrapped so the
+ * pass draws at the game's 60 degrees whatever the field of view
+ * (ts2_view_model). */
+extern void sub_000AF8A0_gen(void);
+void sub_000AF8A0(void) { ts2_view_model(sub_000AF8A0_gen); }
+
 /* build_projection is sub_000E6A00 (PAL 0x000E6E30), wrapped so every
  * projection but the in-game camera's is widened as that one is. 0x00032DF6
  * is camera_setup's call of it, which is widened already. The others, logged
  * (RECOMP_TS2_CAMLOG) over both recordings: 0x00095CF7 (front_end_scene's
  * camera, sub_00095CA0), 0x000A4C8B (the front end's), 0x0008F651 (the
- * character select's model, aspect 1) and 0x00058574 (from a level's start:
- * the hands and weapon). */
+ * character select's model, aspect 1) and 0x00058574 (sub_00058510, which
+ * draws bullet holes, scorch marks and blood over the level with a projection
+ * of its own; it is also given the chosen field of view, the third argument
+ * here). */
 extern void sub_000E6A00_gen(void);
-void sub_000E6A00(void) { ts2_build_projection(sub_000E6A00_gen, 0x00032DF6u); }
+void sub_000E6A00(void) { ts2_build_projection(sub_000E6A00_gen, 0x00032DF6u, 0x00058574u); }
 
 /* front_end_scene is sub_0009F180 (PAL 0x0009F1C0): it builds its camera
  * through sub_00095CA0 (PAL 0x00095CE0), which calls build_projection. */

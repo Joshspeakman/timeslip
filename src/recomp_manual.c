@@ -507,67 +507,105 @@ static int g_ts2_frame_camera, g_ts2_frame_front_end, g_ts2_frame_play;
 #define TS2_FOV_DEFAULT 60.0f
 
 /*
- * The first-person weapon at the game's own field of view. TS2 draws the
- * hands and weapon with the camera's projection, uploaded together with
- * their own transform (c60-c67 in one upload, which nothing of the level
- * does: its pieces upload the projection alone, c60-c63, and their
- * transforms apart). With the field of view widened the weapon shrank
- * toward the middle of the screen and the arms showed to the elbow: "the
- * gun just looks like it's floating" (Josh, 24 Nov 2026). Such an upload
- * of the widened projection gets the 60-degree one the game was made with
- * (the same x and y scales, multiplied by tan(fov/2) / tan(30)), on its way
- * to the renderer (xbox_D3D8SetConstantFilter), so the weapon sits where
- * it always did at any field of view. A scope's narrower view is the
- * game's own and is left alone.
+ * The first-person weapon at the game's own field of view. With the field of
+ * view widened the hands and weapon shrank toward the middle of the screen
+ * and the arms showed to the elbow: "the gun just looks like it's floating"
+ * (Josh, 24 Nov 2026). The weapon pass (view_model, sub_000AF8A0 in the US
+ * release, found by the guest stack of its draws) uploads no projection of
+ * its own: its pieces upload their transforms alone (c64-c67) and draw with
+ * whatever c60-c63 hold, which at the console's one field of view was always
+ * the camera's. So ts2_view_model puts the 60-degree projection there for
+ * the pass -- the camera's, its x and y scales multiplied by
+ * tan(fov/2) / tan(30) -- and the camera's back after it, both through the
+ * game's own D3DDevice_SetVertexShaderConstant4: into the push buffer in
+ * draw order, and recorded like any of the game's constants, so frame
+ * interpolation redraws the in-between frames with them too. The muzzle
+ * flashes the pass draws (sub_000AF440) come with it. A scope's narrower
+ * view is the game's own and is left alone, and so is a camera the field of
+ * view did not change.
+ *
+ * Before this, a filter rewrote uploads of c60-c67 that carried the widened
+ * projection. Those are not the weapon's: they are the pass that builds its
+ * own projection (ts2_build_projection's decal_caller) restoring the
+ * camera's after itself, and the weapon only sat right on the frames where
+ * one came before it -- not at all in others (tick 4600 of the corridor
+ * sweep at FOV 80, both pistols drawn small and high).
  */
-extern void xbox_D3D8SetConstantFilter(void (*fn)(int first_reg, float *data, int count));
+static int   g_ts2_fov_widened;          /* the player's camera this frame */
+static float g_ts2_fov_k;                /* tan(fov/2) / tan(30 degrees) */
 
-static float g_ts2_fov_sx, g_ts2_fov_sy, g_ts2_own_sx, g_ts2_own_sy;
+extern void sub_001DDEA0(void);          /* D3DDevice_SetVertexShaderConstant4 (US) */
 
-static void ts2_weapon_fov(int first, float *data, int count)
+/* Four constant registers from c60 on, set as the game sets them. */
+static void ts2_set_c60(const float m[16], float k)
 {
-    if (first == 60 && count == 8 && g_ts2_fov_sx != 0.0f &&
-        data[0] == g_ts2_fov_sx && data[5] == g_ts2_fov_sy) {
-        data[0] = g_ts2_own_sx;
-        data[5] = g_ts2_own_sy;
+    uint32_t buf = (g_esp - 0x1000u) & ~15u, eax = g_eax, ecx = g_ecx, edx = g_edx;
+    int r, c;
+
+    /* The game uploads its camera matrix transposed (the shader's rows). */
+    for (r = 0; r < 4; r++)
+        for (c = 0; c < 4; c++) {
+            float v = m[c * 4 + r];
+            if ((r == 0 && c == 0) || (r == 1 && c == 1))
+                v *= k;
+            TS2_MEMF(buf + 4u * (uint32_t)(r * 4 + c)) = v;
+        }
+    g_ecx = 60;
+    g_edx = buf;
+    g_esp -= 4;
+    TS2_MEM32_EARLY(g_esp) = 0;                  /* return address: none; fastcall, no arguments */
+    sub_001DDEA0();
+    g_eax = eax;
+    g_ecx = ecx;
+    g_edx = edx;
+}
+
+static void ts2_view_model(void (*view_model)(void))
+{
+    uint32_t cam = TS2_MEM32_EARLY(0x004B2F60u);
+    uint32_t mat = cam ? TS2_MEM32_EARLY(cam + 0x204) : 0;
+    float m[16];
+    int i;
+
+    if (!g_ts2_fov_widened || !mat) {
+        view_model();
+        return;
+    }
+    for (i = 0; i < 16; i++)
+        m[i] = TS2_MEMF(mat + 4u * (uint32_t)i);
+    ts2_set_c60(m, g_ts2_fov_k);
+    view_model();
+    {
+        uint32_t eax = g_eax;              /* the pass's own result */
+        ts2_set_c60(m, 1.0f);
+        g_eax = eax;
     }
 }
 
 static void ts2_camera_setup(void (*camera_setup)(void), uint32_t player_caller)
 {
     float widen = ts2_camera_widen();
-    int fov = hle_fov(), fov_set = 0;
+    int fov = hle_fov(), fov_set = 0, player = 0;
 
     if (widen != 1.0f)
         TS2_MEMF(g_esp + 0x0C) *= widen;   /* [esp] is the return address */
-    if (fov > 0 && player_caller && TS2_MEM32_EARLY(g_esp) == player_caller &&
-        TS2_MEMF(g_esp + 0x10) == TS2_FOV_DEFAULT) {
-        TS2_MEMF(g_esp + 0x10) = (float)fov;
-        fov_set = fov != (int)TS2_FOV_DEFAULT;
+    if (player_caller && TS2_MEM32_EARLY(g_esp) == player_caller) {
+        player = 1;
+        if (fov > 0 && TS2_MEMF(g_esp + 0x10) == TS2_FOV_DEFAULT) {
+            TS2_MEMF(g_esp + 0x10) = (float)fov;
+            fov_set = fov != (int)TS2_FOV_DEFAULT;
+        }
     }
     /* Read before the call, which may pop them (for the log below). */
     uint32_t log_caller = TS2_MEM32_EARLY(g_esp);
     float log_arg = TS2_MEMF(g_esp + 0x0C), log_fovy = TS2_MEMF(g_esp + 0x10);
     camera_setup();
     g_ts2_frame_camera = 1;                /* see ts2_present below */
-    if (fov_set) {
-        static int filtering;
-        uint32_t cam = TS2_MEM32_EARLY(0x004B2F60u);
-        uint32_t m = cam ? TS2_MEM32_EARLY(cam + 0x204) : 0;
-
-        if (m) {
-            /* tan(fov/2) / tan(30 degrees) */
-            float k = (float)(tan((double)fov * 3.14159265358979 / 360.0) / 0.57735026918962573);
-
-            g_ts2_fov_sx = TS2_MEMF(m + 0x00);
-            g_ts2_fov_sy = TS2_MEMF(m + 0x14);
-            g_ts2_own_sx = g_ts2_fov_sx * k;
-            g_ts2_own_sy = g_ts2_fov_sy * k;
-            if (!filtering) {
-                filtering = 1;
-                xbox_D3D8SetConstantFilter(ts2_weapon_fov);
-            }
-        }
+    if (player) {
+        g_ts2_fov_widened = fov_set;
+        if (fov_set)
+            g_ts2_fov_k = (float)(tan((double)fov * 3.14159265358979 / 360.0) /
+                                  0.57735026918962573);
     }
     /* RECOMP_TS2_CAMLOG=1: the aspect each camera ends up with -- the
      * horizontal half-width the game keeps over the vertical one -- each
@@ -617,17 +655,30 @@ static void ts2_camera_setup(void (*camera_setup)(void), uint32_t player_caller)
  */
 static int ts2_menus_wide(void);
 
-static void ts2_build_projection(void (*build_projection)(void), uint32_t camera_caller)
+static void ts2_build_projection(void (*build_projection)(void), uint32_t camera_caller,
+                                 uint32_t decal_caller)
 {
     static int camlog = -1;
     uint32_t caller = TS2_MEM32_EARLY(g_esp);
     float widen = ts2_camera_widen();
-    int widened = 0;
+    int widened = 0, fov;
 
     if (caller != camera_caller && widen != 1.0f && ts2_menus_wide()) {
         TS2_MEMF(g_esp + 0x08) *= widen;   /* [esp] return, +4 out, +8 aspect */
         widened = 1;
     }
+    /* decal_caller (sub_00058510 in the US release) builds a projection of
+     * its own each time it draws -- 60 degrees times the camera's zoom
+     * (camera +0x324) -- for what it draws over the level: bullet holes,
+     * scorch marks, blood. At a widened field of view they sat where they
+     * would have at 60 and slid off the walls as the view turned. They get
+     * the chosen field of view as the camera does; a scope's narrower one is
+     * the game's own and stays. build_projection takes radians (60 degrees
+     * arrives as 1.0472, the product of the zoom and a constant). */
+    fov = hle_fov();
+    if (decal_caller && caller == decal_caller && fov > 0 &&
+        fabsf(TS2_MEMF(g_esp + 0x0C) - (float)(TS2_FOV_DEFAULT * 3.14159265358979 / 180.0)) < 1e-4f)
+        TS2_MEMF(g_esp + 0x0C) = (float)(fov * 3.14159265358979 / 180.0);   /* +0xC fovy */
     if (camlog < 0)
         camlog = getenv("RECOMP_TS2_CAMLOG") != NULL;
     if (camlog) {
