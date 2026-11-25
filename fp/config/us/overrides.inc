@@ -124,6 +124,32 @@ void sub_000CC720(void) { fp_player_fov(sub_000CC720_gen, 0x384u, 4u); }
 extern void sub_000CBD10_gen(void);
 void sub_000CBD10(void) { fp_player_fov(sub_000CBD10_gen, 0x388u, 1u); }
 
+/* object_draw is sub_000A2740(object) (fp_object_draw), which draws every
+ * object (from sub_000867F0, sub_000A2900, sub_00344400). Its layer, +0x34:
+ * the world's 1..0xC8 (0x000A27B4); 0xCA + a player that player's
+ * first-person layer, the hands and the weapon (sub_00115F10 and
+ * sub_0008CE30 take 0xCA off it to index the players' 0x1584-byte records
+ * at [0x007B0C48]); the sky 0xCF, the backdrops 0xD5 (found by the Mac
+ * session, 25 Nov). The current camera is [0x007B0CC0], its field of view
+ * at +0x388 (sub_00259DF0 puts base_fov's answer there, 0x00259E27), its
+ * viewport at +0x224 as viewport_rect (sub_00055D90(vp, x0, y0, x1, y1))
+ * lays it out: x0 +0, x1 +4, y0 +0x14, y1 +0x18, inclusive screen pixels.
+ *
+ * effect_draw is sub_00111FC0(effect) (fp_effect_draw), called for each
+ * effect by the effects' pass sub_00112120 (the list at [0x0073BD54], next at
+ * +0xF4), which puts the camera-space view (0x007A5900) in place for an
+ * effect with bit 0x10 of +4 set and the camera's own (+0x208) for the rest:
+ * the first-person muzzle flash is one (flags 0x00011011, at about (0.26,
+ * -0.09, -0.75) in front of the camera; another player's view of the same
+ * shot is a world-space one at the gun of the player's body, +0x88). */
+static const FpViewModel k_fp_view_model = {
+    0x007B0CC0u, 0x388u, 0x224u, 0x0u, 0x4u, 0x14u, 0x18u, 0x34u, 0xCAu, 0xCEu, 4u, 0x10u
+};
+extern void sub_000A2740_gen(void);
+void sub_000A2740(void) { fp_object_draw(sub_000A2740_gen, &k_fp_view_model); }
+extern void sub_00111FC0_gen(void);
+void sub_00111FC0(void) { fp_effect_draw(sub_00111FC0_gen, &k_fp_view_model); }
+
 /* weapon_change is sub_001BF140 (fp_weapon_change), called from the player's
  * weapon update sub_001C4400 (0x001C4593) each frame the player may change
  * weapon: for the player whose look state [0x007B0C7C] points at, it reads

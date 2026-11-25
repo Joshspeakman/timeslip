@@ -23,7 +23,7 @@
 #include <stddef.h>   /* ptrdiff_t: not in stdlib.h off MSVC */
 #include <stdlib.h>   /* getenv, exit: the spin verdict below */
 #include <string.h>   /* strcmp: RECOMP_ICALL_FATAL */
-#include <math.h>     /* tan, atan: the field of view */
+#include <math.h>     /* tan, atan: the field of view and the weapon in hand */
 
 /* One diagnostic report, one piece.
  *
@@ -774,6 +774,95 @@ static void fp_player_fov(void (*gen)(void), uint32_t first, uint32_t count)
         volatile float *a = (volatile float *)((uintptr_t)pl + first + 4u * i + g_xbox_mem_offset);
         *a = fp_fov_widen(*a);
     }
+}
+
+/*
+ * The weapon in hand at a wider field of view. The hands and the weapon are
+ * drawn through the world's projection, so with the view widened past the
+ * game's they shrank and drew further off. The object draw (USA
+ * sub_000A2740(object)) knows them: an object whose layer (+0x34) is 0xCA + a
+ * player is that player's first-person layer -- the hands, the weapon --
+ * where the world's are under 0xC8, the sky 0xCF. The muzzle flash is not an
+ * object but an effect (effect_draw, sub_00111FC0(effect)), one the effects'
+ * pass draws in camera space (bit 0x10 of its flags, +4: the pass puts the
+ * camera-space view at 0x007A5900 in place for it, sub_00112120) -- found in
+ * an Arcade match at FOV 80, where the gun was put right and its flash came
+ * out smaller and nearer the middle, apart from the muzzle. While either is
+ * drawn, and while the camera's angle ([0x007B0CC0] +0x388) is one the
+ * setting widened (fp_fov_view_k), the renderer draws it tan(fov/2) /
+ * tan(55/2) times larger about the middle of the camera's view (recompose
+ * xbox_D3D8SetViewModelZoom): as large, and where, the game's own angle drew
+ * it. The middle is the camera's viewport's (+0x224, laid out by
+ * viewport_rect), not Direct3D's: split screen keeps a viewport of the whole
+ * screen and puts each player in a half through the projection, and about
+ * the screen's middle the second player's pistols went off its bottom edge.
+ * Any other angle the game makes -- aiming in, a narrower one of its own --
+ * is drawn as the game made it.
+ */
+extern void xbox_D3D8SetViewModelZoom(float k, float cx, float cy);
+
+typedef struct FpViewModel {
+    uint32_t camera_ptr, fov_off;  /* the current camera, its angle */
+    uint32_t viewport_off;         /* the camera's viewport, viewport_rect's */
+    uint32_t vp_x0, vp_x1, vp_y0, vp_y1; /* its corners, inclusive pixels */
+    uint32_t layer_off, layer_lo, layer_hi; /* an object's layer, the players' */
+    uint32_t effect_flags, effect_camera_space; /* an effect's flags, the bit */
+} FpViewModel;
+
+static float g_fp_view_zoom = 1.0f, g_fp_view_cx = -1.0f, g_fp_view_cy = -1.0f;
+
+/* Run gen with the view model's zoom for the current camera. */
+static void fp_view_zoomed(void (*gen)(void), const FpViewModel *m)
+{
+    uint32_t cam = FP_M32(m->camera_ptr), vp;
+    float k = 1.0f, cx = -1.0f, cy = -1.0f;
+    float was = g_fp_view_zoom, was_cx = g_fp_view_cx, was_cy = g_fp_view_cy;
+
+    if (cam >= 0x10000u && cam < 0x84000000u) {
+        k = fp_fov_view_k(FP_MF(cam + m->fov_off));
+        vp = cam + m->viewport_off;
+        cx = (float)((int32_t)FP_M32(vp + m->vp_x0) + (int32_t)FP_M32(vp + m->vp_x1) + 1) * 0.5f;
+        cy = (float)((int32_t)FP_M32(vp + m->vp_y0) + (int32_t)FP_M32(vp + m->vp_y1) + 1) * 0.5f;
+    }
+    if (k == was && (k == 1.0f || (cx == was_cx && cy == was_cy))) {
+        gen();
+        return;
+    }
+    g_fp_view_zoom = k;
+    g_fp_view_cx = cx;
+    g_fp_view_cy = cy;
+    xbox_D3D8SetViewModelZoom(k, cx, cy);
+    gen();
+    g_fp_view_zoom = was;
+    g_fp_view_cx = was_cx;
+    g_fp_view_cy = was_cy;
+    xbox_D3D8SetViewModelZoom(was, was_cx, was_cy);
+}
+
+static void fp_object_draw(void (*gen)(void), const FpViewModel *m)
+{
+    uint32_t obj = FP_M32(g_esp + 4), layer;
+
+    if (hle_fov() <= 0 || obj < 0x10000u || obj >= 0x84000000u) {
+        gen();
+        return;
+    }
+    layer = FP_M32(obj + m->layer_off);
+    if (layer < m->layer_lo || layer >= m->layer_hi)
+        gen();
+    else
+        fp_view_zoomed(gen, m);
+}
+
+static void fp_effect_draw(void (*gen)(void), const FpViewModel *m)
+{
+    uint32_t fx = FP_M32(g_esp + 4);
+
+    if (hle_fov() <= 0 || fx < 0x10000u || fx >= 0x84000000u ||
+        !(FP_M32(fx + m->effect_flags) & m->effect_camera_space))
+        gen();
+    else
+        fp_view_zoomed(gen, m);
 }
 
 /*

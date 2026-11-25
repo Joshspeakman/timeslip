@@ -82,10 +82,17 @@ in this folder.
   the game's 55 degrees (vertical) where the game asks for it
   (`sub_000CB3B0`), so what is drawn and what is culled widen together; 0,
   the default, is the game's own, and a narrower view the game makes is left
-  alone. Not yet: the weapon in hand is drawn through the same projection,
-  so at a wider angle it looks smaller and further off (TimeSplitters 2 draws
-  its weapon pass at the game's own angle; Future Perfect's pass is still to
-  be found).
+  alone. It holds from the spawn and in split screen too (the player's own
+  copies of base_fov's test, `sub_000CC720` and `sub_000CBD10`; split
+  screen's 45 widens in step). **The weapon in hand** stays the size and
+  place the game's own angle gives it: the hands, the weapon
+  (`sub_000A2740`, the objects in a player's first-person layer, 0xCA + the
+  player) and the muzzle flash (`sub_00111FC0`, the effects drawn in camera
+  space) are drawn tan(fov/2) / tan(55/2) times larger about the middle of
+  that player's view (recompose `xbox_D3D8SetViewModelZoom`), so at 80 the
+  world is wider and the pistols and their flash are where they were at 55,
+  in one-player play and in each half of split screen. Aiming in, or any
+  angle of the game's own, is left as the game draws it.
 - **Clears of some colour channels** as the console does them
   (`xbox_D3D8SetClearChannels(1)` in `src/main.c`; recompose
   `d3d8_xbox.h`, `RECOMP_CLEAR_CHANNELS=0/1` to override): the Audio/Video
