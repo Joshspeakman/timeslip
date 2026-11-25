@@ -846,6 +846,19 @@ static int ts2_coop_keep_draw(void)
  * game shows that player nothing (in a level's intro player 2's camera's is
  * empty and both players watch player 1's fly-by), and so does a whole one.
  */
+/* The scissors (ts2_present): the mode set, and whether a player's view in
+ * this frame is only part of the frame. */
+static int g_ts2_scissor_mode = -1, g_ts2_frame_partial;
+
+static void ts2_views_partial(void)
+{
+    g_ts2_frame_partial = 1;
+    if (g_ts2_scissor_mode != 0) {
+        g_ts2_scissor_mode = 0;
+        xbox_D3D8SetScissorsOff(0);
+    }
+}
+
 static int ts2_caller_in(uint32_t from, const uint32_t *list, int n)
 {
     int i;
@@ -899,6 +912,33 @@ static void ts2_viewport_rect(void (*viewport_rect)(void), uint32_t player_calle
             TS2_MEM32_EARLY(g_esp + 16) = 639;     /* x1 */
             TS2_MEM32_EARLY(g_esp + 20) = 479;     /* y1: the whole 640x480 frame */
         }
+    }
+    /* A player's or camera's view that is part of the frame -- a split
+     * screen -- is kept to its rectangle with a scissor as well: the
+     * scissors go back on at once (ts2_present). (The letterboxed end of a
+     * match keeps a whole view and letterboxes with a scissor band, which
+     * Recompose keeps: xbox_D3D8SetScissorsOff.) */
+    {
+        int x0 = (int)TS2_MEM32_EARLY(g_esp + 8), y0 = (int)TS2_MEM32_EARLY(g_esp + 12);
+        int x1 = (int)TS2_MEM32_EARLY(g_esp + 16), y1 = (int)TS2_MEM32_EARLY(g_esp + 20);
+        static int log = -1, said;
+
+        /* RECOMP_TS2_VPLOG=<from tick>: the players' and cameras' view
+         * rectangles from that frame on, 300 lines. */
+        if (log < 0) {
+            const char *v = getenv("RECOMP_TS2_VPLOG");
+            log = v ? atoi(v) : -2;
+        }
+        if (log >= 0 && said < 300 && recomp_lockstep_tick() >= (uint32_t)log &&
+            (from == player_caller || camera_caller || ts2_caller_in(from, setup_callers, setup_count))) {
+            said++;
+            fprintf(stderr, "[TS2-VP] tick %u from 0x%08X (%s) %d,%d-%d,%d\n", recomp_lockstep_tick(),
+                    from, from == player_caller ? "player" : camera_caller ? "camera"
+                    : "setup", x0, y0, x1, y1);
+        }
+        if ((from == player_caller || camera_caller) && x1 - x0 >= 2 && y1 - y0 >= 2 &&
+            !(x0 <= 0 && y0 <= 0 && x1 >= 639 && y1 >= 479))
+            ts2_views_partial();
     }
     viewport_rect();
 }
@@ -1281,17 +1321,19 @@ static void ts2_present(void (*present)(void))
      * of the level out of in-between frames while the player walks and
      * turns, and leave flickering hairlines of sky and sand at 5x (recompose
      * xbox_D3D8SetScissorsOff). The front end's list boxes and character
-     * select need theirs: play only. */
+     * select need theirs, and so does a view that is only part of the frame
+     * (a split screen, the letterboxed end of a match: ts2_viewport_rect),
+     * which is kept to its rectangle with one: off only for a frame of play
+     * whose every player view is the whole frame. */
     {
-        static int mode = -1;
-        int want = g_ts2_frame_play ? TS2_SCISSORS_IN_PLAY : 0;
+        int want = g_ts2_frame_play && !g_ts2_frame_partial ? TS2_SCISSORS_IN_PLAY : 0;
 
-        if (want != mode) {
-            mode = want;
+        if (want != g_ts2_scissor_mode) {
+            g_ts2_scissor_mode = want;
             xbox_D3D8SetScissorsOff(want);
         }
     }
-    g_ts2_frame_camera = g_ts2_frame_front_end = g_ts2_frame_play = 0;
+    g_ts2_frame_camera = g_ts2_frame_front_end = g_ts2_frame_play = g_ts2_frame_partial = 0;
 }
 
 /* ── TimeSplitters 2: where each piece of 2D goes in widescreen ── */
