@@ -52,15 +52,29 @@ printf '#!/bin/bash\nexec /bin/bash %q "$@"\n' "$HERE/mac/update.sh" > "$A/Conte
 chmod +x "$A/Contents/MacOS/update"
 
 echo "== the icon"
-# Timeslip's own icon (art/icon/png/1024.png, made by tools/art/make_art.py: no game artwork), a full-bleed
-# rounded tile, fitted to macOS's icon grid (the 824 px tile on the 1024 px canvas)
-[ -s "$HERE/art/icon/png/1024.png" ] || die "no art/icon/png/1024.png (tools/art/make_art.py makes it)"
+# The game's own, made here from the player's disc (tools/make_icon.py; nothing of the game is in the repository): the
+# title screen's logo on the front end's blue for 128 px and up, and the Xbox dashboard's emblem, which stays sharp
+# small, for 16-64. Without the launcher's art (mac/make_art.sh) or Pillow, Timeslip's own icon
+# (art/icon/png/1024.png, tools/art/make_art.py). Either is fitted to macOS's icon grid (824 of 1024 px).
 swiftc -O -o "$STAGE/icongrid" "$HERE/mac/tools/icongrid.swift" 2>/dev/null
-"$STAGE/icongrid" "$HERE/art/icon/png/1024.png" "$STAGE/icon1024.png"
 IS="$STAGE/AppIcon.iconset"; mkdir -p "$IS"
+small="$STAGE/icon1024.png"
+if [ -f "$DATA/game/default.xbe" ] && [ -f "$DATA/art/logo.png" ] && [ -f "$DATA/art/glow.png" ] &&
+   "$PY" "$HERE/tools/make_icon.py" --game "$DATA/game" --art "$DATA/art" --png "$STAGE/game1024.png" --size 1024 >/dev/null &&
+   "$PY" "$HERE/tools/make_icon.py" --game "$DATA/game" --png "$STAGE/emblem.png" --out "$STAGE/emblem.ico" >/dev/null; then
+    "$STAGE/icongrid" "$STAGE/game1024.png" "$STAGE/icon1024.png" 0
+    "$STAGE/icongrid" "$STAGE/emblem.png" "$STAGE/emblem1024.png" 0
+    small="$STAGE/emblem1024.png"
+    echo "   the game's (the title logo; the dashboard emblem when small)"
+else
+    [ -s "$HERE/art/icon/png/1024.png" ] || die "no art/icon/png/1024.png (tools/art/make_art.py makes it)"
+    "$STAGE/icongrid" "$HERE/art/icon/png/1024.png" "$STAGE/icon1024.png"
+    echo "   Timeslip's own (no art from the disc yet: mac/make_art.sh)"
+fi
 for s in 16 32 128 256 512; do
-    sips -z $s $s "$STAGE/icon1024.png" --out "$IS/icon_${s}x${s}.png" >/dev/null
-    sips -z $((s * 2)) $((s * 2)) "$STAGE/icon1024.png" --out "$IS/icon_${s}x${s}@2x.png" >/dev/null
+    src="$STAGE/icon1024.png"; [ $s -le 32 ] && src=$small                  # 16, 32 and their @2x (64)
+    sips -z $s $s "$src" --out "$IS/icon_${s}x${s}.png" >/dev/null
+    sips -z $((s * 2)) $((s * 2)) "$src" --out "$IS/icon_${s}x${s}@2x.png" >/dev/null
 done
 iconutil -c icns "$IS" -o "$A/Contents/Resources/AppIcon.icns"
 

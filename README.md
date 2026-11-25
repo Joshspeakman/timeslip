@@ -261,9 +261,10 @@ macOS on Apple Silicon:
 - The [LunarG Vulkan SDK](https://vulkan.lunarg.com/sdk/home#mac), installed
   system-wide. It provides the shader compiler and SPIRV-Cross, which the
   Metal renderer uses; the Mac draws with Metal only.
-- Python 3.10 or newer with `capstone`. Homebrew's Python will not install
-  packages globally, so use a virtual environment:
-  `python3 -m venv ~/.venvs/recomp && ~/.venvs/recomp/bin/pip install capstone`
+- Python 3.10 or newer with `capstone`, and `pillow` for the app's icon
+  (made from your disc). Homebrew's Python will not install packages
+  globally, so use a virtual environment:
+  `python3 -m venv ~/.venvs/recomp && ~/.venvs/recomp/bin/pip install capstone pillow`
 
 Linux, x86-64:
 
