@@ -453,6 +453,88 @@ extern void recomp_lockstep_frame(void);
 extern uint32_t recomp_lockstep_tick(void);
 extern void recomp_lockstep_add_region(uint32_t va, uint32_t size, const char *name);
 
+/*
+ * RECOMP_FP_MEMDUMP=<prefix> with RECOMP_FP_MEMDUMP_AT=<tick>,<tick>,...: guest
+ * memory written at those lockstep ticks to <prefix>t<tick>.bin, in the
+ * lockstep dump's format (py -m tools.lockstep dump), every mapped 64 KB of
+ * RECOMP_FP_MEMDUMP_RANGE=<va>-<va> (default 0x00800000-0x04000000, past the
+ * XBE's image to the top of RAM). TimeSplitters 2's ts2_memdump, for finding
+ * where the game keeps what .data does not hold: the player, the camera.
+ * A tool for finding things; nothing reads it back.
+ */
+extern int xbox_guest_range_mapped(uint32_t va, uint32_t bytes);
+
+static void fp_memdump(uint32_t tick)
+{
+    static int ready, n;
+    static uint32_t at[32], lo = 0x00800000u, hi = 0x04000000u;
+    static const char *prefix;
+    char path[512];
+    FILE *f;
+    uint32_t va, runs = 0;
+    int i;
+
+    if (!ready) {
+        const char *v = getenv("RECOMP_FP_MEMDUMP_AT"), *r = getenv("RECOMP_FP_MEMDUMP_RANGE");
+
+        ready = 1;
+        prefix = getenv("RECOMP_FP_MEMDUMP");
+        while (prefix && v && *v && n < 32) {
+            at[n++] = (uint32_t)strtoul(v, (char **)&v, 10);
+            if (*v == ',')
+                v++;
+            else
+                break;
+        }
+        if (r && *r) {
+            lo = (uint32_t)strtoul(r, (char **)&r, 0);
+            if (*r == '-')
+                hi = (uint32_t)strtoul(r + 1, NULL, 0);
+        }
+    }
+    for (i = 0; i < n && at[i] != tick; i++)
+        ;
+    if (i == n)
+        return;
+    snprintf(path, sizeof path, "%st%u.bin", prefix, tick);
+    f = fopen(path, "wb");
+    if (!f)
+        return;
+    for (va = lo; va < hi; ) {
+        uint32_t end = va;
+
+        while (end < hi && xbox_guest_range_mapped(end, 0x10000u))
+            end += 0x10000u;
+        if (end > va) {
+            runs++;
+            va = end;
+        } else {
+            va += 0x10000u;
+        }
+    }
+    fwrite("LSDUMP1\n", 1, 8, f);
+    fwrite(&runs, 4, 1, f);
+    for (va = lo; va < hi; ) {
+        uint32_t end = va;
+
+        while (end < hi && xbox_guest_range_mapped(end, 0x10000u))
+            end += 0x10000u;
+        if (end > va) {
+            uint32_t hdr[2] = { va, end - va };
+            char name[32] = "heap";
+
+            fwrite(hdr, 4, 2, f);
+            fwrite(name, 1, 32, f);
+            fwrite((const void *)((uintptr_t)va + g_xbox_mem_offset), 1, end - va, f);
+            va = end;
+        } else {
+            va += 0x10000u;
+        }
+    }
+    fclose(f);
+    fprintf(stderr, "[FP] memory dump at tick %u: %s\n", tick, path);
+}
+
 static void fp_frame_clock(void (*gen)(void), const FpStateRegion *state)
 {
     static int named;
@@ -467,6 +549,7 @@ static void fp_frame_clock(void (*gen)(void), const FpStateRegion *state)
                     recomp_lockstep_ignore(state->va, state->size);
         }
         recomp_lockstep_frame();
+        fp_memdump(recomp_lockstep_tick());
     }
     gen();
 }

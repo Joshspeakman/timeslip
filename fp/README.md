@@ -59,10 +59,13 @@ in this folder.
   lands beside those labels (every draw of one options frame logged: the
   labels and the row highlight are there), nothing is skipped or fails, the
   push-buffer walk never resynchronises, and changing the volume shows
-  nothing. `sub_000204F0` is the panel's frame, not the slider. Left to look
-  at: the vertex-program triangle fans drawn on that screen (98 vertices,
-  through 0x000225CF <- 0x003D4FD6 <- 0x00023070), in object space, one of
-  which may be the bar placed off the panel or scaled to nothing.
+  nothing. `sub_000204F0` is the panel's frame, not the slider. The game
+  issues no draw for the bar at all: one options frame's every draw on both
+  host paths logged, 134 and no indexed ones, the labels and highlights
+  among them; the 98-vertex fans through 0x000225CF are the backdrop's rings.
+  So it is the menu code deciding not to draw it -- probably on a value it
+  reads (the volume, or something it asks the sound system that the HLE
+  answers otherwise); next, the options screen's slider routine.
 - For Josh: TimeSplitters 2 clears some channels too, on its title and
   player-count screen, and with them honoured the blue swirl behind its logo
   comes out darker and more see-through in the middle. Which is right wants
