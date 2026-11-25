@@ -25,7 +25,7 @@ camera, its control layouts, its defaults.
 | Mouse look | Toolkit | `mouse_look`: the mouse pushes controller 1's right stick (raw input, pointer clipped to the window) |
 | Quitting | Toolkit | closing the window, Alt+F4, or the in-game menu's Quit to desktop |
 | **In-game menu** (Nov 2026) | Toolkit | Esc: pauses (holds the title and its sound; online the game goes on), Resume, Quit to desktop, and display, frame-rate and mouse settings, saved to the settings file; some apply at once, the rest at the next start, with Restart now. Dear ImGui through the RHI, so the same on every renderer |
-| Renderers | Toolkit | Windows: Direct3D 11 (default), Vulkan. Linux: Vulkan. macOS: Metal (`mac-local`/`metal`), MoltenVK |
+| Renderers | Toolkit | Windows: Vulkan (Timeslip's default since 25 Nov 2026, its `renderer` title default; falls back to Direct3D 11 if Vulkan cannot start), Direct3D 11 (the launcher's other card, or Esc > Display > Renderer). Linux: Vulkan. macOS: Metal only |
 
 ## Missing, in the order it will be done
 

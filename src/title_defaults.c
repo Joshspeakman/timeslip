@@ -54,8 +54,12 @@ const char *const recomp_title_bindings[] = {
     NULL
 };
 
-/* Mouse look on: the mouse is how a PC shooter turns. */
+/* Mouse look on: the mouse is how a PC shooter turns. Vulkan on Windows
+ * (Josh, 25 Nov 2026), Direct3D 11 a choice in the launcher and the Esc
+ * menu's Display; a Mac draws with Metal whatever this says, Linux with
+ * Vulkan anyway. */
 const char *const recomp_title_settings[] = {
     "mouse_look", "1",
+    "renderer", "vulkan",
     NULL
 };

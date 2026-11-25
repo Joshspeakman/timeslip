@@ -135,8 +135,9 @@ While playing:
 
 ## Settings
 
-The launcher's two cards choose the renderer: Direct3D 11 (the default) or
-Vulkan on Windows; the Mac draws with Metal. Its Graphics Options:
+The launcher's two cards choose the renderer on Windows: Vulkan (the default)
+or Direct3D 11; so does the in-game menu (Esc > Display > Renderer, from the
+next start). Linux draws with Vulkan, the Mac with Metal. Its Graphics Options:
 
 | Setting | What it does |
 | --- | --- |
@@ -348,7 +349,7 @@ file:
 | --- | --- | --- |
 | Resolution | `resolution_scale` | `RECOMP_RES_SCALE` |
 | Widescreen | `widescreen` | `RECOMP_WIDESCREEN` |
-| Renderer | `renderer` (`auto`, `d3d11`, `vulkan`; a Mac: always `metal`) | `RECOMP_D3D8_BACKEND` |
+| Renderer | `renderer` (`auto`: Vulkan on Windows and Linux; `d3d11`, `vulkan`; a Mac: always `metal`) | `RECOMP_D3D8_BACKEND` |
 | Texture sharpness | `anisotropy` | `RECOMP_ANISO` |
 | Post-processing (the game's soften pass) | `post_soften` (`sharp`, `console`, `off`) | `RECOMP_POST_SOFTEN` |
 | Crosshair always on with the mouse (Esc menu > Mouse) | `crosshair` (1, 0: only while aiming) | `RECOMP_CROSSHAIR` |

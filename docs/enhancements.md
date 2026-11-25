@@ -14,7 +14,7 @@ Estimates are working time; calendar time will be longer. They date from
 | --- | --- | --- |
 | Widescreen (16:9) | Both | Camera widened where the game builds it, so culling agrees; front end, HUD and every other screen laid out for 16:9 by call site. `RECOMP_TS2_MENUS=43` brings back the 4:3 front end. |
 | Internal resolution | Toolkit | `RECOMP_RES_SCALE=1..8` |
-| Vulkan renderer | Toolkit | The renderer on macOS. On Windows `RECOMP_D3D8_BACKEND=vulkan`, which needs `third_party/dxc` (the DXC GitHub release) for the build |
+| Vulkan renderer | Toolkit | Linux's renderer, and Timeslip's default on Windows (a title's `renderer` default; Direct3D 11 is the other choice), which needs `third_party/dxc` (the DXC GitHub release) for the build. The Mac draws with Metal only |
 | Launcher mouse input | Toolkit | Arrow hit boxes match what is drawn (xboxrecomp #24) |
 | Variable refresh rate | Toolkit | Borderless fullscreen (Alt+Enter), VRR presents on both renderers; launcher rows Fullscreen and Variable refresh rate (xboxrecomp #29) |
 | Frame interpolation | Both | `frame_interp = 2..4` (launcher row): 120+ frames a second shown while the game runs at 60. TS2 names its matrix registers (c60 projection, c64-c75 model-view and bones) in `src/recomp_manual.c`. See below |
