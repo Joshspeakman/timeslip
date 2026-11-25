@@ -600,21 +600,50 @@ static void fp_loading_screen_start(void (*gen)(void))
  * mouse_look is one of the settings a session checks (src/main.c).
  */
 extern int recomp_config_bool(const char *env_name, const char *key, int def);
+/* recompose src/hle/hle_input.h: the look for a guest port this frame, in
+ * degrees, x right and y down, sensitivity and invert applied; under online
+ * co-op the latched one. */
+extern int recomp_input_look(unsigned port, float *dx_deg, float *dy_deg);
 
-static void fp_look_step(void (*gen)(void), uint32_t player_ptr_va,
-                         uint32_t controls_off)
+/*
+ * Native mouse look (as TimeSplitters 2's ts2_mouse_look): the mouse turns
+ * the player as an angle rather than through the right stick, which the
+ * game accelerates and which Inverse Look turns over. The look step keeps
+ * the player's look as degrees in its look state: yaw at +0x100 (0 to 360),
+ * pitch at +0x104 (held within the limit at pitch_limit). After the game's
+ * own step -- a pad's stick still turns as the game turns it -- the
+ * controller's mouse look is added: the look state's controller is the
+ * game's own mapping, its id (+0) through the table at port_map, or the id
+ * itself while port_direct is set.
+ */
+typedef struct FpLook {
+    uint32_t state_ptr;      /* the look state being stepped, a pointer */
+    uint32_t controls_off;   /* the profile's controls, a pointer in the state */
+    uint32_t yaw_off, pitch_off;
+    uint32_t pitch_limit;    /* a float */
+    uint32_t port_map, port_direct;
+} FpLook;
+
+#define FP_M32(va) (*(volatile uint32_t *)((uintptr_t)(uint32_t)(va) + g_xbox_mem_offset))
+#define FP_MF(va)  (*(volatile float *)((uintptr_t)(uint32_t)(va) + g_xbox_mem_offset))
+
+static void fp_look_step(void (*gen)(void), const FpLook *l)
 {
     static int mouse = -1;
     volatile uint8_t *flags = NULL;
     uint8_t was = 0;
     uint32_t p, c;
+    float dx, dy;
 
     if (mouse < 0)
         mouse = recomp_config_bool("RECOMP_MOUSE_LOOK", "mouse_look", 0);
+    p = FP_M32(l->state_ptr);
+    if (!(p >= 0x10000u && p < 0x84000000u)) {
+        gen();
+        return;
+    }
     if (mouse) {
-        p = *(volatile uint32_t *)((uintptr_t)player_ptr_va + g_xbox_mem_offset);
-        c = p >= 0x10000u && p < 0x84000000u
-            ? *(volatile uint32_t *)((uintptr_t)(p + controls_off) + g_xbox_mem_offset) : 0;
+        c = FP_M32(p + l->controls_off);
         if (c >= 0x10000u && c < 0x84000000u) {
             flags = (volatile uint8_t *)((uintptr_t)(c + 2u) + g_xbox_mem_offset);
             was = *flags;
@@ -624,6 +653,29 @@ static void fp_look_step(void (*gen)(void), uint32_t player_ptr_va,
     gen();
     if (flags)
         *flags = was;
+    if (mouse) {
+        uint32_t id = FP_M32(p), port;
+
+        port = FP_M32(l->port_direct) ? id : (id < 16u ? FP_M32(l->port_map + 4u * id) : 4u);
+        if (port < 4u && recomp_input_look(port, &dx, &dy)) {
+            float yaw = FP_MF(p + l->yaw_off) - dx;
+            float pitch = FP_MF(p + l->pitch_off) - dy;   /* dy is down the screen */
+            float limit = FP_MF(l->pitch_limit);
+
+            while (yaw >= 360.0f)
+                yaw -= 360.0f;
+            while (yaw < 0.0f)
+                yaw += 360.0f;
+            if (limit > 0.0f && limit < 90.0f) {
+                if (pitch > limit)
+                    pitch = limit;
+                if (pitch < -limit)
+                    pitch = -limit;
+            }
+            FP_MF(p + l->yaw_off) = yaw;
+            FP_MF(p + l->pitch_off) = pitch;
+        }
+    }
 }
 
 /*

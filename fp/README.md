@@ -28,9 +28,14 @@ in this folder.
   squeeze none of Future Perfect's 2D (`fp/CMakeLists.txt`).
 - **Installs** on Windows and the Mac, with its own icon from the disc and
   the launcher's Updates tile (see "Building").
+- **Native mouse look**, as TimeSplitters 2's: the mouse turns the player
+  as an angle, added after the game's look step (`sub_0025D520`) to the
+  look state's yaw and pitch ([0x007B0C7C] +0x100, +0x104, degrees; the
+  pitch held within the game's limit at 0x007B0C80), for the controller the
+  game maps that state to; the right stick is left to a pad. Online co-op
+  latches each machine's mouse with its controller.
 - **Keyboard and mouse** laid out over the game's own Default control layout
-  (Settings > Controls): W A S D, the mouse to look (turned over for the
-  game's default Inverse Look), left button fire, right button aim, G
+  (Settings > Controls): W A S D, the mouse to look, left button fire, right button aim, G
   grenade, R reload, V melee, F/E/Space activate, C/Ctrl crouch, the wheel
   and Q change weapon, the middle button or Z toggle the weapon's mode (zoom
   in while aiming), X change grenades (zoom out). All of it in
@@ -43,12 +48,9 @@ in this folder.
 - **The launcher's art** from your disc (`tools/make_disc_art.py --title
   fp`): the logo, the ship over the planet, the cockpit, the canyon, the same
   frames on Windows and the Mac (the run is timed by frame under lockstep).
-- Not yet: native mouse look (the mouse moves the right stick, which the
-  game's turn acceleration acts on; TimeSplitters 2 turns its camera
-  directly, which also changes what online co-op sends. Where to start: the
-  look step `sub_0025D520` turns the stick into the look state's angles,
-  [0x007B0C7C] +0x100 and +0x104), the number keys, each co-op player's
-  whole screen. The game has its own crosshair options (Settings > Controls
+- Not yet: the number keys (the held weapon is the look state's +0x58C: 14
+  the Scifi Handgun, 37 the next; what is owned is still to be found), each
+  co-op player's whole screen. The game has its own crosshair options (Settings > Controls
   > Crosshair).
 - **Field of view**: the launcher's and the Esc menu's FOV setting replaces
   the game's 55 degrees (vertical) where the game asks for it

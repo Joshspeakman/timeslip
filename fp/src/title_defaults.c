@@ -26,13 +26,11 @@
  *   D-pad left/right   Change weapon              the mouse wheel, Q, Left/Right
  *   Start              Pause (objectives)         Enter, Tab
  *
- * The game's default profile has Inverse Look on (the right stick pushed up
- * looks down), so the mouse's look is turned over to match: pushed forward,
- * it looks up. A player who turns Inverse Look off in the game's Controls
- * turns mouse_invert off as well (the launcher's Controls, or the Esc
- * menu). Mouse look here is the right stick moved by the mouse; Future
- * Perfect has no camera hook of its own yet (TimeSplitters 2's
- * recomp_mouse_look_native).
+ * The mouse turns the player directly, as an angle (native mouse look,
+ * src/recomp_manual.c, fp_look_step, as TimeSplitters 2's): the game's own
+ * Inverse Look (on in a new profile) is for the stick and does not turn the
+ * mouse over, so pushed forward it looks up; mouse_invert (the launcher's
+ * Controls, the Esc menu) is the mouse's own.
  *
  * In the menus W A S D and the arrows move, Enter, Space or F choose (Start
  * chooses too) and Backspace goes back; the menus' X and Y (Player Progress,
@@ -62,13 +60,14 @@ const char *const recomp_title_bindings[] = {
     NULL
 };
 
-/* Mouse look on: the mouse is how a PC shooter turns, turned over for the
- * game's default Inverse Look (above). Vulkan on Windows (Josh, 25 Nov
- * 2026), Direct3D 11 a choice in the launcher and the Esc menu's Display; a
- * Mac draws with Metal whatever this says, Linux with Vulkan anyway. */
+/* Mouse look on: the mouse is how a PC shooter turns. It turns the player
+ * as an angle (src/recomp_manual.c, fp_look_step), so the game's Inverse
+ * Look -- on in a new profile, for the stick -- does not turn it over:
+ * pushed forward it looks up. Vulkan on Windows (Josh, 25 Nov 2026),
+ * Direct3D 11 a choice in the launcher and the Esc menu's Display; a Mac
+ * draws with Metal whatever this says, Linux with Vulkan anyway. */
 const char *const recomp_title_settings[] = {
     "mouse_look", "1",
-    "mouse_invert", "1",
     "renderer", "vulkan",
     NULL
 };

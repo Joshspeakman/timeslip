@@ -93,9 +93,19 @@ void sub_00022030(void) { fp_vblank_count(sub_00022030_gen); }
  * controls ([state +0x1500]) is set, levels the pitch (+0x104) by a share a
  * frame (0x0025DB95): Auto Lookahead. The controls' address and that bit
  * are the same ones the Controls screen changes (the profile slots at
- * 0x007BEDC0, 0x1F54 apart; sub_00069720 returns a slot's controls). */
+ * 0x007BEDC0, 0x1F54 apart; sub_00069720 returns a slot's controls).
+ *
+ * Native mouse look: the look state's yaw is +0x100 and pitch +0x104, in
+ * degrees (found by dumping the state through a turn and a look: 349.6 to
+ * 87.4 and back, 10.3 to -12.9 and back); the pitch is held within
+ * +-[0x007B0C80] (0x0025DCCB). Its controller: the stick reads
+ * (sub_000CF200 -> sub_00042970) take the state's id (+0) through the table
+ * at 0x006B93C0 to a pad, or the id itself while [0x0076B0FC] is set. */
+static const FpLook k_fp_look = {
+    0x007B0C7Cu, 0x1500u, 0x100u, 0x104u, 0x007B0C80u, 0x006B93C0u, 0x0076B0FCu
+};
 extern void sub_0025D520_gen(void);
-void sub_0025D520(void) { fp_look_step(sub_0025D520_gen, 0x007B0C7Cu, 0x1500u); }
+void sub_0025D520(void) { fp_look_step(sub_0025D520_gen, &k_fp_look); }
 
 /* base_fov is sub_000CB3B0(player) (fp_base_fov): fld [0x004785CC] (55.0,
  * the game's vertical field of view), or [0x00478900] while player+0x254

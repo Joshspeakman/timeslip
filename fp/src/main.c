@@ -654,10 +654,13 @@ static int title_main(int argc, char **argv)
     xbox_WatchdogStart();
 
     /* The field of view can be chosen (recomp_manual.c, fp_base_fov): 55 is
-     * the game's. */
+     * the game's. The mouse turns the player as an angle (fp_look_step),
+     * not through the right stick. */
     {
         extern void hle_fov_title_default(int degrees);
+        extern void recomp_mouse_look_native(int on);
         hle_fov_title_default(55);
+        recomp_mouse_look_native(1);
     }
 
     /* Widescreen: Future Perfect's 16:9 mode lays out its 2D for the 16:9

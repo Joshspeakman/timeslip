@@ -8,7 +8,7 @@ hash at every checkpoint.
 | File | Release | What it plays | Frames |
 | --- | --- | --- | --- |
 | `coop-2401-us.trace` | USA | A fresh game: 2 PLAYER, both make a profile (player 2 by START), Story Co-op, 2401 Time To Split on Normal, the briefing and the intro, then both players walking, turning, strafing and firing | 13,730 |
-| `arcade-vietnam-us.trace` | USA | A fresh game: 2 PLAYER, both profiles, Arcade, Arcade, Deathmatch, Vietnam, the recommended weapons and six bots, GO!, both pick Cortez; then both players walking, turning, strafing and firing among the bots -- hits, deaths, respawns, pickups, ranks from 1st= to 7th -- with a pause and a resume at 160 s | 14,329 |
+| `arcade-vietnam-us.trace` | USA | A fresh game: 2 PLAYER, both profiles, Arcade, Arcade, Deathmatch, Vietnam, the recommended weapons and six bots, GO!, both pick Cortez; then both players walking, turning, strafing and firing among the bots -- hits, deaths, respawns, pickups, ranks from 1st= to 7th -- with a pause and a resume at 160 s, and player 1 turning and looking with the mouse (native mouse look, latched with the controller) four times from 110 s | 14,359 |
 
 Both recorded 26 November 2026 on Windows (Vulkan) with `RECOMP_LOCKSTEP=1`
 and `RECOMP_INPUT_SEQ_PAD=1`; controller 2 by `RECOMP_INPUT_SEQ_P2`. Reduced
@@ -26,7 +26,11 @@ with `py -3 -m tools.lockstep compact` (from `recompose/`).
   `20000:down,21000:a,26000:a,32000:a,38000:a,61000:down,63000:a,68000:a,73000:a,78000:a,83000:a,88000:a`,
   controller 2 `42000:start,46000:a,50000:a,54000:a,88500:a`; then the same
   rounds from 105 s for 20 rounds, less those starting from 158 s to 169 s,
-  and controller 1 `160000:start,165000:a` (pause, resume).
+  and controller 1 `160000:start,165000:a` (pause, resume); the mouse by
+  `RECOMP_MOUSE_FAKE=110000-112500:9,0;130000-131800:-12,3;150000-151200:2,-7;175000-178500:11,-1`
+  (542 frames carry a look). Replayed with mouse look off it differs from
+  the frame after the first look, so the look is in the game every machine
+  computes.
 
 Replay one from a copy of the game folder with no `UDATA` and an empty save
 folder, muted:
