@@ -6,7 +6,26 @@ toolkit, beside TimeSplitters 2 (the repository's root). It shares the toolkit
 submodule, the tools and the launcher; everything that is about this game is
 in this folder.
 
-**Work in progress** (Nov 2026): being brought up on Windows and the Mac.
+<p align="center">
+<img src="docs/screenshots/vietnam.jpg" width="49%" alt="Vietnam, Arcade, before the start">
+<img src="docs/screenshots/sparks.jpg" width="49%" alt="Firing at a wall in Vietnam">
+<img src="docs/screenshots/2401-canyon.jpg" width="49%" alt="2401, Time To Split: the canyon">
+<img src="docs/screenshots/plasma-rifle.jpg" width="49%" alt="The plasma rifle in 2401's canyon">
+<img src="docs/screenshots/temple.jpg" width="49%" alt="The temple in Vietnam">
+<img src="docs/screenshots/main-menu.jpg" width="49%" alt="The main menu">
+</p>
+
+Rendered at 5 times the console's resolution in the game's own widescreen,
+captured from the game as it runs (the two recordings in `tests/lockstep`,
+player 1's view).
+
+<p align="center">
+<img src="docs/screenshots/launcher.png" width="45%" alt="The launcher: the renderer, the settings, Play">
+</p>
+
+**Plays on Windows and the Mac** (Nov 2026), and between them: online co-op
+and System Link tested live between a Windows PC and a Mac on the final
+build (25 November 2026), with the settings below on both.
 
 ## Where it is (25 November 2026)
 
