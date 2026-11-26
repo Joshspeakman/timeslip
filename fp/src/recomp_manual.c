@@ -679,6 +679,42 @@ extern void recomp_mouse_look_native(int on);
 extern void recomp_mouse_look_left(int on);
 extern void recomp_mouse_pad_buttons(int on);
 static volatile int g_fp_frame_play, g_fp_frame_look, g_fp_frame_editor;
+/* A player's view this frame was only part of the screen (a split screen:
+ * fp_viewport_rect, from the player's pass). */
+static volatile int g_fp_frame_partial;
+
+/*
+ * The scissors, as TimeSplitters 2's (ts2_present), but for the world only.
+ * Future Perfect clips each room it sees through a gap -- a doorway, a cleft
+ * in a canyon wall -- to the gap's rectangle on screen, and scissors the
+ * rest of the world to the whole screen, millions of draws a minute in
+ * play. In frame interpolation's in-between frames the rectangles are where
+ * the newer frame had them, so while the view turned fast a slit of sky
+ * showed through a solid rock wall and slabs near the screen's edge were
+ * cut off, at 4x most of all; and the whole-screen one, 0,0-639,479, leaves
+ * the picture's last column and row dark. Its HUD uses them too, though,
+ * unlike TimeSplitters 2's: the weapon-mode panel wipes in through one, and
+ * without it popped in whole (a replayed walk through 2401, every scissored
+ * draw of a frame logged: the world's test depth, the HUD's do not). So off
+ * for the draws that test depth (recompose XBOX_D3D8_SCISSORS_OFF_WORLD),
+ * and only for a frame of play whose every player's view is the whole
+ * screen: the menus' list boxes and MapMaker need theirs, and a split
+ * screen keeps each view to its part of the screen with one.
+ */
+extern void xbox_D3D8SetScissorsOff(int mode);   /* recompose d3d8_xbox.h */
+#define FP_SCISSORS_KEEP    0
+#define FP_SCISSORS_IN_PLAY 3                     /* XBOX_D3D8_SCISSORS_OFF_WORLD */
+
+static void fp_scissors_frame(int played, int partial)
+{
+    static int mode = -1;
+    int want = played && !partial ? FP_SCISSORS_IN_PLAY : FP_SCISSORS_KEEP;
+
+    if (want != mode) {
+        mode = want;
+        xbox_D3D8SetScissorsOff(want);
+    }
+}
 
 static void fp_menu_mouse_frame(void)
 {
@@ -687,10 +723,11 @@ static void fp_menu_mouse_frame(void)
     static int shown = -1, said;
     int mode;
 
+    fp_scissors_frame(g_fp_frame_play, g_fp_frame_partial);
     quiet_play = g_fp_frame_play ? 0 : quiet_play < 1000 ? quiet_play + 1 : quiet_play;
     quiet_look = g_fp_frame_look ? 0 : quiet_look < 1000 ? quiet_look + 1 : quiet_look;
     quiet_editor = g_fp_frame_editor ? 0 : quiet_editor < 1000 ? quiet_editor + 1 : quiet_editor;
-    g_fp_frame_play = g_fp_frame_look = g_fp_frame_editor = 0;
+    g_fp_frame_play = g_fp_frame_look = g_fp_frame_editor = g_fp_frame_partial = 0;
     if (quiet_play < 15)
         mode = quiet_look < 15 ? MOUSE_LOOK : MOUSE_STICK;
     else
@@ -1263,6 +1300,17 @@ static void fp_viewport_rect(void (*gen)(void), const FpViews *fv)
             g_fp_pass[g_fp_passes].hud_vp = vp;
             g_fp_passes++;
         }
+    }
+    /* A player's pass laid out as part of the screen: a split screen, which
+     * keeps the scissors (fp_scissors_frame). As laid out, after the
+     * whole-screen layout above. */
+    if (from == fv->pass_caller) {
+        uint32_t w = FP_M32(fv->screen_w), h = FP_M32(fv->screen_h);
+
+        if (w >= 2u && h >= 2u &&
+            ((int)FP_M32(g_esp + 8) > 0 || (int)FP_M32(g_esp + 12) > 0 ||
+             (int)FP_M32(g_esp + 16) < (int)w - 1 || (int)FP_M32(g_esp + 20) < (int)h - 1))
+            g_fp_frame_partial = 1;
     }
     gen();
 }
