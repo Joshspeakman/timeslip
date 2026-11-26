@@ -138,9 +138,11 @@ endif()
 if(COMMAND recomp_add_launcher)
     # COOP: the System Link tab also hosts and joins online co-op, which TS2's
     # build supports (its frame clock is hooked for lockstep,
-    # src/recomp_manual.c).
+    # src/recomp_manual.c). GAMES: one launcher for both games, the same one
+    # Future Perfect's build makes (src/launcher_games.c), so either install
+    # opens on both; each game keeps its own settings, controls and art.
     recomp_add_launcher(${PROJECT_NAME}_launcher ${PROJECT_NAME}.exe COOP
-        DEFAULTS ${CMAKE_CURRENT_SOURCE_DIR}/src/title_defaults.c
+        GAMES ${CMAKE_CURRENT_SOURCE_DIR}/src/launcher_games.c
         BRAND "Timeslip" SHOWCASE
         THEME ${CMAKE_CURRENT_SOURCE_DIR}/src/launcher_theme_timeslip.h)
 endif()

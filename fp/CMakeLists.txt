@@ -156,10 +156,12 @@ endif()
 # The settings window: video options, input bindings, then starts the game.
 # COOP: the System Link tab also hosts and joins online co-op, which Future
 # Perfect's build supports (its frame clock is hooked for lockstep,
-# src/recomp_manual.c and config/us/overrides.inc).
+# src/recomp_manual.c and config/us/overrides.inc). GAMES: the one launcher
+# for both games, as TimeSplitters 2's build makes it (../src/launcher_games.c),
+# in the collection's one look (../src/launcher_theme_timeslip.h).
 if(COMMAND recomp_add_launcher)
     recomp_add_launcher(${PROJECT_NAME}_launcher ${PROJECT_NAME}.exe COOP
-        DEFAULTS ${CMAKE_CURRENT_SOURCE_DIR}/src/title_defaults.c
+        GAMES ${CMAKE_CURRENT_SOURCE_DIR}/../src/launcher_games.c
         BRAND "Timeslip" SHOWCASE
-        THEME ${CMAKE_CURRENT_SOURCE_DIR}/src/launcher_theme_fp.h)
+        THEME ${CMAKE_CURRENT_SOURCE_DIR}/../src/launcher_theme_timeslip.h)
 endif()

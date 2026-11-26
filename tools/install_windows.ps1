@@ -7,8 +7,11 @@ shortcut to its launcher, and an entry in Settings > Apps that removes it again.
 
 -Title is the game: ts2, TimeSplitters 2 (the default; "Timeslip", built in build\Release),
 or fp, TimeSplitters: Future Perfect ("TimeSplitters Future Perfect", built in
-fp\build\Release by tools\build_windows.ps1 -Title fp). Each has its own folder, shortcuts
-and Settings > Apps entry.
+fp\build\Release by tools\build_windows.ps1 -Title fp). Each has its own folder and
+Settings > Apps entry. The launcher is one for both games (src/launcher_games.c): either
+install's opens on both, so there is one shortcut, "Timeslip", to TimeSplitters 2's
+install's launcher when it is installed, else to this one's; the separate "TimeSplitters
+Future Perfect" shortcuts of before are taken away.
 
 -Game is the game's folder (default.xbe beside its data, and the saves in UDATA): the
 install links to it rather than copying it, so saves and settings carry on where they
@@ -41,7 +44,7 @@ $titles = @{
              Name = "Timeslip"; Link = "Timeslip"; Key = "Timeslip"; ArtId = "4553000A";
              Desc = "TimeSplitters 2, recompiled to run natively"; Icon = "timeslip.ico" }
     fp  = @{ Exe = "timeslip_fp"; Build = "fp\build\Release"; Game = "fp\game"; Folder = "Timeslip Future Perfect";
-             Name = "TimeSplitters Future Perfect"; Link = "TimeSplitters Future Perfect"; Key = "TimeslipFuturePerfect";
+             Name = "TimeSplitters Future Perfect"; Link = "Timeslip"; Key = "TimeslipFuturePerfect";
              ArtId = "45410066"; Desc = "TimeSplitters: Future Perfect, recompiled to run natively";
              Icon = "timeslip_fp.ico" }
 }
@@ -53,6 +56,14 @@ if (-not $Game) { $Game = Join-Path $repo $t.Game }
 if (-not $Dest) { $Dest = Join-Path $env:LOCALAPPDATA "Programs\$($t.Folder)" }
 $startMenu = Join-Path ([Environment]::GetFolderPath("Programs")) "$($t.Link).lnk"
 $desktop = Join-Path ([Environment]::GetFolderPath("Desktop")) "$($t.Link).lnk"
+# Future Perfect's own shortcuts, from before the launcher was one for both games.
+$oldLinks = @("TimeSplitters Future Perfect") | ForEach-Object {
+    (Join-Path ([Environment]::GetFolderPath("Programs")) "$_.lnk"),
+    (Join-Path ([Environment]::GetFolderPath("Desktop")) "$_.lnk") }
+# The other game's install, where its launcher -- the same one -- is.
+$otherTitle = if ($Title -eq "ts2") { "fp" } else { "ts2" }
+$otherDest = Join-Path $env:LOCALAPPDATA "Programs\$($titles[$otherTitle].Folder)"
+$otherLauncher = Join-Path $otherDest "$($titles[$otherTitle].Exe)_launcher.exe"
 $uninstKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$($t.Key)"
 
 function Stop-Running {
@@ -60,6 +71,26 @@ function Stop-Running {
     Get-Process $names -ErrorAction SilentlyContinue |
         Where-Object { $_.Path -and $_.Path.StartsWith($Dest, [StringComparison]::OrdinalIgnoreCase) } |
         ForEach-Object { Stop-Process -Id $_.Id -Force; Start-Sleep -Milliseconds 300 }
+}
+
+# The collection's shortcut, "Timeslip", to a launcher, with an icon from its install.
+function Set-CollectionLinks([string]$target, [string]$iconAt) {
+    $shell = New-Object -ComObject WScript.Shell
+    foreach ($l in $startMenu, $desktop) {
+        $s = $shell.CreateShortcut($l)
+        $s.TargetPath = $target
+        $s.WorkingDirectory = Split-Path $target
+        $s.IconLocation = $iconAt
+        $s.Description = "TimeSplitters 2 and TimeSplitters: Future Perfect, recompiled to run natively"
+        $s.Save()
+    }
+}
+
+# The icon an install made for itself (make_icon.py), else its launcher's own.
+function Install-Icon([string]$dir, [string]$t) {
+    $ico = Join-Path $dir $titles[$t].Icon
+    if (Test-Path $ico) { return "$ico,0" }
+    return (Join-Path $dir "$($titles[$t].Exe)_launcher.exe") + ",0"
 }
 
 # Whether a path is inside this install (a shortcut's target, the Apps entry's location).
@@ -91,8 +122,16 @@ if ($Uninstall) {
     # Only what belongs to this install: a test install's uninstall leaves the real
     # one's shortcuts and Apps entry alone.
     $shell = New-Object -ComObject WScript.Shell
-    foreach ($l in $startMenu, $desktop) {
-        if ((Test-Path $l) -and (In-Dest $shell.CreateShortcut($l).TargetPath)) { Remove-Item $l -Force }
+    $ours = $false
+    foreach ($l in @($startMenu, $desktop) + $oldLinks) {
+        if ((Test-Path $l) -and (In-Dest $shell.CreateShortcut($l).TargetPath)) {
+            Remove-Item $l -Force
+            if ($l -eq $startMenu -or $l -eq $desktop) { $ours = $true }
+        }
+    }
+    # "Timeslip" pointed here, and the other game is still installed: to its launcher.
+    if ($ours -and (Test-Path $otherLauncher)) {
+        Set-CollectionLinks $otherLauncher (Install-Icon $otherDest $otherTitle)
     }
     if (Test-Path $Dest) {
         $j = Join-Path $Dest "game"
@@ -172,15 +211,22 @@ if ($NoShortcuts) {
     return
 }
 
-# Shortcuts, with that icon.
+# One shortcut for both games, "Timeslip": to TimeSplitters 2's install's launcher when it
+# is installed (this one, or the other), else to this one's; the launcher opens on both
+# games either way. Future Perfect's own shortcuts of before, into either install, go.
 $shell = New-Object -ComObject WScript.Shell
-foreach ($l in $startMenu, $desktop) {
-    $s = $shell.CreateShortcut($l)
-    $s.TargetPath = Join-Path $Dest $launcher
-    $s.WorkingDirectory = $Dest
-    $s.IconLocation = $icon
-    $s.Description = $t.Desc
-    $s.Save()
+foreach ($l in $oldLinks) {
+    if (Test-Path $l) {
+        $to = $shell.CreateShortcut($l).TargetPath
+        if ((In-Dest $to) -or ($to -and $to.StartsWith($otherDest, [StringComparison]::OrdinalIgnoreCase))) {
+            Remove-Item $l -Force
+        }
+    }
+}
+if ($Title -eq "fp" -and (Test-Path $otherLauncher)) {
+    Set-CollectionLinks $otherLauncher (Install-Icon $otherDest "ts2")
+} else {
+    Set-CollectionLinks (Join-Path $Dest $launcher) $icon
 }
 
 # Settings > Apps.

@@ -135,9 +135,14 @@ While playing:
 
 ## Settings
 
-The launcher's two cards choose the renderer on Windows: Vulkan (the default)
-or Direct3D 11; so does the in-game menu (Esc > Display > Advanced > Renderer, from the
-next start). Linux draws with Vulkan, the Mac with Metal. Its Graphics Options:
+The launcher is one for both games: its two cards choose TimeSplitters 2 or
+Future Perfect (it remembers the last), and everything under them -- Graphics
+Options, Controls, Online, Saves, Updates, Play -- is that game's, each with its
+own settings file and its own keys (`titles\<id>.input.json` once you change
+one). The renderer is in Graphics Options > Advanced on Windows: Vulkan (the
+default) or Direct3D 11; so is the in-game menu's (Esc > Display > Advanced >
+Renderer, from the next start). Linux draws with Vulkan, the Mac with Metal.
+Its Graphics Options:
 
 | Setting | What it does |
 | --- | --- |
@@ -332,7 +337,7 @@ it, which takes longer. Later runs only recompile. The program ends up in
 | | Windows | macOS and Linux |
 | --- | --- | --- |
 | The game | `timeslip.exe` | `timeslip` |
-| Settings window, then the game | `timeslip_launcher.exe` | `timeslip_launcher` |
+| Settings window for both games, then the one picked | `timeslip_launcher.exe` | `timeslip_launcher` |
 
 If your extracted games live somewhere else, `game` can be a link to the folder
 (`ln -s "/path/to/TimeSplitters 2" game`), or pass `--game DIR` to the build and

@@ -257,7 +257,9 @@ committed), then:
 
 On Windows with the zig toolchain, `tools\build_windows.ps1 -Title fp -Vulkan`.
 The executable is `fp/build/Release/timeslip_fp(.exe)`, with
-`timeslip_fp_launcher` beside it.
+`timeslip_fp_launcher` beside it: the collection's one launcher, the same as
+TimeSplitters 2's (`../src/launcher_games.c`), which opens on both games and
+finds TimeSplitters 2 in its install folder or build tree.
 
 To install it as a program: `tools\install_windows.ps1 -Title fp` on Windows
 (`%LOCALAPPDATA%\Programs\Timeslip Future Perfect`, Start menu and desktop
