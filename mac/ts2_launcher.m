@@ -589,7 +589,7 @@ static BOOL off_word(NSString *v)
  * settings domain they had as two apps, so nothing is lost by the move to one. */
 @interface TSGame : NSObject
 @property NSString *key, *name, *cardName, *line, *place, *exe, *titleID, *dataPath, *confPath, *peerAddr, *missing;
-@property NSUserDefaults *defaults;
+@property NSUserDefaults *defaults; @property NSString *domainName;   /* its settings domain, and that domain's name */
 @property BOOL ready;
 @property NSImage *backdrop, *logo, *glow, *card;
 @property NSArray<TSRow *> *tiles; @property NSArray<TSPanel *> *panels;
@@ -601,11 +601,15 @@ static BOOL off_word(NSString *v)
 @end
 
 /* A row whose values are the settings file's own words: what the file says, else what this game's launcher
- * remembered before it used the file (`legacy`), else `dflt`. A value the file has that the row does not list (a
- * frame cap typed by hand, say) is added, so opening the launcher never changes it. */
+ * remembered before it used the file (`legacy`), else `dflt`. Until this launcher has saved the file once
+ * (g_legacy_first), what the earlier launcher remembered comes first: it handed its settings over as environment
+ * variables, which won over the file, so they are what the game was played with, whatever an older file says. A value
+ * the file has that the row does not list (a frame cap typed by hand, say) is added, so opening the launcher never
+ * changes it. */
+static BOOL g_legacy_first;
 static TSRow *conf_row(NSString *title, NSArray<NSDictionary *> *choices, NSString *have, NSString *legacy, NSString *dflt)
 {
-    NSString *v = have ?: legacy ?: dflt;
+    NSString *v = g_legacy_first ? (legacy ?: have ?: dflt) : (have ?: legacy ?: dflt);
     if (index_of(choices, v, -1) < 0) choices = [choices arrayByAddingObject:@{@"value": v, @"label": v, @"note": @"As the settings file has it"}];
     return row(title, choices, v, index_of(choices, dflt, 0));
 }
@@ -620,10 +624,15 @@ static TSRow *conf_row(NSString *title, NSArray<NSDictionary *> *choices, NSStri
 @implementation Launcher
 - (TSGame *)game { return self.games[self.current]; }
 /* The settings domain a game's launcher used as its own app; a test (TS2_LAUNCHER_PREFS=<prefix>) gets its own. */
+static NSString *domain_name(NSString *bundleID)
+{
+    const char *test = getenv("TS2_LAUNCHER_PREFS");
+    return test && *test ? [NSString stringWithFormat:@"%s.%@", test, bundleID] : bundleID;
+}
 static NSUserDefaults *domain(NSString *bundleID)
 {
     const char *test = getenv("TS2_LAUNCHER_PREFS");
-    if (test && *test) return [[NSUserDefaults alloc] initWithSuiteName:[NSString stringWithFormat:@"%s.%@", test, bundleID]];
+    if (test && *test) return [[NSUserDefaults alloc] initWithSuiteName:domain_name(bundleID)];
     if ([bundleID isEqual:NSBundle.mainBundle.bundleIdentifier]) return NSUserDefaults.standardUserDefaults;
     return [[NSUserDefaults alloc] initWithSuiteName:bundleID];
 }
@@ -648,7 +657,7 @@ static NSUserDefaults *domain(NSString *bundleID)
     if (getenv("TS2_CONF_DIR")) g.confPath = [@(getenv("TS2_CONF_DIR")) stringByAppendingPathComponent:file];
     else if (getenv("RECOMP_DISPLAY_CONFIG") && *getenv("RECOMP_DISPLAY_CONFIG")) g.confPath = @(getenv("RECOMP_DISPLAY_CONFIG"));
     else g.confPath = [[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/xboxrecomp/titles"] stringByAppendingPathComponent:file];
-    g.defaults = domain(bid);
+    g.defaults = domain(bid); g.domainName = domain_name(bid);
     [g.defaults registerDefaults:@{@"fullscreen": @NO, @"scale": @2, @"widescreen": @YES, @"aniso": @8, @"cap": @"adaptive", @"interp": @0,
                                    @"soften": @"sharp", @"fps": @NO, @"scheme": @"kbm", @"mouse": @80, @"crosshair": @YES, @"link": @"off",
                                    @"peer": @"", @"upnp": @NO}];
@@ -669,9 +678,12 @@ static NSUserDefaults *domain(NSString *bundleID)
 - (void)buildRows:(TSGame *)g
 {
     NSUserDefaults *d = g.defaults; NSDictionary<NSString *, NSString *> *c = conf_read(g.confPath);
+    /* what the earlier launcher saved: only what is stored, not the defaults registered above */
+    NSDictionary *stored = [NSUserDefaults.standardUserDefaults persistentDomainForName:g.domainName] ?: @{};
+    g_legacy_first = ![stored[@"confSaved"] boolValue];
     NSString *(^b)(NSString *) = ^NSString *(NSString *k) { return c[k] ? (off_word(c[k]) ? @"0" : @"1") : nil; };   /* a yes/no line */
-    NSString *(^old)(NSString *) = ^NSString *(NSString *k) { return [d objectForKey:k] ? [NSString stringWithFormat:@"%@", [d objectForKey:k]] : nil; };
-    NSString *(^oldb)(NSString *) = ^NSString *(NSString *k) { return [d objectForKey:k] ? ([d boolForKey:k] ? @"1" : @"0") : nil; };
+    NSString *(^old)(NSString *) = ^NSString *(NSString *k) { return stored[k] ? [NSString stringWithFormat:@"%@", stored[k]] : nil; };
+    NSString *(^oldb)(NSString *) = ^NSString *(NSString *k) { return stored[k] ? ([stored[k] boolValue] ? @"1" : @"0") : nil; };
 
     /* Graphics Options */
     g.display = conf_row(@"Display", @[@{@"value": @"0", @"label": @"Window", @"note": @"A window on the desktop; Alt-Return switches in the game"},
@@ -722,7 +734,7 @@ static NSUserDefaults *domain(NSString *bundleID)
     /* Keyboard & Mouse is mouse look (`mouse_look`, the game's default): the mouse turns the view. The keys are the
      * game's own either way (its title_defaults.c, or a bindings file, titles/<ID>.input.json), and a controller
      * works beside them. */
-    NSString *oldScheme = [d objectForKey:@"scheme"] ? ([[d stringForKey:@"scheme"] isEqual:@"pad"] ? @"0" : @"1") : nil;
+    NSString *oldScheme = stored[@"scheme"] ? ([stored[@"scheme"] isEqual:@"pad"] ? @"0" : @"1") : nil;
     g.scheme = conf_row(@"Scheme", @[@{@"value": @"1", @"label": @"Keyboard & Mouse", @"note": @"The mouse turns the view; the keys below, and a controller still works beside them"},
                                      @{@"value": @"0", @"label": @"Controller", @"note": @"The right stick turns the view; the mouse is left to the menus"}], b(@"mouse_look"), oldScheme, @"1");
     NSMutableArray *ms = [NSMutableArray array];
@@ -907,6 +919,7 @@ static NSUserDefaults *domain(NSString *bundleID)
                              @"frame_interp": g.interp.value, @"fps_overlay": g.fps.value, @"renderer": g.renderer.value,
                              @"mouse_look": g.scheme.value, @"mouse_sensitivity": g.mouse.value, @"crosshair": g.crosshair.value});
     [d removeObjectForKey:@"renderer"];                                 /* from when the Mac also had Vulkan */
+    [d setBool:YES forKey:@"confSaved"];                                /* the file has this launcher's settings now: it comes first */
     [d setObject:g.kbm ? @"kbm" : @"pad" forKey:@"scheme"];
     [d setObject:g.link.value forKey:@"link"];
     [d setObject:g.peerAddr ?: @"" forKey:@"peer"];
