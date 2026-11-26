@@ -680,6 +680,19 @@ static int title_main(int argc, char **argv)
         extern void xbox_D3D8SetClearChannels(int on);
         xbox_D3D8SetClearChannels(1);
     }
+    /* No extra half pixel (recompose d3d8_xbox.h, xbox_D3D8SetPixelOffset):
+     * every draw Future Perfect makes goes through a vertex program (its log
+     * counts none fixed-function), whose screen positions carry the XDK's
+     * 0.53125 already (c-38 = 320.53125) or are hardware coordinates (its
+     * full-screen copy pass, 0 to 640 sampling texels 0 to 640). With the
+     * default 0.5 the picture sat a console pixel right of xemu's: a black
+     * strip down the left edge at 2x and over (two screen pixels at 2x, four
+     * at 4x), and the menu's logo two screen pixels off at 1280 wide. With 0
+     * the logo lands on xemu's to a tenth of a pixel. */
+    {
+        extern void xbox_D3D8SetPixelOffset(float pixels);
+        xbox_D3D8SetPixelOffset(0.0f);
+    }
 
     /* Online co-op (recompose src/kernel/recomp_lockstep.h): a joiner meets
      * its host here -- the session's clock, the host's saves, the settings

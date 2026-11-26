@@ -965,6 +965,20 @@ static int fp_coop_own_port(void)
     return port >= 0 && port <= 1 ? port : -1;
 }
 
+/* The frame's one clear. Split screen clears the whole screen once a frame,
+ * at the start of the first player's pass (with that player's camera
+ * current), and the second player's pass draws over it with no clear of its
+ * own. Left out with the first player's draws, the second player's picture
+ * kept the last frame's depth, its level failed the depth test, and only the
+ * sky and a few moved pieces showed (the Mac session, live: player 2's view
+ * was all sky; tick 5,600 of the Arcade recording: one clear, then 157 of
+ * player 1's draws, 111 of player 2's, 44 and 58). So the other player's
+ * clears are kept until this player's own pass has begun, and left out only
+ * after, when they would clear its picture. */
+extern int xbox_D3D8FilterAsksClear(void);
+static uint32_t g_fp_own_camera, g_fp_own_hud;
+static int g_fp_own_begun;
+
 static int fp_coop_keep_draw(void)
 {
     uint32_t cur;
@@ -972,7 +986,11 @@ static int fp_coop_keep_draw(void)
     if (!g_fp_other_camera)
         return 1;
     cur = FP_M32(g_fp_views->current_vp);
-    return cur != g_fp_other_camera && cur != g_fp_other_hud;
+    if (cur == g_fp_own_camera || cur == g_fp_own_hud)
+        g_fp_own_begun = 1;
+    if (cur != g_fp_other_camera && cur != g_fp_other_hud)
+        return 1;
+    return xbox_D3D8FilterAsksClear() && !g_fp_own_begun;
 }
 
 /* At a frame's start (fp_frame_clock): whose pass this frame leaves undrawn,
@@ -984,11 +1002,15 @@ static void fp_coop_frame_start(void)
     int own = fp_coop_own_port(), i;
 
     g_fp_other_camera = g_fp_other_hud = 0;
+    g_fp_own_camera = g_fp_own_hud = 0;
+    g_fp_own_begun = 0;
     if (own >= 0 && g_fp_passes == 2 && g_fp_pass[0].camera_vp != g_fp_pass[1].camera_vp &&
         g_fp_pass[0].port != g_fp_pass[1].port &&
         g_fp_pass[0].camera_vp != g_fp_shared_camera && g_fp_pass[1].camera_vp != g_fp_shared_camera)
         for (i = 0; i < 2; i++)
             if (g_fp_pass[i].port == (uint32_t)own) {
+                g_fp_own_camera = g_fp_pass[i].camera_vp;
+                g_fp_own_hud = g_fp_pass[i].hud_vp;
                 g_fp_other_camera = g_fp_pass[1 - i].camera_vp;
                 g_fp_other_hud = g_fp_pass[1 - i].hud_vp;
             }

@@ -34,7 +34,12 @@ in this folder.
   Five Arcade maps looked at in play (Vietnam, the Hotel, Venice, the jungle
   temple, the nightclub): whole characters, effects and lighting as xemu
   shows them; TimeSplitters 2's Arcade recording renders to the same pixels
-  before and after.
+  before and after. The picture sits where xemu's does, to a tenth of a
+  pixel: Future Perfect draws everything through vertex programs, whose
+  positions carry the console's half-pixel offset already, so the renderer
+  adds none (`xbox_D3D8SetPixelOffset(0)` in `src/main.c`); with its default
+  half pixel the picture sat a console pixel right of xemu's, a black strip
+  down the left edge at 2x and over.
 - **Widescreen**, the game's own 16:9 mode (Widescreen in the launcher's
   Graphics or the Esc menu's Display): its camera, front end, cutscenes and
   HUD laid out for 16:9 by the game itself, on the console's widescreen flag.
@@ -147,7 +152,12 @@ cameras are laid out when a level is set up, by the camera layout switch
 pass points the current-viewport word (`0x007E71C8`) at that player's
 camera's, and the renderer leaves out the other player's camera and HUD
 (`fp_viewport_rect` in `src/recomp_manual.c`; `RECOMP_FP_VIEW_PORT=0|1`
-shows a local game as that player would see it online).
+shows a local game as that player would see it online). All but the frame's
+one clear: the game clears the whole screen once, in player 1's pass, for
+both players, and player 2's machine keeps it (recompose
+`xbox_D3D8FilterAsksClear`); left out with player 1's draws, player 2's level
+was drawn against the last frame's depth and only the sky and a few pieces
+showed (found by the Mac session in a live game, 26 Nov 2026).
 
 What it took (`src/recomp_manual.c`, `config/us/overrides.inc`):
 
