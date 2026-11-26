@@ -42,11 +42,13 @@ const LauncherGame launcher_games[] = {
       "TIMESPLITTERS 2", "TIMESPLITTERS 2",
       "Story \xc2\xb7 Arcade \xc2\xb7 Challenge \xc2\xb7 online co-op",
       "1990  \xc2\xb7  SIBERIA  \xc2\xb7  OBLASK DAM", "card_vulkan",
+      2,    /* its camera widened (src/recomp_manual.c, Hor+) */
       ts2_title_bindings, ts2_title_settings },
     { "fp", 0x45410066u, "timeslip_fp", "default.xbe", "../../game", fp_dirs,
       "TIMESPLITTERS FUTURE PERFECT", "FUTURE PERFECT",
       "Story \xc2\xb7 Arcade \xc2\xb7 Challenge \xc2\xb7 MapMaker \xc2\xb7 online co-op",
       "2401  \xc2\xb7  TIME TO SPLIT", "card_vulkan",
+      1,    /* its own 16:9 mode (fp/CMakeLists.txt recomp_title_widescreen NATIVE) */
       fp_title_bindings, fp_title_settings },
 };
 const int launcher_game_count = (int)(sizeof launcher_games / sizeof launcher_games[0]);
