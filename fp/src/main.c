@@ -693,6 +693,22 @@ static int title_main(int argc, char **argv)
         extern void xbox_D3D8SetPixelOffset(float pixels);
         xbox_D3D8SetPixelOffset(0.0f);
     }
+    /* Frame interpolation (recompose hle_d3d8_interp.c, frame_interp): the
+     * registers it blends, read off Future Perfect's vertex programs
+     * (RECOMP_D3D8_VS_DUMP in an Arcade match, 19 programs). Its objects
+     * and the weapon in hand go through a model-view at c64-c67 and the
+     * projection at c60-c63, as TimeSplitters 2's do; its level and batched
+     * geometry through one whole transform at c68-c71, model, view and
+     * projection together (fp/CMakeLists.txt names c60 and c68 its
+     * projection registers). Said with nothing but c60 -- the default --
+     * every in-between frame was its frame N to the pixel on a turn. */
+    {
+        extern void xbox_D3D8SetInterpRegisters(int projection, int affine_first,
+                                                int affine_count);
+        extern void xbox_D3D8SetInterpProjective(int first);
+        xbox_D3D8SetInterpRegisters(60, 64, 4);
+        xbox_D3D8SetInterpProjective(68);
+    }
 
     /* Online co-op (recompose src/kernel/recomp_lockstep.h): a joiner meets
      * its host here -- the session's clock, the host's saves, the settings

@@ -98,6 +98,17 @@ in this folder.
   world is wider and the pistols and their flash are where they were at 55,
   in one-player play and in each half of split screen. Aiming in, or any
   angle of the game's own, is left as the game draws it.
+- **Frame interpolation** (the launcher's and the Esc menu's Frame
+  interpolation, `frame_interp` 2 to 4), as TimeSplitters 2's: the frames
+  between the game's own are its frame drawn again with each draw's
+  transforms blended part of the way back. Future Perfect's objects and the
+  weapon in hand go through a model-view (c64) and the projection (c60), as
+  TS2's do; its level through one whole transform (c68), which recompose
+  blends term by term (`xbox_D3D8SetInterpProjective`, `src/main.c`).
+  Before, with only the default c60 named, every in-between frame was the
+  newer frame to the pixel; now on a turn each sits between the two, and
+  in split screen the halves keep their edge (an orange line of sky across
+  the middle, gone; TimeSplitters 2's had one too).
 - **Clears of some colour channels** as the console does them
   (`xbox_D3D8SetClearChannels(1)` in `src/main.c`; recompose
   `d3d8_xbox.h`, `RECOMP_CLEAR_CHANNELS=0/1` to override): the Audio/Video

@@ -50,7 +50,14 @@ add_subdirectory(${XBOXRECOMP_DIR} ${CMAKE_BINARY_DIR}/xboxrecomp)
 # it worked out itself rather than read a projection register, so the
 # renderer took every one of them for 2D and squeezed the whole picture into
 # a 4:3 band.
-recomp_title_widescreen(NATIVE)
+#
+# Its projection registers: c60, the projection its objects and the weapon
+# in hand go through (with a model-view at c64), and c68, the whole
+# transform its level and batched geometry read straight into the position.
+# Named for frame interpolation, which blends only draws that go through a
+# projection register (src/main.c, xbox_D3D8SetInterpProjective); NATIVE
+# widens none of them.
+recomp_title_widescreen(NATIVE REGISTER 60 68)
 
 # CONFIGURE_DEPENDS so a re-lift that adds or removes a chunk is picked up
 # without a manual re-configure.
