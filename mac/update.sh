@@ -17,8 +17,9 @@
 # checkout's. A checkout already past the release stays where it is: nothing ever moves back or detaches.
 #
 # The update's "== " lines are the phases the launcher shows; the other lines are its detail.
-# Which game the update rebuilds: TIMESLIP_TITLE (ts2, the default, or fp) and its data folder TIMESLIP_DATA, both
-# set by the app's Contents/MacOS/update (mac/install.sh).
+# Which games the update rebuilds: TIMESLIP_TITLE (all, the collection's app; ts2, the default, or fp, a one-game
+# app's) and their data folders (TIMESLIP_DATA_TS2, TIMESLIP_DATA_FP; TIMESLIP_DATA in a one-game app made before),
+# all set by the app's Contents/MacOS/update (mac/install.sh).
 # For testing: TIMESLIP_UPDATE_RELEASES=<file> reads that JSON instead of GitHub's releases list (and the release
 # tags are the checkout's own), and TIMESLIP_UPDATE_INSTALLED=<commit> stands for the installed build.
 set -uo pipefail
@@ -115,14 +116,22 @@ git_ submodule update --init recompose || stop "could not update the recompose s
 echo "== Recompiling the game from your disc"
 PY=python3; [ -x "$HOME/.venvs/recomp/bin/python" ] && PY=$HOME/.venvs/recomp/bin/python
 TITLE=${TIMESLIP_TITLE:-ts2}
+# each game's data folder: TIMESLIP_DATA_TS2 / TIMESLIP_DATA_FP (the collection's app), or TIMESLIP_DATA (a one-game app's)
 case "$TITLE" in
-ts2) build=(scripts/build.py --relift) ;;
-fp)  build=(fp/scripts/build.py --relift ${TIMESLIP_DATA:+--game "$TIMESLIP_DATA/game"}) ;;
+ts2) DATA_TS2=${TIMESLIP_DATA:-${TIMESLIP_DATA_TS2:-}}; DATA_FP="" ;;
+fp)  DATA_FP=${TIMESLIP_DATA:-${TIMESLIP_DATA_FP:-}}; DATA_TS2="" ;;
+all) DATA_TS2=${TIMESLIP_DATA_TS2:-}; DATA_FP=${TIMESLIP_DATA_FP:-} ;;
 *)   stop "no game called $TITLE" ;;
 esac
-VULKAN_SDK=${VULKAN_SDK:-$HOME/VulkanSDK/1.4.357.1/macOS} "$PY" "${build[@]}" || stop "the build stopped"
+SDK=${VULKAN_SDK:-$HOME/VulkanSDK/1.4.357.1/macOS}
+if [ "$TITLE" != fp ]; then
+    VULKAN_SDK=$SDK "$PY" scripts/build.py --relift || stop "the build of TimeSplitters 2 stopped"
+fi
+if [ "$TITLE" != ts2 ]; then
+    VULKAN_SDK=$SDK "$PY" fp/scripts/build.py --relift ${DATA_FP:+--game "$DATA_FP/game"} || stop "the build of Future Perfect stopped"
+fi
 
 echo "== Installing"
-"$HERE/mac/install.sh" --title "$TITLE" ${TIMESLIP_DATA:+--data "$TIMESLIP_DATA"} || stop "the install stopped"
+"$HERE/mac/install.sh" --title "$TITLE" ${DATA_TS2:+--data-ts2 "$DATA_TS2"} ${DATA_FP:+--data-fp "$DATA_FP"} || stop "the install stopped"
 echo "== Updated to $tag"
 exit 0

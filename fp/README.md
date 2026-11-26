@@ -266,7 +266,8 @@ To install it as a program: `tools\install_windows.ps1 -Title fp` on Windows
 shortcuts named "TimeSplitters Future Perfect", an entry in Settings > Apps,
 FFmpeg's three libraries beside the game for its movies, the launcher's art
 made once from your disc by `tools/make_disc_art.py --title fp` and the icon
-from it), or `mac/install.sh --title fp` on a Mac. The launcher's Updates tile
+from it), or on a Mac `mac/install.sh`, whose `Timeslip.app` has both games
+(`--title fp` for this one alone). The launcher's Updates tile
 updates it from the collection's releases as it does TimeSplitters 2.
 
 ## Layout

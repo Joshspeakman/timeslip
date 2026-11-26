@@ -265,7 +265,8 @@ macOS on Apple Silicon:
 - CMake, Ninja and OpenSSL from Homebrew: `brew install cmake ninja openssl@3`
 - The [LunarG Vulkan SDK](https://vulkan.lunarg.com/sdk/home#mac), installed
   system-wide. It provides the shader compiler and SPIRV-Cross, which the
-  Metal renderer uses; the Mac draws with Metal only.
+  Metal renderer uses, and the Vulkan loader and MoltenVK the app bundles for
+  the renderer kept under Graphics > Advanced (Metal is the Mac's default).
 - Python 3.10 or newer with `capstone`, and `pillow` for the app's icon
   (made from your disc). Homebrew's Python will not install packages
   globally, so use a virtual environment:
@@ -350,13 +351,15 @@ If you cloned without `--recursive`, run `git submodule update --init --recursiv
 On Windows, `tools\install_windows.ps1` installs what you built into
 `%LOCALAPPDATA%\Programs\Timeslip` with Start menu and desktop shortcuts (the
 game's own logo as their icon, made from your disc) and an entry in Settings >
-Apps; on a Mac, `mac/install.sh` makes the app. `tools\build_windows.ps1` builds
+Apps; on a Mac, `mac/install.sh` makes one app, `Timeslip.app`, with both
+games and a card for each in its launcher (mac/README.md). `tools\build_windows.ps1` builds
 again with the same toolchain. Future Perfect (`fp/`) installs beside it with
 `-Title fp` on both (`tools\build_windows.ps1 -Title fp`, then
 `tools\install_windows.ps1 -Title fp`, into
 `%LOCALAPPDATA%\Programs\Timeslip Future Perfect` as "TimeSplitters Future
-Perfect"; `mac/install.sh --title fp`), with its own shortcuts, icon and
-updater.
+Perfect"), with its own shortcuts, icon and updater; on a Mac it is in
+`Timeslip.app` already (`mac/install.sh --title fp` still makes it an app of
+its own).
 
 The launcher's **Updates** tile offers the newest
 [release](https://github.com/Joshspeakman/timeslip/releases) (pre-releases

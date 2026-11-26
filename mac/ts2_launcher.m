@@ -1,23 +1,23 @@
-/* TimeSplitters 2 launcher, in the manner of the other native ports' launch windows (Homeworld's, Ghost Recon's):
- * the game's logo over its own Oblask Dam with the project's name, TIMESLIP, as its subtitle, the renderer's card (Metal: the Mac draws with Metal only), a
- * row of tiles (Graphics Options, Controls, Saves, Updates) and Quit / Play. Then the recompiled game
- * (Contents/MacOS/timeslip) starts in this process, so the app in the Dock is the game.
+/* Timeslip's launcher, in the manner of the other native ports' launch windows (Homeworld's, Ghost Recon's): a card
+ * for each game of the collection (TimeSplitters 2, Future Perfect) under the chosen one's logo, backdrop and place,
+ * with the project's name, TIMESLIP, as its subtitle; a row of tiles (Graphics Options, Controls, Play Together, Saves,
+ * Updates) for the chosen game; and Quit / Play. Then that game's recompiled executable (Contents/MacOS/timeslip or
+ * timeslip_fp) starts in this process, so the app in the Dock is the game. Laid out as the Windows launcher is
+ * (recompose's launcher_showcase.inc with this repository's src/launcher_games.c): the same cards, words and panels.
  *
- * Settings are remembered here and handed to the game as the toolkit's environment variables, which win over its
- * settings file (README: "Running a build of your own"): RECOMP_D3D8_BACKEND (always metal), RECOMP_RES_SCALE, RECOMP_WIDESCREEN,
- * RECOMP_ANISO, RECOMP_FPS_CAP, RECOMP_FRAME_INTERP, RECOMP_FPS_OVERLAY, RECOMP_FULLSCREEN, and for Keyboard & Mouse
- * a bindings file (RECOMP_INPUT_CONFIG) with mouse look (RECOMP_MOUSE_LOOK, RECOMP_MOUSE_SENSITIVITY) and the
- * crosshair (RECOMP_CROSSHAIR).
+ * Settings: graphics, the renderer and the mouse are read from and written to the game's settings file,
+ * titles/<ID>.conf, which its in-game menu (Esc) changes too, so the two always agree; what the game's launcher kept
+ * in its own settings domain before is carried into the file the first time. System Link and online co-op are chosen
+ * for each start and handed over as the toolkit's environment variables (RECOMP_SYSLINK, RECOMP_LOCKSTEP_NET, ...).
+ * Each game keeps the data folder and settings domain it had as an app of its own.
  *
- * Art: <data>/art (or a copy in the app's Resources/art), made from the player's own disc by mac/make_art.sh: the
- * title screen's logo textures and frames the game drew. Nothing from the game is in this repository; without the
- * art the window writes the title in plain type.
+ * Art: <data>/art (or a copy in the app's Resources/art_<game>), made from the player's own disc by mac/make_art.sh:
+ * the title screen's logo textures and frames the game drew. Nothing from the games is in this repository; without
+ * the art the window writes the game's name in plain type.
  * Updates: install.sh gives the app an updater (Contents/MacOS/update, mac/update.sh) that rebuilds it from the newest
  * GitHub release.
- * Development: TS2_LAUNCHER_SHOT=<png> renders the window to an image (TS2_LAUNCHER_HOVER=<code> lights an item,
- * TS2_LAUNCHER_PANEL=<0|1> opens Graphics Options or Controls);
- * TS2_DATA_PATH=<dir> uses another data folder (a test copy of the game: it saves into its folder); TS2_LAUNCHER_PLAY=1
- * presses Play at once. */
+ * Development: mac/README.md ("Development"): TS2_LAUNCHER_SHOT, _GAME, _PANEL, _ROWFOCUS, _HOVER, _PLAY;
+ * TS2_CONF_DIR, TS2_LAUNCHER_PREFS and TS2_DATA_PATH_<TS2|FP> keep a test off the player's own settings and games. */
 #import <Cocoa/Cocoa.h>
 #include <unistd.h>
 #include <ifaddrs.h>
@@ -49,19 +49,23 @@ static void on_main(dispatch_block_t b) { CFRunLoopPerformBlock(CFRunLoopGetMain
 
 @interface TSPanel : NSObject
 @property NSString *title, *footnote; @property NSArray<TSRow *> *rows;
+@property NSString *linkTitle; @property NSInteger linkPanel; @property BOOL linkLeft;   /* a button in its title bar opening another panel */
 @end
 @implementation TSPanel @end
 
 // ---------------------------------------------------------------- the view
-enum { HIT_NONE = -1, HIT_PLAY = 100, HIT_QUIT = 101, HIT_BACK = 102, HIT_CARD = 200, HIT_TILE = 300, HIT_ROW = 400 };   /* + 10*k + 0 left / 1 value / 2 right */
+enum { HIT_NONE = -1, HIT_PLAY = 100, HIT_QUIT = 101, HIT_BACK = 102, HIT_PLINK = 103, HIT_CARD = 200, HIT_TILE = 300, HIT_ROW = 400 };   /* + 10*k + 0 left / 1 value / 2 right */
 enum { W = 960, H = 660 };
 
 @interface TSLaunchView : NSView
 @property NSArray<TSRow *> *tiles; @property NSArray<TSPanel *> *panels;
-@property NSInteger card, hover, pressed, focus, open, rowFocus;   /* focus: -1 the cards, else a tile; open: a panel, or -1 */
-@property NSImage *backdrop, *logo, *glow; @property NSArray<NSImage *> *shots; @property NSString *hint;
-@property NSString *titleText, *place;   /* the game's name without its logo art; where the backdrop is */
+@property NSInteger card, hover, pressed, focus, open, rowFocus;   /* focus: -1 the cards, else a tile; open: a panel, or -1; rowFocus -1: the panel's link */
+@property NSImage *backdrop, *logo, *glow; @property NSString *hint;
+/* the games, a card each: name, line, image, ready (NO: not installed, dimmed and not chosen) */
+@property NSArray<NSDictionary *> *cards;
+@property NSString *titleText, *place;   /* the chosen game's name without its logo art; where its backdrop is */
 @property (copy) void (^onPlay)(void); @property (copy) void (^onQuit)(void); @property (copy) void (^onChange)(void);
+@property (copy) void (^onSelect)(NSInteger game);
 @end
 
 @implementation TSLaunchView
@@ -69,7 +73,10 @@ enum { W = 960, H = 660 };
 - (BOOL)acceptsFirstResponder { return YES; }
 - (BOOL)acceptsFirstMouse:(NSEvent *)e { return YES; }
 - (NSArray<TSRow *> *)rows { return self.open >= 0 ? self.panels[self.open].rows : @[]; }
-- (NSRect)cardRect:(NSInteger)i { return NSMakeRect(60, 250, 840, 224); }   /* one card: the Mac draws with Metal only */
+- (NSRect)cardRect:(NSInteger)i { return NSMakeRect(i == 0 ? 60 : 496, 250, 404, 224); }   /* a card for each game */
+- (BOOL)cardReady:(NSInteger)i { return i >= 0 && i < (NSInteger)self.cards.count && [self.cards[i][@"ready"] boolValue]; }
+- (NSRect)linkRect { NSRect p = self.panelRect; TSPanel *pn = self.panels[self.open];
+                     return pn.linkLeft ? NSMakeRect(p.origin.x + 24, p.origin.y + 21, 120, 28) : NSMakeRect(NSMaxX(p) - 24 - 132, p.origin.y + 21, 132, 28); }
 - (NSRect)tileRect:(NSInteger)k   /* a row under the cards (a wide tile counts twice) */
 {
     NSInteger units = 0, at = 0, n = (NSInteger)self.tiles.count;
@@ -86,13 +93,20 @@ enum { W = 960, H = 660 };
 - (NSRect)rowArrow:(NSInteger)k right:(BOOL)right { NSRect r = [self rowRect:k]; return NSMakeRect(right ? NSMaxX(r) - 34 : NSMaxX(r) - 330, r.origin.y + 3, 30, 30); }
 - (NSRect)rowValue:(NSInteger)k { NSRect r = [self rowRect:k]; return NSMakeRect(NSMaxX(r) - 300, r.origin.y + 4, 262, 28); }
 - (BOOL)rowCycles:(NSInteger)k { return self.rows[k].choices.count > 1 || self.rows[k].activate != nil; }   /* cycles, or runs something */
-- (void)openPanel:(NSInteger)i { self.open = i; self.rowFocus = 0; self.hover = HIT_NONE; self.needsDisplay = YES; }
+- (void)openPanel:(NSInteger)i
+{
+    self.open = i; self.hover = HIT_NONE; self.rowFocus = 0;
+    while (self.rowFocus < (NSInteger)self.rows.count - 1 && ![self rowCycles:self.rowFocus]) self.rowFocus++;
+    self.needsDisplay = YES;
+}
+- (void)selectCard:(NSInteger)i { if (![self cardReady:i] || i == self.card) return; if (self.onSelect) self.onSelect(i); self.needsDisplay = YES; }
 - (void)closePanel { self.open = -1; self.hover = HIT_NONE; self.needsDisplay = YES; }
 - (NSInteger)hit:(NSPoint)p
 {
     if (NSPointInRect(p, self.playRect)) return HIT_PLAY;
     if (NSPointInRect(p, self.quitRect)) return self.open >= 0 ? HIT_BACK : HIT_QUIT;
     if (self.open >= 0) {
+        if (self.panels[self.open].linkTitle && NSPointInRect(p, self.linkRect)) return HIT_PLINK;
         for (NSInteger k = 0; k < (NSInteger)self.rows.count; k++) {
             if (![self rowCycles:k]) continue;
             if (NSPointInRect(p, [self rowArrow:k right:NO])) return HIT_ROW + 10 * k;
@@ -101,7 +115,7 @@ enum { W = 960, H = 660 };
         }
         return NSPointInRect(p, self.panelRect) ? HIT_NONE : HIT_BACK;    /* a click outside the panel closes it */
     }
-    if (NSPointInRect(p, [self cardRect:0])) return HIT_CARD;
+    for (NSInteger i = 0; i < (NSInteger)self.cards.count; i++) if (NSPointInRect(p, [self cardRect:i])) return HIT_CARD + i;
     for (NSInteger k = 0; k < (NSInteger)self.tiles.count; k++) {
         if (!NSPointInRect(p, [self tileRect:k])) continue;
         if (self.tiles[k].activate) return HIT_TILE + 10 * k + 1;
@@ -121,7 +135,9 @@ enum { W = 960, H = 660 };
 - (void)mouseDown:(NSEvent *)e
 {
     NSInteger h = [self hit:[self convertPoint:e.locationInWindow fromView:nil]];
-    if (h == HIT_CARD && e.clickCount == 2) { if (self.onPlay) self.onPlay(); return; }   /* double-click: play */
+    if (h >= HIT_CARD && h < HIT_TILE && e.clickCount == 2 && [self cardReady:h - HIT_CARD]) {   /* double-click: play that game */
+        [self selectCard:h - HIT_CARD]; if (self.onPlay) self.onPlay(); return;
+    }
     self.pressed = h; self.needsDisplay = YES;
 }
 - (void)mouseUp:(NSEvent *)e
@@ -131,14 +147,19 @@ enum { W = 960, H = 660 };
     if (h == HIT_PLAY) { if (self.onPlay) self.onPlay(); return; }
     if (h == HIT_QUIT) { if (self.onQuit) self.onQuit(); return; }
     if (h == HIT_BACK) { [self closePanel]; return; }
+    if (h == HIT_PLINK) { [self openPanel:self.panels[self.open].linkPanel]; return; }
     if (h >= HIT_ROW) { NSInteger k = (h - HIT_ROW) / 10; self.rowFocus = k; [self stepRow:k by:(h - HIT_ROW) % 10 == 0 ? -1 : 1]; return; }
-    if (h == HIT_CARD) { self.focus = -1; self.needsDisplay = YES; return; }
+    if (h >= HIT_CARD && h < HIT_TILE) { self.focus = -1; [self selectCard:h - HIT_CARD]; self.needsDisplay = YES; return; }
     NSInteger k = (h - HIT_TILE) / 10, part = (h - HIT_TILE) % 10; self.focus = k;
     [self step:k by:part == 0 ? -1 : 1];
 }
 - (void)step:(NSInteger)k by:(NSInteger)dir
 {
-    if (k < 0) return;                                                  /* the card: nothing to choose */
+    if (k < 0) {                                                        /* the cards: the next game that is installed */
+        NSInteger n = (NSInteger)self.cards.count;
+        for (NSInteger j = 1; j < n; j++) { NSInteger c = ((self.card + dir * j) % n + n) % n; if ([self cardReady:c]) { [self selectCard:c]; break; } }
+        return;
+    }
     TSRow *t = self.tiles[k];
     if (t.activate) { t.activate(); self.needsDisplay = YES; return; }
     NSInteger n = (NSInteger)t.choices.count; t.index = (t.index + dir + n) % n;
@@ -154,7 +175,12 @@ enum { W = 960, H = 660 };
 }
 - (void)moveRowFocus:(NSInteger)dir
 {
-    NSInteger n = (NSInteger)self.rows.count;
+    NSInteger n = (NSInteger)self.rows.count, first = 0;
+    while (first < n - 1 && ![self rowCycles:first]) first++;
+    if (self.panels[self.open].linkTitle) {                             /* up from the first row: the title bar's button */
+        if (self.rowFocus == -1) { if (dir > 0) self.rowFocus = first; self.needsDisplay = YES; return; }
+        if (dir < 0 && self.rowFocus == first) { self.rowFocus = -1; self.needsDisplay = YES; return; }
+    }
     for (NSInteger i = 0; i < n; i++) { self.rowFocus = (self.rowFocus + dir + n) % n; if ([self rowCycles:self.rowFocus]) break; }
     self.needsDisplay = YES;
 }
@@ -162,9 +188,13 @@ enum { W = 960, H = 660 };
 {
     if (self.open >= 0) {
         switch (e.keyCode) {
-        case 0x24: case 0x4c: case 0x35: [self closePanel]; return;                          /* Return, Escape: back */
-        case 0x7b: [self stepRow:self.rowFocus by:-1]; return;
-        case 0x7c: [self stepRow:self.rowFocus by:1]; return;
+        case 0x24: case 0x4c: case 0x31: case 0x7b: case 0x7c:                              /* on the title bar's button: press it */
+            if (self.rowFocus == -1) { [self openPanel:self.panels[self.open].linkPanel]; return; }
+            if (e.keyCode == 0x7b) { [self stepRow:self.rowFocus by:-1]; return; }
+            if (e.keyCode == 0x7c) { [self stepRow:self.rowFocus by:1]; return; }
+            if (e.keyCode == 0x31) break;
+            [self closePanel]; return;                                                      /* Return: back */
+        case 0x35: [self closePanel]; return;                                               /* Escape: back */
         case 0x7e: [self moveRowFocus:-1]; return;
         case 0x7d: case 0x30: [self moveRowFocus:1]; return;
         }
@@ -235,26 +265,30 @@ static NSRect fit_rect(NSImage *img, NSRect r)
 }
 - (void)drawCard:(NSInteger)i shadow:(NSShadow *)sh
 {
-    static NSString *kicker[] = {@"NATIVE RENDERER"}, *name[] = {@"METAL"};
-    static NSString *line[] = {@"Apple's own graphics API, drawn by the port's own renderer: no translation layer"};
-    NSRect r = [self cardRect:i]; BOOL sel = self.card == i, hot = self.hover == HIT_CARD + i, foc = sel && self.focus == -1 && self.open < 0;
-    if (sel) {                                                           /* the chosen renderer: a glow behind its card */
+    NSDictionary *cd = self.cards[i]; BOOL ready = [cd[@"ready"] boolValue];
+    NSRect r = [self cardRect:i]; BOOL sel = self.card == i, hot = ready && self.hover == HIT_CARD + i, foc = sel && self.focus == -1 && self.open < 0;
+    if (sel) {                                                           /* the chosen game: a glow behind its card */
         NSShadow *glow = [NSShadow new]; glow.shadowColor = [accent() colorWithAlphaComponent:0.55]; glow.shadowBlurRadius = 26; glow.shadowOffset = NSZeroSize;
         [NSGraphicsContext saveGraphicsState]; [glow set]; [NSColor.blackColor setFill]; NSRectFill(r); [NSGraphicsContext restoreGraphicsState];
     }
     [NSColor.blackColor setFill]; NSRectFill(r);
-    NSImage *shot = i < (NSInteger)self.shots.count ? self.shots[i] : nil;
-    if (shot.size.width > 16) draw_cover(shot, r, sel ? 1 : hot ? 0.85 : 0.6, i == 0 ? 0.95 : 0.78, 0.5, i == 0 ? 0.6 : 0.35);   /* the portal; the base above the HUD */
+    NSImage *shot = cd[@"image"];
+    if (shot.size.width > 16) draw_cover(shot, r, sel ? 1 : hot ? 0.85 : ready ? 0.6 : 0.3, 0.78, 0.5, 0.35);   /* the place, above the HUD */
     NSGradient *foot = [[NSGradient alloc] initWithColorsAndLocations:[NSColor colorWithWhite:0 alpha:0], 0.0, [NSColor colorWithWhite:0 alpha:0.3], 0.42, ink(0.94), 1.0, nil];
     [foot drawInRect:r angle:90];
-    if (!sel) { [ink(hot ? 0.16 : 0.32) setFill]; fill_over(r); }
-    NSColor *tc = sel || hot ? NSColor.whiteColor : [text_c() colorWithAlphaComponent:0.82];
-    draw_text(kicker[i], heading(11), sel || hot ? accent() : dim(), NSMakeRect(r.origin.x + 20, NSMaxY(r) - 100, 360, 16), NSTextAlignmentLeft, sh, 3.5);
-    draw_text(name[i], heavy(38), tc, NSMakeRect(r.origin.x + 18, NSMaxY(r) - 84, 360, 50), NSTextAlignmentLeft, sh, 6);
-    draw_text(line[i], body(13, NO), sel || hot ? text_c() : dim(), NSMakeRect(r.origin.x + 20, NSMaxY(r) - 32, r.size.width - 40, 20), NSTextAlignmentLeft, sh, 0.2);
-    [(sel ? accent() : hot ? [accent() colorWithAlphaComponent:0.7] : [accent_dim() colorWithAlphaComponent:0.7]) setStroke];
+    if (!sel) { [ink(!ready ? 0.5 : hot ? 0.16 : 0.32) setFill]; fill_over(r); }
+    NSColor *tc = sel || hot ? NSColor.whiteColor : [text_c() colorWithAlphaComponent:ready ? 0.82 : 0.5];
+    draw_text(ready ? @"READY TO PLAY" : @"NOT INSTALLED", heading(11), sel || hot ? accent() : dim(), NSMakeRect(r.origin.x + 20, NSMaxY(r) - 92, 360, 16), NSTextAlignmentLeft, sh, 3.5);
+    draw_text(cd[@"name"], heavy(25), tc, NSMakeRect(r.origin.x + 18, NSMaxY(r) - 74, r.size.width - 36, 36), NSTextAlignmentLeft, sh, 4);
+    draw_text(ready ? cd[@"line"] : @"Install it from its disc to play it here", body(13, NO), sel || hot ? text_c() : dim(), NSMakeRect(r.origin.x + 20, NSMaxY(r) - 32, r.size.width - 40, 20), NSTextAlignmentLeft, sh, 0.2);
+    [(sel ? accent() : hot ? [accent() colorWithAlphaComponent:0.7] : [accent_dim() colorWithAlphaComponent:ready ? 0.7 : 0.4]) setStroke];
     NSBezierPath *b = [NSBezierPath bezierPathWithRect:NSInsetRect(r, 0.5, 0.5)]; b.lineWidth = sel ? 1.5 : 1; [b stroke];
-    if (sel) brackets(NSInsetRect(r, -6, -6), foc ? 22 : 16, foc ? 3 : 2.5, accent());
+    if (sel) {
+        brackets(NSInsetRect(r, -6, -6), foc ? 22 : 16, foc ? 3 : 2.5, accent());
+        NSRect badge = NSMakeRect(NSMaxX(r) - 104, r.origin.y + 14, 90, 22);   /* SELECTED */
+        [accent() setFill]; NSRectFill(badge);
+        draw_text(@"SELECTED", heading(10.5), ink(1), NSMakeRect(badge.origin.x, badge.origin.y + 4, badge.size.width, 16), NSTextAlignmentCenter, nil, 2.5);
+    }
 }
 - (void)drawArrow:(NSRect)r right:(BOOL)right lit:(BOOL)lit
 {
@@ -293,6 +327,21 @@ static NSRect fit_rect(NSImage *img, NSRect r)
     [accent_dim() setStroke]; NSBezierPath *bp = [NSBezierPath bezierPathWithRect:NSInsetRect(p, 0.5, 0.5)]; bp.lineWidth = 1; [bp stroke];
     brackets(NSInsetRect(p, -6, -6), 22, 3, accent());
     draw_text(pn.title, heading(20), accent(), NSMakeRect(p.origin.x, p.origin.y + 22, p.size.width, 28), NSTextAlignmentCenter, sh, 6);
+    if (pn.linkTitle) {                                                  /* ADVANCED > · < GRAPHICS */
+        NSRect lr = self.linkRect; BOOL lit = self.hover == HIT_PLINK || self.rowFocus == -1;
+        [ink(lit ? 0.95 : 0.8) setFill]; fill_over(lr);
+        [(lit ? accent() : accent_dim()) setStroke]; NSBezierPath *lb = [NSBezierPath bezierPathWithRect:NSInsetRect(lr, 0.5, 0.5)]; lb.lineWidth = 1; [lb stroke];
+        if (self.rowFocus == -1) brackets(NSInsetRect(lr, -4, -4), 8, 2, accent());
+        /* the word and a chevron drawn beside it (a font's ‹ › can be clipped) */
+        NSDictionary *at = @{NSFontAttributeName: heading(12), NSKernAttributeName: @3};
+        CGFloat tw = [pn.linkTitle sizeWithAttributes:at].width, gap = 10, cw = 5, x0 = NSMidX(lr) - (tw + gap + cw) / 2;
+        CGFloat tx = pn.linkLeft ? x0 + cw + gap : x0, cx = pn.linkLeft ? x0 : x0 + tw + gap, cy = NSMidY(lr);
+        draw_text(pn.linkTitle, heading(12), lit ? NSColor.whiteColor : text_c(), NSMakeRect(tx, lr.origin.y + 6, tw + 4, 18), NSTextAlignmentLeft, nil, 3);
+        NSBezierPath *ch = [NSBezierPath bezierPath]; ch.lineWidth = 2; ch.lineCapStyle = NSLineCapStyleRound; ch.lineJoinStyle = NSLineJoinStyleRound;
+        if (pn.linkLeft) { [ch moveToPoint:NSMakePoint(cx + cw, cy - 5)]; [ch lineToPoint:NSMakePoint(cx, cy)]; [ch lineToPoint:NSMakePoint(cx + cw, cy + 5)]; }
+        else { [ch moveToPoint:NSMakePoint(cx, cy - 5)]; [ch lineToPoint:NSMakePoint(cx + cw, cy)]; [ch lineToPoint:NSMakePoint(cx, cy + 5)]; }
+        [(lit ? NSColor.whiteColor : accent()) setStroke]; [ch stroke];
+    }
     [[accent_dim() colorWithAlphaComponent:0.6] setFill]; fill_over(NSMakeRect(p.origin.x + 30, p.origin.y + 60, p.size.width - 60, 1));
     for (NSInteger k = 0; k < (NSInteger)self.rows.count; k++) {
         TSRow *t = self.rows[k]; NSRect r = [self rowRect:k]; NSDictionary *c = t.choices[t.index]; BOOL cycles = [self rowCycles:k];
@@ -313,11 +362,16 @@ static NSRect fit_rect(NSImage *img, NSRect r)
 }
 - (NSString *)currentHint
 {
+    if (self.open >= 0 && self.hover == HIT_PLINK) return self.panels[self.open].linkLeft ? @"Back to Graphics Options" : @"The renderer, and what is seldom changed";
     if (self.open >= 0) return @"←/→ change  ·  ↑/↓ move  ·  Return or Esc goes back";
     NSInteger k = -1;
     if (self.hover >= HIT_TILE && self.hover < HIT_ROW) k = (self.hover - HIT_TILE) / 10; else if (self.hover == HIT_NONE && self.focus >= 0) k = self.focus;
     if (k >= 0 && k < (NSInteger)self.tiles.count) { TSRow *t = self.tiles[k]; return t.choices[t.index][@"note"]; }
-    if (self.hover == HIT_CARD) return @"Metal: the port's own renderer, nothing in between. Double-click to play.";
+    if (self.hover >= HIT_CARD && self.hover < HIT_TILE) {
+        NSInteger i = self.hover - HIT_CARD;
+        return [self cardReady:i] ? [NSString stringWithFormat:@"%@: click to choose it, double-click to play.", self.cards[i][@"title"]]
+                                  : [NSString stringWithFormat:@"%@: not installed (%@)", self.cards[i][@"title"], self.cards[i][@"missing"]];
+    }
     return self.hint;
 }
 - (void)drawRect:(NSRect)dirty
@@ -348,9 +402,9 @@ static NSRect fit_rect(NSImage *img, NSRect r)
     }
     draw_text(@"TIMESLIP", heavy(22), text_c(), NSMakeRect(0, 150, W, 30), NSTextAlignmentCenter, sh, 14);
     draw_text(@"NATIVE FOR APPLE SILICON  ·  RECOMPILED FROM YOUR XBOX DISC", heading(11.5), accent(), NSMakeRect(0, 184, W, 18), NSTextAlignmentCenter, sh, 4);
-    draw_text(@"RENDERER", heading(10.5), dim(), NSMakeRect(60, 226, 400, 16), NSTextAlignmentLeft, sh, 3.5);
+    draw_text(@"CHOOSE YOUR GAME", heading(10.5), dim(), NSMakeRect(60, 226, 400, 16), NSTextAlignmentLeft, sh, 3.5);
     draw_text(self.place.uppercaseString, heading(10.5), dim(), NSMakeRect(W - 460, 226, 400, 16), NSTextAlignmentRight, sh, 3.5);
-    [self drawCard:0 shadow:sh];
+    for (NSInteger i = 0; i < (NSInteger)self.cards.count; i++) [self drawCard:i shadow:sh];
     NSInteger hov = self.hover, foc = self.focus; if (self.open >= 0) self.hover = self.focus = HIT_NONE;   /* under a panel: nothing lit */
     for (NSInteger k = 0; k < (NSInteger)self.tiles.count; k++) [self drawTile:k shadow:sh];
     self.hover = hov; self.focus = foc;
@@ -486,157 +540,305 @@ static TSRow *info(NSString *title, NSString *(^value)(void), NSString *note)
     TSRow *r = [TSRow new]; r.title = title; r.choices = @[@{@"value": @"", @"label": @"", @"note": note ?: @""}]; r.summary = value; return r;
 }
 
-/* Keyboard & Mouse: the left stick on WASD, the triggers on the mouse buttons, the right stick on the mouse (mouse
- * look). Every control keeps its pad source, so a controller still works beside it. */
-static NSString *const kbm_json =
-    @"{\n  \"version\": 1,\n  \"controllers\": [\n    {\n      \"port\": 1,\n      \"device\": \"gamepad:0\",\n      \"bindings\": {\n"
-     "        \"lstick_up\": [\"pad:ly+\", \"key:W\"], \"lstick_down\": [\"pad:ly-\", \"key:S\"],\n"
-     "        \"lstick_left\": [\"pad:lx-\", \"key:A\"], \"lstick_right\": [\"pad:lx+\", \"key:D\"],\n"
-     "        \"rtrigger\": [\"pad:rt\", \"mouse:left\"], \"ltrigger\": [\"pad:lt\", \"mouse:right\"],\n"
-     "        \"a\": [\"pad:a\", \"key:SPACE\"], \"b\": [\"pad:b\", \"key:C\", \"key:ESCAPE\"],\n"
-     "        \"x\": [\"pad:x\", \"key:R\"], \"y\": [\"pad:y\", \"key:F\"],\n"
-     "        \"white\": [\"pad:rshoulder\", \"key:Q\"], \"black\": [\"pad:lshoulder\", \"key:E\"],\n"
-     "        \"lthumb\": [\"pad:lthumb\", \"key:LSHIFT\"], \"rthumb\": [\"pad:rthumb\", \"mouse:middle\", \"key:V\"],\n"
-     "        \"start\": [\"pad:start\", \"key:RETURN\"], \"back\": [\"pad:back\", \"key:TAB\"],\n"
-     "        \"dpad_up\": [\"pad:dpad_up\", \"key:UP\"], \"dpad_down\": [\"pad:dpad_down\", \"key:DOWN\"],\n"
-     "        \"dpad_left\": [\"pad:dpad_left\", \"key:LEFT\"], \"dpad_right\": [\"pad:dpad_right\", \"key:RIGHT\"]\n"
-     "      }\n    }\n  ]\n}\n";
+/* The title's settings file, titles/<ID>.conf, which the game reads at start and its in-game menu writes: the
+ * launcher's graphics and mouse rows are read from it and written back to it (README: "Running a build of your
+ * own"), so a change made in either place is the one the other shows. Lines the launcher does not set (comments, the
+ * picture, a title's own keys) are kept as they are. */
+static NSMutableDictionary<NSString *, NSString *> *conf_read(NSString *path)
+{
+    NSMutableDictionary *d = [NSMutableDictionary dictionary];
+    NSString *text = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil];
+    for (NSString *raw in [text componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet]) {
+        NSString *line = [raw stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        NSRange eq = [line rangeOfString:@"="];
+        if (!line.length || [line hasPrefix:@"#"] || [line hasPrefix:@";"] || eq.location == NSNotFound) continue;
+        NSString *k = [[line substringToIndex:eq.location] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        NSString *v = [[line substringFromIndex:eq.location + 1] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        if (k.length) d[k.lowercaseString] = v;
+    }
+    return d;
+}
+static BOOL conf_write(NSString *path, NSDictionary<NSString *, NSString *> *vals)
+{
+    NSString *text = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil] ?: @"";
+    NSMutableArray<NSString *> *lines = [[text componentsSeparatedByString:@"\n"] mutableCopy];
+    if (lines.count && !lines.lastObject.length) [lines removeLastObject];
+    NSMutableSet *done = [NSMutableSet set];
+    for (NSUInteger i = 0; i < lines.count; i++) {
+        NSString *line = [lines[i] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        NSRange eq = [line rangeOfString:@"="];
+        if (!line.length || [line hasPrefix:@"#"] || [line hasPrefix:@";"] || eq.location == NSNotFound) continue;
+        NSString *k = [[line substringToIndex:eq.location] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet].lowercaseString;
+        if (!vals[k]) continue;
+        lines[i] = [NSString stringWithFormat:@"%@ = %@", k, vals[k]]; [done addObject:k];
+    }
+    if (!text.length) [lines addObject:@"# Settings for this title: the launcher's and the in-game menu's (Esc). Delete the file for the defaults."];
+    for (NSString *k in [vals.allKeys sortedArrayUsingSelector:@selector(compare:)])
+        if (![done containsObject:k]) [lines addObject:[NSString stringWithFormat:@"%@ = %@", k, vals[k]]];
+    [[NSFileManager defaultManager] createDirectoryAtPath:path.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+    return [[[lines componentsJoinedByString:@"\n"] stringByAppendingString:@"\n"] writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
+static BOOL off_word(NSString *v)
+{
+    NSString *l = v.lowercaseString;
+    return [l isEqual:@"0"] || [l isEqual:@"off"] || [l isEqual:@"no"] || [l isEqual:@"false"];
+}
+
+/* One game of the collection: where it is, what it remembers, and its own settings rows. TimeSplitters 2 and Future
+ * Perfect each keep the data folder (~/Games/<…>Native: the disc's files in game/, the launcher's art in art/) and the
+ * settings domain they had as two apps, so nothing is lost by the move to one. */
+@interface TSGame : NSObject
+@property NSString *key, *name, *cardName, *line, *place, *exe, *titleID, *dataPath, *confPath, *peerAddr, *missing;
+@property NSUserDefaults *defaults;
+@property BOOL ready;
+@property NSImage *backdrop, *logo, *glow, *card;
+@property NSArray<TSRow *> *tiles; @property NSArray<TSPanel *> *panels;
+@property TSRow *display, *resolution, *widescreen, *filtering, *framerate, *soften, *interp, *fps, *renderer,
+                *scheme, *mouse, *crosshair, *link, *router, *saves;
+@end
+@implementation TSGame
+- (BOOL)kbm { return [self.scheme.value isEqual:@"1"]; }
+@end
+
+/* A row whose values are the settings file's own words: what the file says, else what this game's launcher
+ * remembered before it used the file (`legacy`), else `dflt`. A value the file has that the row does not list (a
+ * frame cap typed by hand, say) is added, so opening the launcher never changes it. */
+static TSRow *conf_row(NSString *title, NSArray<NSDictionary *> *choices, NSString *have, NSString *legacy, NSString *dflt)
+{
+    NSString *v = have ?: legacy ?: dflt;
+    if (index_of(choices, v, -1) < 0) choices = [choices arrayByAddingObject:@{@"value": v, @"label": v, @"note": @"As the settings file has it"}];
+    return row(title, choices, v, index_of(choices, dflt, 0));
+}
 
 @interface Launcher : NSObject <NSApplicationDelegate>
 @property (strong) NSWindow *window; @property (strong) TSLaunchView *view;
-@property (strong) TSRow *display, *resolution, *widescreen, *filtering, *framerate, *soften, *interp, *fps, *scheme, *mouse, *crosshair, *link, *router, *saves, *updates, *controls;
-@property NSString *dataPath, *gameName, *gameExe, *peerAddr;
+@property (strong) NSArray<TSGame *> *games; @property NSInteger current;
+@property NSString *lastPickPath;                   /* <user dir>/launcher_game.txt: the game last picked, "ts2" or "fp" (the PC's launcher keeps it there too) */
+@property (strong) TSRow *updates;
 @end
 
 @implementation Launcher
-- (BOOL)kbm { return [self.scheme.value isEqual:@"kbm"]; }
+- (TSGame *)game { return self.games[self.current]; }
+/* The settings domain a game's launcher used as its own app; a test (TS2_LAUNCHER_PREFS=<prefix>) gets its own. */
+static NSUserDefaults *domain(NSString *bundleID)
+{
+    const char *test = getenv("TS2_LAUNCHER_PREFS");
+    if (test && *test) return [[NSUserDefaults alloc] initWithSuiteName:[NSString stringWithFormat:@"%s.%@", test, bundleID]];
+    if ([bundleID isEqual:NSBundle.mainBundle.bundleIdentifier]) return NSUserDefaults.standardUserDefaults;
+    return [[NSUserDefaults alloc] initWithSuiteName:bundleID];
+}
+- (TSGame *)gameWithKey:(NSString *)key name:(NSString *)name card:(NSString *)card line:(NSString *)line place:(NSString *)place
+                    exe:(NSString *)exe titleID:(NSString *)tid bundleID:(NSString *)bid data:(NSString *)defData
+{
+    NSDictionary *plist = NSBundle.mainBundle.infoDictionary;
+    TSGame *g = [TSGame new]; g.key = key; g.name = name; g.cardName = card; g.line = line; g.place = place; g.exe = exe; g.titleID = tid;
+    /* the data folder: install.sh's (Timeslip<KEY>Data; TS2DataPath in a one-game app), or a test's
+     * (TS2_DATA_PATH_<KEY>, or TS2_DATA_PATH for the app's own game) */
+    NSString *pkey = [NSString stringWithFormat:@"Timeslip%@Data", key.uppercaseString];
+    NSString *data = plist[pkey];
+    BOOL ownGame = [plist[@"TS2Exe"] ?: @"timeslip" isEqual:exe];
+    if (!data && ownGame) data = plist[@"TS2DataPath"];
+    const char *env = getenv([NSString stringWithFormat:@"TS2_DATA_PATH_%@", key.uppercaseString].UTF8String);
+    if (env && *env) data = @(env);
+    else if (ownGame && getenv("TS2_DATA_PATH")) data = @(getenv("TS2_DATA_PATH"));
+    g.dataPath = [(data ?: defData) stringByExpandingTildeInPath];
+    /* its settings file: the game's own (~/Library/Application Support/xboxrecomp/titles/<ID>.conf); a test's
+     * folder of them (TS2_CONF_DIR), or the one RECOMP_DISPLAY_CONFIG names */
+    NSString *file = [NSString stringWithFormat:@"%@.conf", tid.uppercaseString];
+    if (getenv("TS2_CONF_DIR")) g.confPath = [@(getenv("TS2_CONF_DIR")) stringByAppendingPathComponent:file];
+    else if (getenv("RECOMP_DISPLAY_CONFIG") && *getenv("RECOMP_DISPLAY_CONFIG")) g.confPath = @(getenv("RECOMP_DISPLAY_CONFIG"));
+    else g.confPath = [[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/xboxrecomp/titles"] stringByAppendingPathComponent:file];
+    g.defaults = domain(bid);
+    [g.defaults registerDefaults:@{@"fullscreen": @NO, @"scale": @2, @"widescreen": @YES, @"aniso": @8, @"cap": @"adaptive", @"interp": @0,
+                                   @"soften": @"sharp", @"fps": @NO, @"scheme": @"kbm", @"mouse": @80, @"crosshair": @YES, @"link": @"off",
+                                   @"peer": @"", @"upnp": @NO}];
+    NSString *macos = NSBundle.mainBundle.executablePath.stringByDeletingLastPathComponent;
+    BOOL haveExe = [[NSFileManager defaultManager] isExecutableFileAtPath:[macos stringByAppendingPathComponent:exe]];
+    BOOL haveDisc = [[NSFileManager defaultManager] fileExistsAtPath:[g.dataPath stringByAppendingPathComponent:@"game/default.xbe"]];
+    g.ready = haveExe && haveDisc;
+    g.missing = !haveExe ? @"this app was built without it (mac/install.sh)"
+                         : [NSString stringWithFormat:@"no disc files in %@", [[g.dataPath stringByAppendingPathComponent:@"game"] stringByAbbreviatingWithTildeInPath]];
+    NSArray *artDirs = @[[g.dataPath stringByAppendingPathComponent:@"art"],
+                         [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:[@"art_" stringByAppendingString:key]] ?: @"",
+                         ownGame ? [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"art"] ?: @"" : @""];
+    g.backdrop = image_at(artDirs, @"backdrop.jpg"); g.logo = image_at(artDirs, @"logo.png"); g.glow = image_at(artDirs, @"glow.png");
+    g.card = image_at(artDirs, @"card_vulkan.jpg") ?: image_at(artDirs, @"card_metal.jpg") ?: g.backdrop;
+    [self buildRows:g];
+    return g;
+}
+- (void)buildRows:(TSGame *)g
+{
+    NSUserDefaults *d = g.defaults; NSDictionary<NSString *, NSString *> *c = conf_read(g.confPath);
+    NSString *(^b)(NSString *) = ^NSString *(NSString *k) { return c[k] ? (off_word(c[k]) ? @"0" : @"1") : nil; };   /* a yes/no line */
+    NSString *(^old)(NSString *) = ^NSString *(NSString *k) { return [d objectForKey:k] ? [NSString stringWithFormat:@"%@", [d objectForKey:k]] : nil; };
+    NSString *(^oldb)(NSString *) = ^NSString *(NSString *k) { return [d objectForKey:k] ? ([d boolForKey:k] ? @"1" : @"0") : nil; };
+
+    /* Graphics Options */
+    g.display = conf_row(@"Display", @[@{@"value": @"0", @"label": @"Window", @"note": @"A window on the desktop; Alt-Return switches in the game"},
+                                       @{@"value": @"1", @"label": @"Full Screen", @"note": @"The whole display, Dock and menu bar out of the way"}], b(@"fullscreen"), oldb(@"fullscreen"), @"0");
+    NSMutableArray *res = [NSMutableArray array];
+    for (int s = 1; s <= 4; s++)
+        [res addObject:@{@"value": [NSString stringWithFormat:@"%d", s], @"label": [NSString stringWithFormat:@"%dx  ·  %d × %d", s, 640 * s, 480 * s], @"short": [NSString stringWithFormat:@"%dx", s],
+                         @"note": s == 1 ? @"The console's own 640 × 480: softest, lightest on the GPU" : s == 2 ? @"Sharp on a Retina display at little cost (recommended)"
+                                : s == 3 ? @"Sharper still; for a larger window or full screen" : @"Supersampled: the cleanest edges, the most GPU work"}];
+    g.resolution = conf_row(@"Resolution", res, c[@"resolution_scale"], old(@"scale"), @"2");
+    g.widescreen = conf_row(@"Widescreen", @[@{@"value": @"1", @"label": @"16:9", @"note": @"A wider camera, not a stretched one; menus and HUD laid out for it"},
+                                             @{@"value": @"0", @"label": @"4:3", @"note": @"The picture as the console drew it"}], b(@"widescreen"), oldb(@"widescreen"), @"1");
+    g.filtering = conf_row(@"Texture Filtering", @[@{@"value": @"1", @"label": @"Console", @"short": @"Console Filtering", @"note": @"The game's own filtering"},
+                                                   @{@"value": @"4", @"label": @"4x Anisotropic", @"short": @"4x AF", @"note": @"Floors and walls stay sharp at an angle"},
+                                                   @{@"value": @"8", @"label": @"8x Anisotropic", @"short": @"8x AF", @"note": @"Floors and walls stay sharp at an angle"},
+                                                   @{@"value": @"16", @"label": @"16x Anisotropic", @"short": @"16x AF", @"note": @"The sharpest; costs a little GPU time"}],
+                           c[@"anisotropy"], old(@"aniso"), @"8");
+    g.soften = conf_row(@"Post-processing", @[@{@"value": @"sharp", @"label": @"Sharp", @"note": @"The game's soften pass, one screen pixel wide at any resolution"},
+                                              @{@"value": @"console", @"label": @"As the console", @"note": @"The soften pass a console pixel wide: softer, as the game looked on a TV"},
+                                              @{@"value": @"off", @"label": @"Off", @"note": @"No soften pass: the crispest picture"}], c[@"post_soften"], old(@"soften"), @"sharp");
+    g.framerate = conf_row(@"Frame Rate", @[@{@"value": @"adaptive", @"label": @"Adaptive", @"note": @"60 where the game ran at 60, paced the way the console paced it"},
+                                            @{@"value": @"60", @"label": @"60 fps", @"note": @"Every frame at 60"},
+                                            @{@"value": @"30", @"label": @"30 fps", @"note": @"Half the work: steadier on a busy or older Mac"}], c[@"frame_cap"], old(@"cap"), @"adaptive");
+    NSString *oldInterp = old(@"interp"); if ([oldInterp isEqual:@"0"]) oldInterp = @"1";      /* the launcher's 0 was the file's 1: off */
+    g.interp = conf_row(@"Frame Interpolation", @[@{@"value": @"1", @"label": @"Off", @"note": @"Each frame the game draws, shown once"},
+                                                  @{@"value": @"2", @"label": @"2x", @"note": @"Twice the frames on screen while the game runs at 60: for 120 Hz displays"},
+                                                  @{@"value": @"3", @"label": @"3x", @"note": @"Three frames for each the game draws"},
+                                                  @{@"value": @"4", @"label": @"4x", @"note": @"Four frames for each the game draws"}], c[@"frame_interp"], oldInterp, @"1");
+    g.fps = conf_row(@"FPS Counter", @[@{@"value": @"0", @"label": @"Off", @"note": @"F9 shows it in the game"},
+                                       @{@"value": @"1", @"label": @"On", @"note": @"The frame rate in the corner; F9 hides it"}], b(@"fps_overlay"), oldb(@"fps"), @"0");
+    TSPanel *gp = [TSPanel new]; gp.title = @"GRAPHICS OPTIONS";
+    gp.rows = @[g.display, g.resolution, g.widescreen, g.filtering, g.soften, g.framerate, g.interp, g.fps];
+    gp.linkTitle = @"ADVANCED"; gp.linkPanel = 3;
+    /* Advanced: the renderer. Metal is the Mac's; Vulkan through MoltenVK is kept here for a Mac Metal does not suit.
+     * `moltenvk`, not `vulkan`: an old file's `vulkan` stays Metal (recompose's rhi.c). */
+    NSString *rv = c[@"renderer"] && [c[@"renderer"].lowercaseString isEqual:@"moltenvk"] ? @"moltenvk" : (c[@"renderer"] ? @"metal" : nil);
+    g.renderer = conf_row(@"Renderer", @[@{@"value": @"metal", @"label": @"Metal (default)", @"short": @"Metal", @"note": @"Apple's own graphics API, drawn by the port's own renderer: nothing in between"},
+                                         @{@"value": @"moltenvk", @"label": @"Vulkan (MoltenVK)", @"short": @"MoltenVK", @"note": @"The Vulkan renderer through MoltenVK; Metal again if it cannot start"}],
+                          rv, nil, @"metal");
+    TSPanel *ap = [TSPanel new]; ap.title = @"ADVANCED OPTIONS"; ap.rows = @[g.renderer];
+    ap.linkTitle = @"GRAPHICS"; ap.linkPanel = 0; ap.linkLeft = YES;
+    ap.footnote = @"The renderer changes from the next start. The in-game menu (Esc) has it too, under Display › Advanced.";
+
+    /* Controls */
+    /* Keyboard & Mouse is mouse look (`mouse_look`, the game's default): the mouse turns the view. The keys are the
+     * game's own either way (its title_defaults.c, or a bindings file, titles/<ID>.input.json), and a controller
+     * works beside them. */
+    NSString *oldScheme = [d objectForKey:@"scheme"] ? ([[d stringForKey:@"scheme"] isEqual:@"pad"] ? @"0" : @"1") : nil;
+    g.scheme = conf_row(@"Scheme", @[@{@"value": @"1", @"label": @"Keyboard & Mouse", @"note": @"The mouse turns the view; the keys below, and a controller still works beside them"},
+                                     @{@"value": @"0", @"label": @"Controller", @"note": @"The right stick turns the view; the mouse is left to the menus"}], b(@"mouse_look"), oldScheme, @"1");
+    NSMutableArray *ms = [NSMutableArray array];
+    for (NSString *m in @[@"40", @"60", @"80", @"100"]) [ms addObject:@{@"value": m, @"label": [m isEqual:@"80"] ? @"80 (default)" : m, @"note": @"How far the view turns for the mouse's travel"}];
+    g.mouse = conf_row(@"Mouse Speed", ms, c[@"mouse_sensitivity"], old(@"mouse"), @"80");
+    g.crosshair = conf_row(@"Crosshair", @[@{@"value": @"1", @"label": @"Always", @"note": @"With the mouse, the aiming crosshair stays in the middle of the screen"},
+                                           @{@"value": @"0", @"label": @"While Aiming", @"note": @"Only while aiming, as the game drew it; online, both players need the same"}],
+                           b(@"crosshair"), oldb(@"crosshair"), @"1");
+    __weak TSGame *wg = g;
+    /* the game's own keys (its title_defaults.c), as the PC's launcher shows them */
+    BOOL fp = [g.key isEqual:@"fp"];
+    TSRow *move = info(@"Move · Look", ^{ return wg.kbm ? (fp ? @"W A S D  ·  Mouse or I J K L" : @"W A S D  ·  Mouse") : @"Left Stick  ·  Right Stick"; }, nil);
+    TSRow *fire = info(@"Fire · Secondary", ^{ return wg.kbm ? (fp ? @"Left Click or H  ·  G" : @"Left Click  ·  G or Middle Click") : @"Right Trigger  ·  Left Trigger"; }, nil);
+    TSRow *abxy = info(fp ? @"A · B · X · Y" : @"A · B · Y", ^{ return wg.kbm ? (fp ? @"F, E, Space  ·  V, Backspace  ·  R  ·  Y" : @"F, E, Space  ·  Backspace  ·  R")
+                                                                    : @"The pad's own"; }, nil);
+    TSRow *wb = info(fp ? @"White · Black · Sticks" : @"Stick Clicks", ^{ return wg.kbm ? (fp ? @"T  ·  B  ·  Right Click, Shift / C, Ctrl" : @"Right Click  ·  C or Ctrl")
+                                                                            : fp ? @"Shoulders  ·  Stick Clicks" : @"Stick Clicks"; }, nil);
+    TSRow *menus = info(@"Start · Back · Menus", ^{ return wg.kbm ? (fp ? @"Return or P  ·  Tab  ·  Arrows" : @"Return or Tab  ·  Backspace  ·  Arrows")
+                                                                  : @"Start  ·  Back  ·  D-Pad"; }, nil);
+    TSPanel *cp = [TSPanel new]; cp.title = @"CONTROLS"; cp.rows = @[g.scheme, g.mouse, g.crosshair, move, fire, abxy, wb, menus];
+    cp.footnote = @"In the game: 1-9 weapons · the wheel swaps or zooms · Esc the PC menu · F9 frame rate · F11 screenshot · Alt-Return full screen";
+    /* Play Together: System Link (the game's own LAN play, over the network or the internet) and online co-op (each
+     * machine runs the whole game and sends only its controller). Chosen for each start, so given to the game as
+     * RECOMP_SYSLINK / RECOMP_SYSLINK_HOST / RECOMP_SYSLINK_UPNP and RECOMP_LOCKSTEP_NET / RECOMP_LOCKSTEP_PEER. */
+    g.link = row(@"Mode", @[@{@"value": @"off", @"label": @"Off", @"note": @"Play on this Mac alone"},
+                            @{@"value": @"host", @"label": @"System Link: Host", @"short": @"Link Host", @"note": @"Others join this Mac's System Link game (UDP 27610)"},
+                            @{@"value": @"join", @"label": @"System Link: Join", @"short": @"Link Join", @"note": @"Join the System Link game at the host's address below"},
+                            @{@"value": @"coop-host", @"label": @"Co-op: Host", @"short": @"Co-op Host", @"note": @"Story co-op online: this Mac plays controller 1, the other machine joins (UDP 27620)"},
+                            @{@"value": @"coop-join", @"label": @"Co-op: Join", @"short": @"Co-op Join", @"note": @"Story co-op online: join the host below as controller 2"}],
+                 [d stringForKey:@"link"], 0);
+    g.peerAddr = [d stringForKey:@"peer"] ?: @"";
+    __weak Launcher *wl = self;
+    TSRow *peer = [TSRow new]; peer.title = @"Host's Address";
+    peer.choices = @[@{@"value": @"", @"label": @"", @"note": @"When joining: the hosting machine's address, with :port if not the usual one"}];
+    peer.summary = ^NSString * { return wg.peerAddr.length ? wg.peerAddr : @"Click to Type It"; };
+    peer.activate = ^{ [wl askPeer]; };
+    g.router = row(@"Router", @[@{@"value": @NO, @"label": @"Leave It", @"note": @"Hosting on your own network: nothing to open"},
+                                @{@"value": @YES, @"label": @"Open the Port (UPnP)", @"short": @"UPnP", @"note": @"Hosting for friends on the internet: the router is asked to forward the port"}],
+                   @([d boolForKey:@"upnp"]), 0);
+    TSRow *me = info(@"This Mac", ^{ return lan_address(); }, @"When hosting, the other player joins this address");
+    TSPanel *np = [TSPanel new]; np.title = @"PLAY TOGETHER"; np.rows = @[g.link, peer, g.router, me];
+    np.footnote = @"Both machines need this same version. The first time you host, macOS asks to allow incoming connections.";
+    g.panels = @[gp, cp, np, ap];
+
+    TSRow *gfx = [TSRow new]; gfx.title = @"Graphics Options"; gfx.wide = YES;
+    gfx.choices = @[@{@"value": @"", @"label": @"", @"note": @"Display, resolution, widescreen, filtering, post-processing, frame rate, interpolation; the renderer under Advanced"}];
+    gfx.summary = ^NSString * {
+        NSMutableArray *a = [NSMutableArray array];
+        for (TSRow *t in @[wg.display, wg.resolution, wg.widescreen, wg.filtering]) [a addObject:t.choices[t.index][@"short"] ?: t.choices[t.index][@"label"]];
+        return [a componentsJoinedByString:@"  ·  "];
+    };
+    gfx.activate = ^{ [wl.view openPanel:0]; };
+    TSRow *controls = [TSRow new]; controls.title = @"Controls";
+    controls.choices = @[@{@"value": @"", @"label": @"", @"note": @"Keyboard & Mouse or a controller, and which key does what"}];
+    controls.summary = ^NSString * { return wg.kbm ? @"Keys & Mouse" : @"Controller"; };
+    controls.activate = ^{ [wl.view openPanel:1]; };
+    TSRow *net = [TSRow new]; net.title = @"Play Together";
+    net.choices = @[@{@"value": @"", @"label": @"", @"note": @"System Link and online co-op with another Mac or PC"}];
+    net.summary = ^NSString * { NSDictionary *ch = wg.link.choices[wg.link.index]; return ch[@"short"] ?: ch[@"label"]; };
+    net.activate = ^{ [wl.view openPanel:2]; };
+    /* the game's own save folder: UDATA/<its title id> */
+    NSString *saves = [g.dataPath stringByAppendingPathComponent:[@"game/UDATA" stringByAppendingPathComponent:g.titleID.lowercaseString]];
+    g.saves = [TSRow new]; g.saves.title = @"Saves";
+    g.saves.choices = @[@{@"value": @"", @"label": @"Open", @"note": [@"Your profiles and story progress: " stringByAppendingString:[saves stringByAbbreviatingWithTildeInPath]]}];
+    g.saves.activate = ^{ [[NSFileManager defaultManager] createDirectoryAtPath:saves withIntermediateDirectories:YES attributes:nil error:nil];
+                          [[NSWorkspace sharedWorkspace] openURL:[NSURL fileURLWithPath:saves isDirectory:YES]]; };
+    g.tiles = @[gfx, controls, net, g.saves];
+}
+- (void)showGame:(NSInteger)i
+{
+    self.current = i; TSGame *g = self.game; TSLaunchView *v = self.view;
+    v.card = i; v.backdrop = g.backdrop; v.logo = g.logo; v.glow = g.glow; v.titleText = g.name; v.place = g.place;
+    v.tiles = [g.tiles arrayByAddingObject:self.updates]; v.panels = g.panels;
+    v.needsDisplay = YES;
+}
 - (void)applicationDidFinishLaunching:(NSNotification *)n
 {
-    NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
-    [d registerDefaults:@{@"fullscreen": @NO, @"scale": @2, @"widescreen": @YES, @"aniso": @8, @"cap": @"adaptive",
-                          @"interp": @0, @"soften": @"sharp", @"fps": @NO, @"scheme": @"kbm", @"mouse": @80, @"crosshair": @YES, @"link": @"off", @"peer": @"", @"upnp": @NO}];
-    NSDictionary *infoPlist = NSBundle.mainBundle.infoDictionary;
-    self.dataPath = [(infoPlist[@"TS2DataPath"] ?: @"~/Games/TimeSplitters2Native") stringByExpandingTildeInPath];
-    /* Which game of the collection this app is (mac/install.sh --title): its name, the recompiled game's executable
-     * beside the launcher, and the place its backdrop shows. TimeSplitters 2's when the app does not say. */
-    self.gameName = infoPlist[@"TS2DisplayName"] ?: @"TimeSplitters 2";
-    self.gameExe = infoPlist[@"TS2Exe"] ?: @"timeslip";
-    if (getenv("TS2_DATA_PATH")) self.dataPath = @(getenv("TS2_DATA_PATH"));   /* development: another game folder (a test copy) */
-    NSArray *artDirs = @[[self.dataPath stringByAppendingPathComponent:@"art"], [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"art"] ?: @""];
+    NSString *userDir = getenv("TS2_CONF_DIR") ? @(getenv("TS2_CONF_DIR")).stringByDeletingLastPathComponent   /* a test's: beside its titles/ */
+                                               : [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/xboxrecomp"];
+    self.lastPickPath = [userDir stringByAppendingPathComponent:@"launcher_game.txt"];
+    self.games = @[
+        [self gameWithKey:@"ts2" name:@"TimeSplitters 2" card:@"TIMESPLITTERS 2" line:@"Story · Arcade · Challenge · online co-op"
+                    place:@"1990 · Siberia · Oblask Dam" exe:@"timeslip" titleID:@"4553000A" bundleID:@"io.github.joshspeakman.timesplitters2"
+                     data:@"~/Games/TimeSplitters2Native"],
+        [self gameWithKey:@"fp" name:@"TimeSplitters Future Perfect" card:@"FUTURE PERFECT" line:@"Story · Arcade · Challenge · MapMaker · online co-op"
+                    place:@"2401 · Time to Split" exe:@"timeslip_fp" titleID:@"45410066" bundleID:@"io.github.joshspeakman.timesplitters-fp"
+                     data:@"~/Games/TimeSplittersFPNative"]];
 
     TSLaunchView *v = [[TSLaunchView alloc] initWithFrame:NSMakeRect(0, 0, W, H)]; self.view = v;
     v.hover = v.pressed = HIT_NONE; v.focus = -1; v.open = -1;
-    v.card = 0;
-    v.backdrop = image_at(artDirs, @"backdrop.jpg");
-    v.logo = image_at(artDirs, @"logo.png"); v.glow = image_at(artDirs, @"glow.png");
-    NSImage *none = [NSImage new];
-    v.shots = @[image_at(artDirs, @"card_metal.jpg") ?: none];
-    v.hint = @"↑/↓ settings · ←/→ change · Return plays · Esc quits";
-    v.titleText = self.gameName;
-    v.place = infoPlist[@"TS2Place"] ?: (infoPlist[@"TS2DisplayName"] ? @"" : @"1990 · Siberia · Oblask Dam");
-
-    /* Graphics Options */
-    self.display = row(@"Display", @[@{@"value": @NO, @"label": @"Window", @"note": @"A window on the desktop; Alt-Return switches in the game"},
-                                     @{@"value": @YES, @"label": @"Full Screen", @"note": @"The whole display, Dock and menu bar out of the way"}], @([d boolForKey:@"fullscreen"]), 0);
-    NSMutableArray *res = [NSMutableArray array];
-    for (int s = 1; s <= 4; s++)
-        [res addObject:@{@"value": @(s), @"label": [NSString stringWithFormat:@"%dx  ·  %d × %d", s, 640 * s, 480 * s], @"short": [NSString stringWithFormat:@"%dx", s],
-                         @"note": s == 1 ? @"The console's own 640 × 480: softest, lightest on the GPU" : s == 2 ? @"Sharp on a Retina display at little cost (recommended)"
-                                : s == 3 ? @"Sharper still; for a larger window or full screen" : @"Supersampled: the cleanest edges, the most GPU work"}];
-    self.resolution = row(@"Resolution", res, @([d integerForKey:@"scale"]), 1);
-    self.widescreen = row(@"Widescreen", @[@{@"value": @YES, @"label": @"16:9", @"note": @"A wider camera, not a stretched one; menus and HUD laid out for it"},
-                                           @{@"value": @NO, @"label": @"4:3", @"note": @"The picture as the console drew it"}], @([d boolForKey:@"widescreen"]), 0);
-    self.filtering = row(@"Texture Filtering", @[@{@"value": @1, @"label": @"Console", @"short": @"Console Filtering", @"note": @"The game's own filtering"},
-                                                 @{@"value": @4, @"label": @"4x Anisotropic", @"short": @"4x AF", @"note": @"Floors and walls stay sharp at an angle"},
-                                                 @{@"value": @8, @"label": @"8x Anisotropic", @"short": @"8x AF", @"note": @"Floors and walls stay sharp at an angle"},
-                                                 @{@"value": @16, @"label": @"16x Anisotropic", @"short": @"16x AF", @"note": @"The sharpest; costs a little GPU time"}], @([d integerForKey:@"aniso"]), 2);
-    self.soften = row(@"Post-processing", @[@{@"value": @"sharp", @"label": @"Sharp", @"note": @"The game's soften pass, one screen pixel wide at any resolution"},
-                                            @{@"value": @"console", @"label": @"As the console", @"note": @"The soften pass a console pixel wide: softer, as the game looked on a TV"},
-                                            @{@"value": @"off", @"label": @"Off", @"note": @"No soften pass: the crispest picture"}], [d stringForKey:@"soften"], 0);
-    self.framerate = row(@"Frame Rate", @[@{@"value": @"adaptive", @"label": @"Adaptive", @"note": @"60 where the game ran at 60, paced the way the console paced it"},
-                                          @{@"value": @"60", @"label": @"60 fps", @"note": @"Every frame at 60"},
-                                          @{@"value": @"30", @"label": @"30 fps", @"note": @"Half the work: steadier on a busy or older Mac"}], [d stringForKey:@"cap"], 0);
-    self.interp = row(@"Frame Interpolation", @[@{@"value": @0, @"label": @"Off", @"note": @"Each frame the game draws, shown once"},
-                                                @{@"value": @2, @"label": @"2x", @"note": @"Twice the frames on screen while the game runs at 60: for 120 Hz displays"},
-                                                @{@"value": @3, @"label": @"3x", @"note": @"Three frames for each the game draws"},
-                                                @{@"value": @4, @"label": @"4x", @"note": @"Four frames for each the game draws"}], @([d integerForKey:@"interp"]), 0);
-    self.fps = row(@"FPS Counter", @[@{@"value": @NO, @"label": @"Off", @"note": @"F9 shows it in the game"}, @{@"value": @YES, @"label": @"On", @"note": @"The frame rate in the corner; F9 hides it"}], @([d boolForKey:@"fps"]), 0);
-    TSPanel *gp = [TSPanel new]; gp.title = @"GRAPHICS OPTIONS";
-    gp.rows = @[self.display, self.resolution, self.widescreen, self.filtering, self.soften, self.framerate, self.interp, self.fps];
-
-    /* Controls */
-    self.scheme = row(@"Scheme", @[@{@"value": @"kbm", @"label": @"Keyboard & Mouse", @"note": @"WASD and mouse look, with a controller still working beside them"},
-                                   @{@"value": @"pad", @"label": @"Controller", @"note": @"Any pad macOS sees, as an Xbox controller; the keyboard as the toolkit maps it"}], [d stringForKey:@"scheme"], 0);
-    NSMutableArray *ms = [NSMutableArray array];
-    for (NSNumber *m in @[@40, @60, @80, @100]) [ms addObject:@{@"value": m, @"label": m.intValue == 80 ? @"80 (default)" : m.stringValue, @"note": @"How far the view turns for the mouse's travel"}];
-    self.mouse = row(@"Mouse Speed", ms, @([d integerForKey:@"mouse"]), 2);
-    self.crosshair = row(@"Crosshair", @[@{@"value": @YES, @"label": @"Always", @"note": @"With the mouse, the aiming crosshair stays in the middle of the screen"},
-                                         @{@"value": @NO, @"label": @"While Aiming", @"note": @"Only while aiming, as the game drew it; online, both players need the same"}],
-                         @([d boolForKey:@"crosshair"]), 0);
-    __weak Launcher *wl = self;
-    TSRow *move = info(@"Move · Look", ^{ return wl.kbm ? @"W A S D  ·  Mouse" : @"Left Stick  ·  Right Stick"; }, nil);
-    TSRow *fire = info(@"Fire · Secondary", ^{ return wl.kbm ? @"Left Click  ·  Right Click" : @"Right Trigger  ·  Left Trigger"; }, nil);
-    TSRow *abxy = info(@"A · B · X · Y", ^{ return wl.kbm ? @"Space  ·  C  ·  R  ·  F" : @"Pad  (keyboard: Z · X · A · S)"; }, nil);
-    TSRow *wb = info(@"White · Black · Sticks", ^{ return wl.kbm ? @"Q  ·  E  ·  Shift / V" : @"Shoulders  ·  Stick Clicks"; }, nil);
-    TSRow *menus = info(@"Start · Back · Menus", ^{ return wl.kbm ? @"Return  ·  Tab  ·  Arrows" : @"Start  ·  Back  ·  D-Pad"; }, nil);
-    TSPanel *cp = [TSPanel new]; cp.title = @"CONTROLS"; cp.rows = @[self.scheme, self.mouse, self.crosshair, move, fire, abxy, wb, menus];
-    cp.footnote = @"In the game: 1-9 weapons · wheel zooms while aiming · F9 frame rate · F10 cap · F11 screenshot · Alt-Return full screen";
-    /* Play Together: System Link (the game's own LAN play, over the network or the internet) and, for a game whose
-     * build has it, online co-op (each machine runs the whole game and sends only its controller). The game reads
-     * RECOMP_SYSLINK / RECOMP_SYSLINK_HOST / RECOMP_SYSLINK_UPNP and RECOMP_LOCKSTEP_NET / RECOMP_LOCKSTEP_PEER. */
-    self.link = row(@"Mode", @[@{@"value": @"off", @"label": @"Off", @"note": @"Play on this Mac alone"},
-                               @{@"value": @"host", @"label": @"System Link: Host", @"short": @"Link Host", @"note": @"Others join this Mac's System Link game (UDP 27610)"},
-                               @{@"value": @"join", @"label": @"System Link: Join", @"short": @"Link Join", @"note": @"Join the System Link game at the host's address below"},
-                               @{@"value": @"coop-host", @"label": @"Co-op: Host", @"short": @"Co-op Host", @"note": @"Story co-op online: this Mac plays controller 1, the other machine joins (UDP 27620)"},
-                               @{@"value": @"coop-join", @"label": @"Co-op: Join", @"short": @"Co-op Join", @"note": @"Story co-op online: join the host below as controller 2"}],
-                    [d stringForKey:@"link"], 0);
-    self.peerAddr = [d stringForKey:@"peer"] ?: @"";
-    TSRow *peer = [TSRow new]; peer.title = @"Host's Address";
-    peer.choices = @[@{@"value": @"", @"label": @"", @"note": @"When joining: the hosting machine's address, with :port if not the usual one"}];
-    peer.summary = ^NSString * { return wl.peerAddr.length ? wl.peerAddr : @"Click to Type It"; };
-    peer.activate = ^{ [wl askPeer]; };
-    self.router = row(@"Router", @[@{@"value": @NO, @"label": @"Leave It", @"note": @"Hosting on your own network: nothing to open"},
-                                   @{@"value": @YES, @"label": @"Open the Port (UPnP)", @"short": @"UPnP", @"note": @"Hosting for friends on the internet: the router is asked to forward the port"}],
-                      @([d boolForKey:@"upnp"]), 0);
-    TSRow *me = info(@"This Mac", ^{ return lan_address(); }, @"When hosting, the other player joins this address");
-    TSPanel *np = [TSPanel new]; np.title = @"PLAY TOGETHER"; np.rows = @[self.link, peer, self.router, me];
-    np.footnote = @"Both machines need this same version. The first time you host, macOS asks to allow incoming connections.";
-    v.panels = @[gp, cp, np];
-
-    TSRow *gfx = [TSRow new]; gfx.title = @"Graphics Options"; gfx.wide = YES;
-    gfx.choices = @[@{@"value": @"", @"label": @"", @"note": @"Display, resolution, widescreen, filtering, post-processing, frame rate, interpolation"}];
-    gfx.summary = ^NSString * {
-        Launcher *l = wl; NSMutableArray *a = [NSMutableArray array];
-        for (TSRow *t in @[l.display, l.resolution, l.widescreen, l.filtering]) [a addObject:t.choices[t.index][@"short"] ?: t.choices[t.index][@"label"]];
-        return [a componentsJoinedByString:@"  ·  "];
-    };
-    __weak TSLaunchView *wv = v; gfx.activate = ^{ [wv openPanel:0]; };
-    self.controls = [TSRow new]; self.controls.title = @"Controls";
-    self.controls.choices = @[@{@"value": @"", @"label": @"", @"note": @"Keyboard & Mouse or a controller, and which key does what"}];
-    self.controls.summary = ^NSString * { return wl.kbm ? @"Keys & Mouse" : @"Controller"; };
-    self.controls.activate = ^{ [wv openPanel:1]; };
-    TSRow *net = [TSRow new]; net.title = @"Play Together";
-    net.choices = @[@{@"value": @"", @"label": @"", @"note": @"System Link and online co-op with another Mac or PC"}];
-    net.summary = ^NSString * { NSDictionary *c = wl.link.choices[wl.link.index]; return c[@"short"] ?: c[@"label"]; };
-    net.activate = ^{ [wv openPanel:2]; };
-    /* the game's own save folder: UDATA/<its title id> */
-    NSString *tid = [(infoPlist[@"TS2TitleID"] ?: @"4553000A") lowercaseString];
-    NSString *saves = [self.dataPath stringByAppendingPathComponent:[@"game/UDATA" stringByAppendingPathComponent:tid]];
-    self.saves = [TSRow new]; self.saves.title = @"Saves";
-    self.saves.choices = @[@{@"value": @"", @"label": @"Open", @"note": [@"Your profiles and story progress: " stringByAppendingString:[saves stringByAbbreviatingWithTildeInPath]]}];
-    self.saves.activate = ^{ [[NSFileManager defaultManager] createDirectoryAtPath:saves withIntermediateDirectories:YES attributes:nil error:nil];
-                             [[NSWorkspace sharedWorkspace] openURL:[NSURL fileURLWithPath:saves isDirectory:YES]]; };
+    NSMutableArray *cards = [NSMutableArray array];
+    for (TSGame *g in self.games)
+        [cards addObject:@{@"name": g.cardName, @"title": g.name, @"line": g.line, @"image": g.card ?: [NSImage new], @"ready": @(g.ready), @"missing": g.missing}];
+    v.cards = cards;
+    v.hint = @"←/→ game · ↑/↓ settings · Return plays · Esc quits";
     [self setupUpdates];
-    v.tiles = @[gfx, self.controls, net, self.saves, self.updates];
+    /* the game picked last time, if it is still here; else the first that is (a one-game app: its own) */
+    NSInteger pick = -1; NSString *last = getenv("TS2_LAUNCHER_GAME") ? @(getenv("TS2_LAUNCHER_GAME")) : [[NSString stringWithContentsOfFile:self.lastPickPath encoding:NSUTF8StringEncoding error:nil]
+                                                                                       stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    NSString *own = NSBundle.mainBundle.infoDictionary[@"TS2Exe"];
+    for (NSInteger i = 0; i < (NSInteger)self.games.count; i++) if ([self.games[i].key isEqual:last] && self.games[i].ready) pick = i;
+    for (NSInteger i = 0; pick < 0 && i < (NSInteger)self.games.count; i++) if (own && [self.games[i].exe isEqual:own] && self.games[i].ready) pick = i;
+    for (NSInteger i = 0; pick < 0 && i < (NSInteger)self.games.count; i++) if (self.games[i].ready) pick = i;
+    [self showGame:MAX(pick, 0)];
     __weak Launcher *ws = self;
     v.onPlay = ^{ [ws play]; };
     v.onQuit = ^{ [NSApp terminate:nil]; };
     v.onChange = ^{ [ws save]; };
+    v.onSelect = ^(NSInteger i) {
+        [ws showGame:i];
+        [[NSFileManager defaultManager] createDirectoryAtPath:ws.lastPickPath.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+        [[ws.game.key stringByAppendingString:@"\n"] writeToFile:ws.lastPickPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    };
 
     const char *shot = getenv("TS2_LAUNCHER_SHOT");
     if (shot) {                                                          /* development: the window as an image */
         if (getenv("TS2_LAUNCHER_HOVER")) v.hover = atoi(getenv("TS2_LAUNCHER_HOVER"));
-        if (getenv("TS2_LAUNCHER_PANEL")) v.open = atoi(getenv("TS2_LAUNCHER_PANEL"));
+        if (getenv("TS2_LAUNCHER_PANEL")) [v openPanel:atoi(getenv("TS2_LAUNCHER_PANEL"))];
+        if (getenv("TS2_LAUNCHER_ROWFOCUS")) v.rowFocus = atoi(getenv("TS2_LAUNCHER_ROWFOCUS"));
         NSBitmapImageRep *rep = [v bitmapImageRepForCachingDisplayInRect:v.bounds]; [v cacheDisplayInRect:v.bounds toBitmapImageRep:rep];
         [[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:@(shot) atomically:YES];
         exit(0);
@@ -645,7 +847,7 @@ static NSString *const kbm_json =
     NSWindow *w = [[NSWindow alloc] initWithContentRect:v.frame styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskFullSizeContentView
                                                 backing:NSBackingStoreBuffered defer:NO];
     w.releasedWhenClosed = NO; w.titlebarAppearsTransparent = YES; w.titleVisibility = NSWindowTitleHidden; w.movableByWindowBackground = YES;
-    w.title = self.gameName; w.backgroundColor = NSColor.blackColor; w.contentView = v;
+    w.title = NSBundle.mainBundle.infoDictionary[@"CFBundleName"] ?: @"Timeslip"; w.backgroundColor = NSColor.blackColor; w.contentView = v;
     self.window = w; [w center]; [w makeKeyAndOrderFront:nil]; [w makeFirstResponder:v];
     [NSApp activateIgnoringOtherApps:YES];
 }
@@ -680,11 +882,11 @@ static NSString *const kbm_json =
         if (state != UPD_AVAILABLE) { check(); return; }
         NSAlert *a = [NSAlert new];
         a.messageText = [NSString stringWithFormat:@"Update to %@?", tag];
-        a.informativeText = @"The release is downloaded from GitHub and the app is rebuilt from your own copy of the game, "
+        a.informativeText = @"The release is downloaded from GitHub and the app is rebuilt from your own copy of the games, "
                              "which takes a few minutes. Your saves and settings are kept. The app restarts when it is done.";
         [a addButtonWithTitle:@"Update"]; [a addButtonWithTitle:@"Cancel"];
         if ([a runModal] != NSAlertFirstButtonReturn) return;
-        if (update_run(ws.window, updater, [ws.dataPath stringByAppendingPathComponent:@"update.log"])) {
+        if (update_run(ws.window, updater, [ws.game.dataPath stringByAppendingPathComponent:@"update.log"])) {
             NSTask *o = [NSTask new]; o.executableURL = [NSURL fileURLWithPath:@"/usr/bin/open"]; o.arguments = @[@"-n", NSBundle.mainBundle.bundlePath];
             [o launchAndReturnError:nil]; [o waitUntilExit];
             exit(0);
@@ -693,80 +895,59 @@ static NSString *const kbm_json =
     };
 }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)a { return YES; }
+/* Graphics and mouse into the game's settings file; the rest (scheme, Play Together) into its settings domain. */
 - (void)save
 {
-    NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
+    TSGame *g = self.game; NSUserDefaults *d = g.defaults;
+    conf_write(g.confPath, @{@"fullscreen": g.display.value, @"resolution_scale": g.resolution.value, @"widescreen": g.widescreen.value,
+                             @"anisotropy": g.filtering.value, @"post_soften": g.soften.value, @"frame_cap": g.framerate.value,
+                             @"frame_interp": g.interp.value, @"fps_overlay": g.fps.value, @"renderer": g.renderer.value,
+                             @"mouse_look": g.scheme.value, @"mouse_sensitivity": g.mouse.value, @"crosshair": g.crosshair.value});
     [d removeObjectForKey:@"renderer"];                                 /* from when the Mac also had Vulkan */
-    [d setBool:[self.display.value boolValue] forKey:@"fullscreen"];
-    [d setInteger:[self.resolution.value integerValue] forKey:@"scale"];
-    [d setBool:[self.widescreen.value boolValue] forKey:@"widescreen"];
-    [d setInteger:[self.filtering.value integerValue] forKey:@"aniso"];
-    [d setObject:self.soften.value forKey:@"soften"];
-    [d setObject:self.framerate.value forKey:@"cap"];
-    [d setInteger:[self.interp.value integerValue] forKey:@"interp"];
-    [d setBool:[self.fps.value boolValue] forKey:@"fps"];
-    [d setObject:self.scheme.value forKey:@"scheme"];
-    [d setInteger:[self.mouse.value integerValue] forKey:@"mouse"];
-    [d setBool:[self.crosshair.value boolValue] forKey:@"crosshair"];
-    [d setObject:self.link.value forKey:@"link"];
-    [d setObject:self.peerAddr ?: @"" forKey:@"peer"];
-    [d setBool:[self.router.value boolValue] forKey:@"upnp"];
+    [d setObject:g.kbm ? @"kbm" : @"pad" forKey:@"scheme"];
+    [d setObject:g.link.value forKey:@"link"];
+    [d setObject:g.peerAddr ?: @"" forKey:@"peer"];
+    [d setBool:[g.router.value boolValue] forKey:@"upnp"];
     [d synchronize];
 }
 - (void)askPeer
 {
+    TSGame *g = self.game;
     NSAlert *a = [NSAlert new]; a.messageText = @"The host's address";
     a.informativeText = @"The address of the machine that is hosting (its launcher shows it under This Mac), with :port if it is not the usual one.";
-    NSTextField *f = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 260, 24)]; f.stringValue = self.peerAddr ?: @""; f.placeholderString = @"192.168.1.20";
+    NSTextField *f = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 260, 24)]; f.stringValue = g.peerAddr ?: @""; f.placeholderString = @"192.168.1.20";
     a.accessoryView = f; [a addButtonWithTitle:@"OK"]; [a addButtonWithTitle:@"Cancel"];
     [a.window setInitialFirstResponder:f];
     if ([a runModal] != NSAlertFirstButtonReturn) return;
-    self.peerAddr = [f.stringValue stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    g.peerAddr = [f.stringValue stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     [self save]; self.view.needsDisplay = YES;
 }
 - (void)play
 {
+    TSGame *g = self.game;
+    if (!g.ready) {
+        NSAlert *a = [NSAlert new]; a.messageText = [NSString stringWithFormat:@"%@ is not installed", g.name];
+        a.informativeText = [NSString stringWithFormat:@"Its %@.", g.missing]; [a runModal]; return;
+    }
     [self save];
-    NSString *mode = self.link.value;
-    if (([mode isEqual:@"join"] || [mode isEqual:@"coop-join"]) && !self.peerAddr.length) {
+    NSString *mode = g.link.value;
+    if (([mode isEqual:@"join"] || [mode isEqual:@"coop-join"]) && !g.peerAddr.length) {
         [self.view openPanel:2]; [self askPeer];
-        if (!self.peerAddr.length) return;
+        if (!g.peerAddr.length) return;
     }
-    NSString *game = [self.dataPath stringByAppendingPathComponent:@"game"];
-    if (![[NSFileManager defaultManager] fileExistsAtPath:[game stringByAppendingPathComponent:@"default.xbe"]]) {
-        NSAlert *a = [NSAlert new]; a.messageText = @"The game files are missing";
-        a.informativeText = [NSString stringWithFormat:@"Expected your disc's files in %@ (default.xbe and the rest).", [game stringByAbbreviatingWithTildeInPath]];
-        [a runModal]; return;
-    }
+    NSString *game = [g.dataPath stringByAppendingPathComponent:@"game"];
     setenv("RECOMP_GAME_DIR", game.fileSystemRepresentation, 1);
-    setenv("RECOMP_D3D8_BACKEND", "metal", 1);                         /* the Mac draws with Metal only */
-    setenv("RECOMP_FULLSCREEN", [self.display.value boolValue] ? "1" : "0", 1);
-    setenv("RECOMP_RES_SCALE", [[self.resolution.value stringValue] UTF8String], 1);
-    setenv("RECOMP_WIDESCREEN", [self.widescreen.value boolValue] ? "1" : "0", 1);
-    setenv("RECOMP_ANISO", [[self.filtering.value stringValue] UTF8String], 1);
-    setenv("RECOMP_POST_SOFTEN", [self.soften.value UTF8String], 1);
-    setenv("RECOMP_FPS_CAP", [self.framerate.value UTF8String], 1);
-    setenv("RECOMP_FRAME_INTERP", [[self.interp.value stringValue] UTF8String], 1);
-    setenv("RECOMP_FPS_OVERLAY", [self.fps.value boolValue] ? "1" : "0", 1);
+    /* the graphics come from the settings file, as the launcher just wrote it; a test's folder of them is the game's too */
+    if (getenv("TS2_CONF_DIR")) setenv("RECOMP_DISPLAY_CONFIG", g.confPath.fileSystemRepresentation, 1);
     /* Play Together: the launcher decides, so a setting left in the settings file does not */
     BOOL coop = [mode hasPrefix:@"coop-"], hosts = [mode hasSuffix:@"host"], joins = [mode hasSuffix:@"join"];
     setenv("RECOMP_SYSLINK", coop || [mode isEqual:@"off"] ? "off" : mode.UTF8String, 1);
     setenv("RECOMP_LOCKSTEP_NET", coop ? (hosts ? "host" : "join") : "off", 1);
-    setenv("RECOMP_SYSLINK_UPNP", hosts && [self.router.value boolValue] ? "1" : "0", 1);
+    setenv("RECOMP_SYSLINK_UPNP", hosts && [g.router.value boolValue] ? "1" : "0", 1);
     unsetenv("RECOMP_SYSLINK_HOST"); unsetenv("RECOMP_LOCKSTEP_PEER");
-    if (joins) setenv(coop ? "RECOMP_LOCKSTEP_PEER" : "RECOMP_SYSLINK_HOST", self.peerAddr.UTF8String, 1);
-    if (self.kbm) {
-        NSString *path = [self.dataPath stringByAppendingPathComponent:@"keyboard_mouse.json"];
-        [kbm_json writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
-        setenv("RECOMP_INPUT_CONFIG", path.fileSystemRepresentation, 1);
-        setenv("RECOMP_MOUSE_LOOK", "1", 1);
-        setenv("RECOMP_MOUSE_SENSITIVITY", [[self.mouse.value stringValue] UTF8String], 1);
-        setenv("RECOMP_CROSSHAIR", [self.crosshair.value boolValue] ? "1" : "0", 1);
-    } else {
-        unsetenv("RECOMP_INPUT_CONFIG"); unsetenv("RECOMP_MOUSE_LOOK"); unsetenv("RECOMP_MOUSE_SENSITIVITY"); unsetenv("RECOMP_CROSSHAIR");   /* the player's own bindings */
-    }
+    if (joins) setenv(coop ? "RECOMP_LOCKSTEP_PEER" : "RECOMP_SYSLINK_HOST", g.peerAddr.UTF8String, 1);
     [self.window orderOut:nil];
-    NSString *exe = [NSBundle.mainBundle.executablePath.stringByDeletingLastPathComponent stringByAppendingPathComponent:self.gameExe];
+    NSString *exe = [NSBundle.mainBundle.executablePath.stringByDeletingLastPathComponent stringByAppendingPathComponent:g.exe];
     char *const av[] = {(char *)exe.fileSystemRepresentation, NULL};
     execv(av[0], av);
     NSAlert *a = [NSAlert new]; a.messageText = @"The game did not start"; a.informativeText = exe; [a runModal];
