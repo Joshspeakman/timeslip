@@ -127,7 +127,7 @@ While playing:
 
 | Key | |
 | --- | --- |
-| Esc | The PC menu: pause, settings (display, frame rate, mouse) and Quit to desktop |
+| Esc | The PC menu: pause, settings (display, frame rate, picture, mouse) and Quit to desktop. Changes are kept when you leave it, or at once with Apply |
 | F9 | Show or hide the frame rate |
 | F10 | Change the frame cap: adaptive, 60, 30, off |
 | F11 | Save a screenshot and a capture of the frame, for bug reports |
@@ -136,7 +136,7 @@ While playing:
 ## Settings
 
 The launcher's two cards choose the renderer on Windows: Vulkan (the default)
-or Direct3D 11; so does the in-game menu (Esc > Display > Renderer, from the
+or Direct3D 11; so does the in-game menu (Esc > Display > Advanced > Renderer, from the
 next start). Linux draws with Vulkan, the Mac with Metal. Its Graphics Options:
 
 | Setting | What it does |
@@ -374,6 +374,10 @@ file:
 | Texture sharpness | `anisotropy` | `RECOMP_ANISO` |
 | Post-processing (the game's soften pass) | `post_soften` (`sharp`, `console`, `off`) | `RECOMP_POST_SOFTEN` |
 | Crosshair always on with the mouse (Esc menu > Mouse) | `crosshair` (1, 0: only while aiming) | `RECOMP_CROSSHAIR` |
+| Brightness (Esc menu > Picture, changed while playing) | `picture_brightness` (-50 to 50; 0, the game's) | `RECOMP_PICTURE_BRIGHTNESS` |
+| Contrast | `picture_contrast` (percent, 50 to 150; 100) | `RECOMP_PICTURE_CONTRAST` |
+| Saturation | `picture_saturation` (percent, 0 grey to 200; 100) | `RECOMP_PICTURE_SATURATION` |
+| Gamma | `picture_gamma` (x 100, 50 to 200; 100; higher brightens the mid-tones) | `RECOMP_PICTURE_GAMMA` |
 | Frame rate | `frame_cap` (0 for uncapped) | `RECOMP_FPS_CAP` |
 | Show frame rate | `fps_overlay` | `RECOMP_FPS_OVERLAY` |
 | Fullscreen | `fullscreen` | `RECOMP_FULLSCREEN` |
