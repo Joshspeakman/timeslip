@@ -682,7 +682,10 @@ static NSUserDefaults *domain(NSString *bundleID)
                          @"note": s == 1 ? @"The console's own 640 × 480: softest, lightest on the GPU" : s == 2 ? @"Sharp on a Retina display at little cost (recommended)"
                                 : s == 3 ? @"Sharper still; for a larger window or full screen" : @"Supersampled: the cleanest edges, the most GPU work"}];
     g.resolution = conf_row(@"Resolution", res, c[@"resolution_scale"], old(@"scale"), @"2");
-    g.widescreen = conf_row(@"Widescreen", @[@{@"value": @"1", @"label": @"16:9", @"note": @"A wider camera, not a stretched one; menus and HUD laid out for it"},
+    /* what 16:9 is: Future Perfect's own widescreen mode; TimeSplitters 2's camera widened (src/launcher_games.c `widescreen`) */
+    NSString *wideNote = [g.key isEqual:@"fp"] ? @"16:9 in the game's own widescreen mode"
+                                               : @"A wider camera, not a stretched one; menus and HUD laid out for it";
+    g.widescreen = conf_row(@"Widescreen", @[@{@"value": @"1", @"label": @"16:9", @"note": wideNote},
                                              @{@"value": @"0", @"label": @"4:3", @"note": @"The picture as the console drew it"}], b(@"widescreen"), oldb(@"widescreen"), @"1");
     g.filtering = conf_row(@"Texture Filtering", @[@{@"value": @"1", @"label": @"Console", @"short": @"Console Filtering", @"note": @"The game's own filtering"},
                                                    @{@"value": @"4", @"label": @"4x Anisotropic", @"short": @"4x AF", @"note": @"Floors and walls stay sharp at an angle"},
