@@ -75,10 +75,24 @@ build (25 November 2026), with the settings below on both.
   latches each machine's mouse with its controller.
 - **Keyboard and mouse** laid out over the game's own Default control layout
   (Settings > Controls): W A S D, the mouse to look, left button fire, right button aim, G
-  grenade, R reload, V melee, F/E/Space activate, C/Ctrl crouch, the wheel
-  and Q change weapon, the middle button or Z toggle the weapon's mode (zoom
-  in while aiming), X change grenades (zoom out). All of it in
-  `src/title_defaults.c`; any of it rebound in the launcher. With mouse look
+  grenade, R reload, V melee, F/E/Space activate, C/Ctrl crouch, Q change
+  weapon, the middle button or Z toggle the weapon's mode (zoom in while
+  aiming), X change grenades (zoom out), Enter or P pause, Tab the
+  SCORES / OPTIONS screen (the Xbox's Back), T and B the White and Black
+  buttons, I J K L the right stick, H and left Shift fire and aim. Every
+  Xbox control has a key, so nothing any menu or mode asks for is out of
+  reach. All of it in `src/title_defaults.c`; any of it rebound in the
+  launcher. **The mouse** does what the screen needs (`fp_menu_mouse_frame`):
+  on foot it looks; in the front end and every submenu, the pause and SCORES
+  screens and results the pointer is shown and it works the menu (left
+  button A, right B, the wheel up and down), as TimeSplitters 2's; in
+  MapMaker it moves MapMaker's own cursor and its buttons choose; in a
+  control mode off foot (vehicles, mounted guns) it moves the right stick,
+  lifted past the game's 0.25 dead zone so a slow movement still moves. The
+  **wheel** changes weapon, or zooms while aiming a weapon that zooms (the
+  scoped pistol), as the d-pad does. The keyboard only counts while the
+  game's window is in front (Windows read it whatever was in front: Enter
+  typed in a chat paused the game). With mouse look
   on, the profile's **Auto Lookahead** is set aside while the game's look
   step runs (`sub_0025D520`; the profile itself is untouched), as
   TimeSplitters 2 does it: it levelled the view as you walked, so a look up

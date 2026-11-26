@@ -538,6 +538,8 @@ static void fp_memdump(uint32_t tick)
 
 static void fp_coop_frame_start(void);     /* online co-op's views, below */
 static void fp_weapon_keys_frame(void);    /* the number keys, below */
+static void fp_menu_mouse_frame(void);     /* the mouse in the menus, below */
+static void fp_wheel_install(void);        /* the wheel, below */
 
 static void fp_frame_clock(void (*gen)(void), const FpStateRegion *state)
 {
@@ -557,6 +559,8 @@ static void fp_frame_clock(void (*gen)(void), const FpStateRegion *state)
     }
     fp_coop_frame_start();
     fp_weapon_keys_frame();
+    fp_wheel_install();
+    fp_menu_mouse_frame();
     gen();
 }
 
@@ -628,10 +632,106 @@ typedef struct FpLook {
     uint32_t yaw_off, pitch_off;
     uint32_t pitch_limit;    /* a float */
     uint32_t port_map, port_direct;
+    uint32_t camera_ptr;     /* the player's camera while it is stepped, a pointer */
+    uint32_t angle_off;      /* the camera's angle the zoom aims for, a float */
 } FpLook;
 
 #define FP_M32(va) (*(volatile uint32_t *)((uintptr_t)(uint32_t)(va) + g_xbox_mem_offset))
 #define FP_MF(va)  (*(volatile float *)((uintptr_t)(uint32_t)(va) + g_xbox_mem_offset))
+
+/*
+ * What the mouse does, decided each frame (fp_frame_clock) from what the
+ * frame before did, and held a quarter of a second (15 frames) before it
+ * changes:
+ *
+ *   on foot   a player was controlled and controller 1's took the look step
+ *             (sub_0025D520): native mouse look, as before;
+ *   stick     a player was controlled but controller 1's not on foot -- the
+ *             look state's other control modes, which the dispatcher
+ *             (sub_000D5C70) sends to their own steps and which read the
+ *             right stick themselves (vehicles, mounted guns, remote
+ *             devices): the mouse moves the right stick, as mouse look does
+ *             in a title without native look, its buttons as bound;
+ *   mapmaker  no player controlled but MapMaker's editor ran (sub_00306460,
+ *             which reads the right stick every frame to pan, turn and zoom
+ *             the grid, and runs behind MapMaker's own screens too):
+ *             MapMaker draws a cursor of its own and moves it with the left
+ *             stick, A choosing under it, so the mouse moves the left stick,
+ *             its left button is A and its right B, the wheel up and down,
+ *             with the pointer kept (recompose recomp_mouse_look_left,
+ *             recomp_mouse_pad_buttons); the grid's view is on I J K L;
+ *   menu      none of those: the front end and every submenu, the pause and
+ *             SCORES screens, a level's results and cutscenes. The pointer
+ *             is shown and the mouse works the menu (left button A, right B,
+ *             the wheel up and down; recompose hle_window_title_menu), as
+ *             TimeSplitters 2's.
+ *
+ * Before, the mouse stayed captured as native look everywhere: in the menus
+ * its buttons were still fire and aim and it did nothing there, and whatever
+ * read the right stick outside the look step got nothing from it (found by
+ * the Mac session, logging every right-stick read: on foot only the look
+ * step reads it; MapMaker's editor and the dispatched modes read it
+ * themselves). Online each machine decides for its own controller from the
+ * game, which is the same on both, and what it sends is the latched pad.
+ */
+extern void hle_window_title_menu(int on);
+extern void recomp_mouse_look_native(int on);
+extern void recomp_mouse_look_left(int on);
+extern void recomp_mouse_pad_buttons(int on);
+static volatile int g_fp_frame_play, g_fp_frame_look, g_fp_frame_editor;
+
+static void fp_menu_mouse_frame(void)
+{
+    enum { MOUSE_LOOK, MOUSE_STICK, MOUSE_MAPMAKER, MOUSE_MENU };
+    static int quiet_play = 1000, quiet_look = 1000, quiet_editor = 1000;
+    static int shown = -1, said;
+    int mode;
+
+    quiet_play = g_fp_frame_play ? 0 : quiet_play < 1000 ? quiet_play + 1 : quiet_play;
+    quiet_look = g_fp_frame_look ? 0 : quiet_look < 1000 ? quiet_look + 1 : quiet_look;
+    quiet_editor = g_fp_frame_editor ? 0 : quiet_editor < 1000 ? quiet_editor + 1 : quiet_editor;
+    g_fp_frame_play = g_fp_frame_look = g_fp_frame_editor = 0;
+    if (quiet_play < 15)
+        mode = quiet_look < 15 ? MOUSE_LOOK : MOUSE_STICK;
+    else
+        mode = quiet_editor < 15 ? MOUSE_MAPMAKER : MOUSE_MENU;
+    if (mode != shown) {
+        shown = mode;
+        /* Native look off only where the mouse moves a stick: in the menus
+         * it stays on, or the mouse would move the right stick there too. */
+        recomp_mouse_look_native(mode != MOUSE_STICK && mode != MOUSE_MAPMAKER);
+        recomp_mouse_look_left(mode == MOUSE_MAPMAKER);
+        recomp_mouse_pad_buttons(mode == MOUSE_MAPMAKER);
+        hle_window_title_menu(mode == MOUSE_MENU);
+        if (said < 12) {
+            said++;
+            fprintf(stderr, "[FP] %s (tick %u)\n",
+                    mode == MOUSE_MENU ? "menus: the mouse works the menu"
+                    : mode == MOUSE_STICK ? "not on foot: the mouse moves the right stick"
+                    : mode == MOUSE_MAPMAKER ? "MapMaker: the mouse moves its cursor, the buttons choose"
+                    : "on foot: the mouse looks", recomp_lockstep_tick());
+        }
+    }
+}
+
+/* A player is controlled this frame, in whatever mode (the dispatcher). */
+static void fp_control_step(void (*gen)(void))
+{
+    g_fp_frame_play = 1;
+    gen();
+}
+
+/* MapMaker's editor ran this frame. */
+static void fp_editor_step(void (*gen)(void))
+{
+    g_fp_frame_editor = 1;
+    gen();
+}
+
+/* Whether the keyboard and mouse's player is aiming a weapon that zooms
+ * (fp_zoom_state, after the FOV code below), for the wheel. */
+static volatile int g_fp_p1_zoom;
+static void fp_zoom_state(uint32_t cam, uint32_t angle_off);
 
 static void fp_look_step(void (*gen)(void), const FpLook *l)
 {
@@ -659,6 +759,16 @@ static void fp_look_step(void (*gen)(void), const FpLook *l)
     gen();
     if (flags)
         *flags = was;
+    g_fp_frame_play = 1;                   /* a player was updated: play (fp_menu_mouse_frame) */
+    {
+        uint32_t id = FP_M32(p);
+        uint32_t port = FP_M32(l->port_direct) ? id : (id < 16u ? FP_M32(l->port_map + 4u * id) : 4u);
+
+        if (port == 0u) {                  /* the keyboard and mouse's player, on foot */
+            g_fp_frame_look = 1;
+            fp_zoom_state(FP_M32(l->camera_ptr), l->angle_off);
+        }
+    }
     if (mouse) {
         uint32_t id = FP_M32(p), port;
 
@@ -752,6 +862,70 @@ float fp_fov_view_k(float angle, float base_now)
         return 1.0f;
     return (float)(tan((double)angle * 3.14159265358979 / 360.0) /
                    tan((double)angle * game / base_now * 3.14159265358979 / 360.0));
+}
+
+/*
+ * The mouse wheel (as TimeSplitters 2's ts2_wheel_filter): aiming a weapon
+ * that zooms, it zooms in (away) and out (towards), as the d-pad up and down
+ * do; otherwise it changes weapon, as the d-pad left and right do. Future
+ * Perfect's own d-pad works the same way: up and down change the weapon's
+ * mode when not aiming (a pair of pistols to the single scoped one) and zoom
+ * while aiming. Aiming a weapon that zooms is the camera's angle (+0x388,
+ * where the zoom is going) below the angle at rest -- the game's 55 or split
+ * screen's 45, as the field of view setting widened them -- by more than a
+ * little: the scoped pistol aims at 30.25 and the d-pad then takes it down a
+ * degree at a time (24.25 and 23.25 in an Arcade match); a pair of pistols,
+ * which does not zoom, leaves it at rest. The state is the keyboard and
+ * mouse's player's (controller 1), read each time that player is stepped;
+ * the wheel acts on it as the frame's pad is sampled, and that pad is what
+ * is latched, so online every machine acts on the same one.
+ */
+typedef struct { uint16_t wButtons; uint8_t bAnalogButtons[8]; int16_t sThumb[4]; } FpGamepad;
+extern void recomp_bindings_set_wheel_filter(void (*fn)(int wheel, FpGamepad *pad));
+
+static void fp_zoom_state(uint32_t cam, uint32_t angle_off)
+{
+    float a, rest, r55, r45;
+
+    if (!(cam >= 0x10000u && cam < 0x84000000u)) {
+        g_fp_p1_zoom = 0;
+        return;
+    }
+    a = FP_MF(cam + angle_off);
+    r55 = fp_fov_widen(fp_fov_const(FP_FOV_BASE_VA));
+    r45 = fp_fov_widen(fp_fov_const(FP_FOV_OTHER_VA));
+    rest = r45 > 1.0f && r45 < r55 ? r45 : r55;
+    g_fp_p1_zoom = a > 1.0f && rest > 1.0f && a < rest * 0.98f;
+}
+
+static void fp_wheel_filter(int wheel, FpGamepad *pad)
+{
+    if (!wheel)
+        return;
+    if (g_fp_p1_zoom)
+        pad->wButtons |= wheel > 0 ? 0x0001 : 0x0002;   /* d-pad up: in; down: out */
+    else
+        pad->wButtons |= wheel > 0 ? 0x0004 : 0x0008;   /* d-pad left, right: weapon */
+}
+
+/* Installed at the first frame: the wheel's filter, and the dead zone Future
+ * Perfect's stick reads have -- 0.25 of a push, the first float of each
+ * pad's record (0x006B93D0 for controller 1, read in MapMaker), which
+ * sub_00042970 takes off every axis -- so the mouse, where it moves a stick
+ * (MapMaker's cursor, the modes off foot), is lifted past it (recompose
+ * recomp_mouse_stick_dead_zone): a slow movement moved MapMaker's cursor not
+ * at all before (a push of 0.14) and only a fast one did (0.53). */
+extern void recomp_mouse_stick_dead_zone(float dz);
+
+static void fp_wheel_install(void)
+{
+    static int done;
+
+    if (!done) {
+        done = 1;
+        recomp_bindings_set_wheel_filter(fp_wheel_filter);
+        recomp_mouse_stick_dead_zone(0.25f);
+    }
 }
 
 static void fp_base_fov(void (*gen)(void), uint32_t base_va)

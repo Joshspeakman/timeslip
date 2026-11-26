@@ -9,24 +9,43 @@
  * what the game's own "Default" control layout does with each Xbox control
  * (Settings > Controls, read off the game, 25 Nov 2026):
  *
- *   right trigger      Fire                       left mouse button
+ *   right trigger      Fire                       left mouse button, H
  *   left trigger       Throw grenade              G
- *   right stick press  Aim                        right mouse button
+ *   right stick press  Aim                        right mouse button, left Shift
  *   left stick press   Crouch                     C, left Ctrl
  *   A                  Activate                   F, E, Space
  *   X                  Manual reload              R
  *   B                  Melee attack               V (and Backspace, Back in menus)
  *   Y                  (nothing in play; menus)   Y
  *   left stick         Run, side step             W A S D
- *   right stick        Look, turn                 the mouse (mouse_look)
+ *   right stick        Look, turn                 the mouse (mouse_look); I J K L
  *   D-pad up           Toggle weapon mode;        middle mouse button, Z,
  *                      while aiming, zoom in      mouse side button, Up
  *   D-pad down         Change grenades;           X, the other side button,
  *                      while aiming, zoom out     Down
- *   D-pad left/right   Change weapon              the mouse wheel, Q, Left/Right
- *   Start              Pause (objectives)         Enter, Tab
+ *   D-pad left/right   Change weapon              Q, Left/Right
+ *   the wheel          Change weapon; aiming a    (src/recomp_manual.c,
+ *                      weapon that zooms, zoom    fp_wheel_filter)
+ *   Start              Pause (objectives)         Enter, P
+ *   Back               SCORES / OPTIONS           Tab
+ *   White, Black       (the Xbox's two extra      T, B
+ *                      buttons)
  *   (none)             A weapon by its place      1 to 9 (src/recomp_manual.c,
  *                                                 fp_weapon_change)
+ *
+ * Every Xbox control has a key, so nothing any menu or mode asks for is out
+ * of reach: Back opens the SCORES / OPTIONS screen in a match (found by
+ * pressing it in an Arcade match, 26 Nov 2026; Tab, as PC shooters show the
+ * scores), the right stick moves what reads it outside the look step
+ * (MapMaker's camera, anything the mouse does not turn), and the right
+ * trigger and the aim have keys for the menus, where the mouse's buttons
+ * work the menu instead (below).
+ *
+ * In the game's own menus -- the front end and its submenus, the pause and
+ * SCORES screens, results -- the pointer is shown and the mouse works the
+ * menu: left button A, right button B, the wheel up and down; the first
+ * frame of play takes it back for mouse look (src/recomp_manual.c,
+ * fp_menu_mouse_frame, as TimeSplitters 2's).
  *
  * The mouse turns the player directly, as an angle (native mouse look,
  * src/recomp_manual.c, fp_look_step, as TimeSplitters 2's): the game's own
@@ -46,17 +65,24 @@ const char *const recomp_title_bindings[] = {
     "lstick_down",  "key:S",
     "lstick_left",  "key:A",
     "lstick_right", "key:D",
-    "rtrigger",     "mouse:left",
+    "rstick_up",    "key:I",
+    "rstick_down",  "key:K",
+    "rstick_left",  "key:J",
+    "rstick_right", "key:L",
+    "rtrigger",     "mouse:left key:H",
     "ltrigger",     "key:G",
-    "rthumb",       "mouse:right",
+    "rthumb",       "mouse:right key:LSHIFT",
     "lthumb",       "key:C key:LCTRL",
     "a",            "key:F key:E key:SPACE",
     "x",            "key:R",
     "b",            "key:V key:BACK",
     "y",            "key:Y",
-    "start",        "key:RETURN key:TAB",
-    "dpad_left",    "key:LEFT mouse:wheel_up",
-    "dpad_right",   "key:Q key:RIGHT mouse:wheel_down",
+    "white",        "key:T",
+    "black",        "key:B",
+    "start",        "key:RETURN key:P",
+    "back",         "key:TAB",
+    "dpad_left",    "key:LEFT",
+    "dpad_right",   "key:Q key:RIGHT",
     "dpad_up",      "mouse:middle key:Z mouse:x2 key:UP",
     "dpad_down",    "key:X mouse:x1 key:DOWN",
     NULL

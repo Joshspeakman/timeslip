@@ -100,12 +100,41 @@ void sub_00022030(void) { fp_vblank_count(sub_00022030_gen); }
  * 87.4 and back, 10.3 to -12.9 and back); the pitch is held within
  * +-[0x007B0C80] (0x0025DCCB). Its controller: the stick reads
  * (sub_000CF200 -> sub_00042970) take the state's id (+0) through the table
- * at 0x006B93C0 to a pad, or the id itself while [0x0076B0FC] is set. */
+ * at 0x006B93C0 to a pad, or the id itself while [0x0076B0FC] is set.
+ *
+ * The wheel's zoom (fp_zoom_state): the player's camera while it is stepped
+ * is [0x007B0CC0], and +0x388 is the angle the zoom is going to -- the angle
+ * at rest, or while aiming a weapon that zooms its aim angle and below
+ * (logged through an aim in an Arcade match: 55 at rest; the scoped pistol
+ * 30.25, then 29.25, 24.25, 23.25 as the d-pad zoomed). */
 static const FpLook k_fp_look = {
-    0x007B0C7Cu, 0x1500u, 0x100u, 0x104u, 0x007B0C80u, 0x006B93C0u, 0x0076B0FCu
+    0x007B0C7Cu, 0x1500u, 0x100u, 0x104u, 0x007B0C80u, 0x006B93C0u, 0x0076B0FCu,
+    0x007B0CC0u, 0x388u
 };
 extern void sub_0025D520_gen(void);
 void sub_0025D520(void) { fp_look_step(sub_0025D520_gen, &k_fp_look); }
+
+/* control_step is sub_000D5C70 (fp_control_step), called from the player
+ * update sub_000D5EB0 for the player being controlled, whatever its control
+ * mode: it dispatches on the look state's mode word ([0x007B0C7C] +0x114):
+ * 2..16 through the table at 0x000D5E84/0x000D5E98 (2 sub_00258F50, 4
+ * sub_000D4100, 8 sub_000D4610, 16 sub_000D55F0), 0x20, 0x800 and above
+ * apart. On foot the look step runs as well; the other modes read the right
+ * stick themselves (sub_000CCAB0, sub_000D0E30, sub_000D2470, sub_0022B1A0:
+ * found by the Mac session, logging every right-stick read). The mouse moves
+ * the right stick while a player is controlled but not on foot
+ * (fp_menu_mouse_frame). */
+extern void sub_000D5C70_gen(void);
+void sub_000D5C70(void) { fp_control_step(sub_000D5C70_gen); }
+
+/* MapMaker's editor is sub_00306460 (fp_editor_step), which reads both of
+ * pad 0's right-stick axes every frame the editor is up (0x003073F6,
+ * 0x00307405: the grid's view; found by the Mac session in a MapMaker
+ * session). MapMaker's screens draw a cursor of their own, moved by the
+ * left stick, A choosing under it: there the mouse moves that stick and its
+ * buttons are A and B (fp_menu_mouse_frame). */
+extern void sub_00306460_gen(void);
+void sub_00306460(void) { fp_editor_step(sub_00306460_gen); }
 
 /* base_fov is sub_000CB3B0(player) (fp_base_fov): fld [0x004785CC] (55.0,
  * the game's vertical field of view), or [0x00478900] while player+0x254
