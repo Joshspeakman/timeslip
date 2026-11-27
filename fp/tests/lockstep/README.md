@@ -7,10 +7,15 @@ hash at every checkpoint.
 
 | File | Release | What it plays | Frames |
 | --- | --- | --- | --- |
-| `coop-2401-us.trace` | USA | A fresh game: 2 PLAYER, both make a profile (player 2 by START), Story Co-op, 2401 Time To Split on Normal, the briefing and the intro, then both players walking, turning, strafing and firing | 13,730 |
-| `arcade-vietnam-us.trace` | USA | A fresh game: 2 PLAYER, both profiles, Arcade, Arcade, Deathmatch, Vietnam, the recommended weapons and six bots, GO!, both pick Cortez; then both players walking, turning, strafing and firing among the bots -- hits, deaths, respawns, pickups, ranks from 1st= to 7th -- with a pause and a resume at 160 s, and player 1 turning and looking with the mouse (native mouse look, latched with the controller) four times from 110 s | 14,359 |
+| `coop-2401-us.trace` | USA | A fresh game: 2 PLAYER, both make a profile (player 2 by START), Story Co-op, 2401 Time To Split on Normal, the briefing and the intro, then both players walking, turning, strafing and firing | 13,747 |
+| `arcade-vietnam-us.trace` | USA | A fresh game: 2 PLAYER, both profiles, Arcade, Arcade, Deathmatch, Vietnam, the recommended weapons and six bots, GO!, both pick Cortez; then both players walking, turning, strafing and firing among the bots -- hits, deaths, respawns, pickups, ranks from 1st= to 7th -- with a pause and a resume at 160 s, and player 1 turning and looking with the mouse (native mouse look, latched with the controller) four times from 110 s | 14,361 |
 
-Both recorded 26 November 2026 on Windows (Vulkan) with `RECOMP_LOCKSTEP=1`
+Both recorded again 26 November 2026, once Recompose took the streams'
+`SetFormat` (Future Perfect makes its streams at 44,100 Hz and gives each the
+rate of what it plays: its dialogue 22,042 Hz, its music 32,000; kept at
+44,100, the dialogue played an octave high and the packets completed early,
+which the game's state shows from its first music), on Windows (Vulkan) with
+`RECOMP_LOCKSTEP=1`
 and `RECOMP_INPUT_SEQ_PAD=1`; controller 2 by `RECOMP_INPUT_SEQ_P2`. Reduced
 with `py -3 -m tools.lockstep compact` (from `recompose/`).
 
@@ -21,7 +26,8 @@ with `py -3 -m tools.lockstep compact` (from `recompose/`).
   `<t>:lstick_up:3500,<t+800>:rt:1800,<t+3600>:rstick_left:450,<t+4200>:lstick_left:1200`
   and controller 2, 1.5 s later,
   `<u>:lstick_up:3000,<u+500>:rt:1500,<u+3300>:rstick_right:400,<u+4000>:lstick_right:1000`
-  (every third turn and every second strafe the other way).
+  (the third, sixth, ... turn and the second, fourth, ... strafe the other
+  way).
 - Arcade: controller 1
   `20000:down,21000:a,26000:a,32000:a,38000:a,61000:down,63000:a,68000:a,73000:a,78000:a,83000:a,88000:a`,
   controller 2 `42000:start,46000:a,50000:a,54000:a,88500:a`; then the same
