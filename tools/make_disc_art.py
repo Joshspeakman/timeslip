@@ -22,6 +22,11 @@ about five minutes; logo.png is the front end's own logo texture (DXT3,
 1024x512, clear around the letters) and glow.png a soft halo made from its outline;
 backdrop.jpg the ship over the planet, card_metal.jpg the cockpit, card_vulkan.jpg the
 canyon. The art folder's default is .../art/45410066.
+
+For Future Perfect, then, a second short run under lockstep, to the Arcade match settings,
+whose footer is drawn from the game's sheet of button pictures (a 128x64 DXT3 texture: B,
+A, X, Y over START, BACK and two arrows): glyphs.png, the launcher's hints with a
+controller. About two minutes; --glyphs-only makes it alone (an install made before it).
 """
 import argparse
 import glob
@@ -114,6 +119,74 @@ def fp_logo(capdir, outdir):
     return 1
 
 
+# The run to Future Perfect's button pictures (glyphs.png): 1 PLAYER, a new profile, its
+# name, the hard disk; Arcade, League off, the first mode and level; then its match
+# settings, whose footer draws from the sheet. Under lockstep, timed by frame.
+GLYPHS = {
+    'fp': dict(seq='t1200:a,t1560:a,t1920:a,t2280:a,t2640:down:200,t2730:a,t3000:a,t3300:a,'
+                   't3600:a,t3900:a',
+               pad=True, lockstep_end=4150, seconds=150, capture=('4100', '1', '1')),
+}
+
+
+def find_glyphs(capdir, outdir):
+    """The sheet of button pictures among the captures' textures: 128x64 DXT3, a picture
+    in each of its eight 32x32 cells. 0 when glyphs.png was written."""
+    try:
+        sys.path.insert(0, os.path.join(HERE, 'tools'))
+        import make_icon                                # needs Pillow
+    except Exception:
+        print('make_disc_art: the button pictures need Pillow', file=sys.stderr)
+        return 1
+    for cap in sorted(glob.glob(os.path.join(capdir, '*.d3dcap'))):
+        for tid, fmt, w, h, lv, data in captex.textures(cap):
+            if fmt != 0x0E or (w, h) != (128, 64):
+                continue
+            img = make_icon.decode(fmt, w, h, data)
+            a = img.getchannel('A')
+            if all(a.crop((x, y, x + 32, y + 32)).getbbox() for x in range(0, 128, 32) for y in (0, 32)):
+                img.save(os.path.join(outdir, 'glyphs.png'))
+                return 0
+    return 1
+
+
+def glyph_run(g, game_exe, build, game, work, out):
+    """A run of the game to its button pictures (GLYPHS), into out/glyphs.png."""
+    caps = os.path.join(work, 'caps_glyphs')
+    saves = os.path.join(work, 'saves_glyphs')
+    os.makedirs(caps, exist_ok=True)
+    os.makedirs(saves, exist_ok=True)
+    env = dict(os.environ, RECOMP_GAME_DIR=game, RECOMP_SAVE_DIR=saves,
+               RECOMP_USER_DIR=os.path.join(work, 'user'),
+               RECOMP_DISPLAY_CONFIG=os.path.join(work, 'user', 'art.conf'),
+               RECOMP_MUTE='1', RECOMP_WINDOW_BACKGROUND='1', RECOMP_INPUT_SEQ=g['seq'],
+               RECOMP_D3D8_CAPTURE=os.path.join(caps, 'a.d3dcap'),
+               RECOMP_D3D8_CAPTURE_SWAP=g['capture'][0], RECOMP_D3D8_CAPTURE_EVERY=g['capture'][1],
+               RECOMP_D3D8_CAPTURE_MAX=g['capture'][2],
+               RECOMP_LOCKSTEP='1', RECOMP_LOCKSTEP_END=str(g['lockstep_end']))
+    for k in ('RECOMP_LOCKSTEP_REPLAY', 'RECOMP_LOCKSTEP_TRACE', 'RECOMP_INPUT_FAKE', 'RECOMP_MOUSE_FAKE',
+              'RECOMP_INPUT_SEQ_P2', 'RECOMP_PAD_FAKE'):
+        env.pop(k, None)
+    if g['pad']:
+        env['RECOMP_INPUT_SEQ_PAD'] = '1'
+    print('== the button pictures (about %d minutes)' % round(g['seconds'] / 60), flush=True)
+    with open(os.path.join(work, 'game_glyphs.log'), 'wb') as log:
+        proc = subprocess.Popen([game_exe], cwd=build, env=env, stdout=log, stderr=log)
+        try:
+            for _ in range(g['seconds']):
+                if proc.poll() is not None:
+                    break
+                time.sleep(1)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+    if find_glyphs(caps, out):
+        print('make_disc_art: no button pictures found; the launcher writes the letters', file=sys.stderr)
+    else:
+        print('   glyphs.png: the footer\'s button pictures')
+
+
 def link_tree(src, dst):
     """The game's files, linked rather than copied where the disk allows (the game only
     reads them; its saves folders are left out)."""
@@ -171,6 +244,8 @@ def main():
     ap.add_argument('--game', default=None, help="the game's folder (default.xbe)")
     ap.add_argument('--out', default=None, help="where the pictures go (the launcher's art folder)")
     ap.add_argument('--build', default=None, help='the built game')
+    ap.add_argument('--glyphs-only', action='store_true',
+                    help="only the button pictures (Future Perfect's glyphs.png)")
     a = ap.parse_args()
     t = TITLES[a.title]
     a.game = a.game or t['game']
@@ -196,6 +271,14 @@ def main():
         link_tree(a.game, game)
         for d in ('caps', 'saves', 'frames', 'art', 'user'):
             os.makedirs(os.path.join(work, d))
+        if a.glyphs_only:
+            if a.title not in GLYPHS:
+                sys.exit('make_disc_art: only Future Perfect has button pictures to make')
+            open(os.path.join(work, 'user', 'art.conf'), 'w').write(
+                'resolution_scale = 1\nwidescreen = 0\nfullscreen = 0\nframe_interp = 1\n')
+            os.makedirs(out, exist_ok=True)
+            glyph_run(GLYPHS[a.title], game_exe, a.build, game, work, out)
+            return
         conf = os.path.join(work, 'user', 'art.conf')          # nothing of the player's settings
         open(conf, 'w').write('resolution_scale = 1\nwidescreen = 0\nfullscreen = 0\nframe_interp = 1\n')
         env = dict(os.environ, RECOMP_GAME_DIR=game, RECOMP_SAVE_DIR=os.path.join(work, 'saves'),
@@ -264,6 +347,8 @@ def main():
         os.makedirs(out, exist_ok=True)
         for f in os.listdir(os.path.join(work, 'art')):
             shutil.copy2(os.path.join(work, 'art', f), os.path.join(out, f))
+        if a.title in GLYPHS and not os.path.isfile(os.path.join(out, 'glyphs.png')):
+            glyph_run(GLYPHS[a.title], game_exe, a.build, game, work, out)
         print('== art in', out)
         for f in sorted(os.listdir(out)):
             print('  ', f)

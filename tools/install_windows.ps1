@@ -196,6 +196,12 @@ if (-not $NoArt -and -not (Test-Path (Join-Path $art "backdrop.jpg")) -and -not 
         & $py (Join-Path $repo "tools\make_disc_art.py") --title $Title --game $Game --out $art --build $build
     } else { "No Python here: the launcher writes the game's name until tools\make_disc_art.py is run." }
 }
+# Future Perfect's controller button pictures (the launcher's hints), for an install whose
+# art was made before they were: a short run of their own.
+if (-not $NoArt -and $py -and $Title -eq "fp" -and -not (Test-Path (Join-Path $art "glyphs.png"))) {
+    "Making the controller button pictures from your game (about two minutes)..."
+    & $py (Join-Path $repo "tools\make_disc_art.py") --title fp --game $Game --out $art --build $build --glyphs-only
+}
 
 # The key art the launcher shows, the clear logo, and the icon's picture (a square of
 # the key art), from the LaunchBox Games Database (tools\fetch_art.py); what is there

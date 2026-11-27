@@ -7,7 +7,8 @@
  * The pictures are fetched when the game is installed (tools/fetch_art.py:
  * the key art and clear logos from the LaunchBox Games Database) and made
  * from the player's own disc (tools/make_disc_art.py, mac/make_art.sh: a
- * logo), into the launcher's art folder
+ * logo, and Future Perfect's controller button pictures), into the
+ * launcher's art folder
  * (%LOCALAPPDATA%\xboxrecomp\art\<id>, ~/Library/Application
  * Support/xboxrecomp/art/<id> or ~/.local/share/...). Nothing of the game's
  * is in this repository. The two addresses below are the launcher's own

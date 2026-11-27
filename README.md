@@ -24,7 +24,7 @@ Rendered at 5 times the console's resolution in widescreen, captured from the
 game as it runs (the two recordings in `tests/lockstep`).
 
 <p align="center">
-<img src="docs/screenshots/launcher.png" width="45%" alt="The launcher: the renderer, the settings, Play">
+<img src="docs/screenshots/launcher.png" width="45%" alt="The launcher: TimeSplitters 2's key art, its menu across the bottom">
 <img src="docs/screenshots/launcher-setup.png" width="45%" alt="The first start: drop the game on it">
 </p>
 
@@ -405,8 +405,9 @@ If you cloned without `--recursive`, run `git submodule update --init --recursiv
 
 On Windows, `tools\install_windows.ps1` installs what you built into
 `%LOCALAPPDATA%\Programs\Timeslip` with Start menu and desktop shortcuts (their
-icon a square of the game's key art) and an entry in Settings > Apps; on a Mac, `mac/install.sh` makes one app, `Timeslip.app`, with both
-games and a card for each in its launcher (mac/README.md). `tools\build_windows.ps1` builds
+icon a square of the game's key art, which the game's and the launcher's windows
+and taskbar buttons show too) and an entry in Settings > Apps; on a Mac, `mac/install.sh` makes one app, `Timeslip.app`, with both
+games in its launcher (mac/README.md). `tools\build_windows.ps1` builds
 again with the same toolchain. Future Perfect (`fp/`) installs beside it with
 `-Title fp` on both (`tools\build_windows.ps1 -Title fp`, then
 `tools\install_windows.ps1 -Title fp`, into
@@ -528,8 +529,9 @@ game is installed (`tools/install_windows.ps1`; `-NoArt` leaves them out). Its
 list says which pictures and where they are; the pictures themselves are not
 in this repository or its releases. `tools/make_disc_art.py` (and
 `mac/make_art.sh` on a Mac) also makes a logo from your own copy of the game,
-which the launcher uses when the key art could not be fetched. Without any of
-them the launcher writes the game's name.
+which the launcher uses when the key art could not be fetched, and Future
+Perfect's controller button pictures, which its hints show with a controller.
+Without any of them the launcher writes the game's name.
 
 # Legal
 
