@@ -168,6 +168,15 @@ if ($Title -eq "fp" -and (Test-Path $ffbin)) {
         ForEach-Object { Copy-Item $_.FullName $Dest -Force }
 }
 Copy-Item (Join-Path $repo "LICENSE") $Dest -Force -ErrorAction SilentlyContinue
+# The online server's files (recompose's tools/online_server), for Play Together's page on
+# setting one up: its setup script runs from this folder.
+$srvFrom = Join-Path $repo "recompose\tools\online_server"
+if (Test-Path (Join-Path $srvFrom "server.py")) {
+    New-Item -ItemType Directory -Force (Join-Path $Dest "online_server") | Out-Null
+    foreach ($f in "server.py", "Dockerfile", "fly.toml.template", "deploy.ps1", "deploy.sh", "README.md") {
+        Copy-Item (Join-Path $srvFrom $f) (Join-Path $Dest "online_server") -Force
+    }
+}
 Copy-Item $PSCommandPath (Join-Path $Dest "uninstall.ps1") -Force     # what Settings > Apps runs
 if ($Title -eq "ts2") {
     Copy-Item (Join-Path $repo "art\icon-256.png") (Join-Path $Dest "icon.png") -Force -ErrorAction SilentlyContinue

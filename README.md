@@ -239,6 +239,25 @@ Then everyone starts the game and opens System Link from its own menus, as on
 a console. Any player can host the game there, not only the one who hosts the
 session. The session ends when its host quits.
 
+### Through an online server
+
+Instead of the host opening a port, everyone can connect to one online server.
+In Play Together, set Connect to Through an online server, type the Server
+address and a Session code of four or more characters; everyone playing types
+the same two. It works for System Link and for online co-op. With a server,
+Host and Join both connect to it, and the game decides who hosts the match.
+
+One person sets the server up, once. Press up from the first row of Play
+Together, to Set up a server: the launcher shows the steps for Fly.io and opens
+the server's folder. The setup script there (`deploy.ps1` on Windows,
+`deploy.sh` on macOS and Linux) signs in to Fly, makes the server and prints
+its address. At Fly's prices it costs about $4.20 a month (a small machine and
+the dedicated IPv4 address UDP needs), on Fly's Pay As You Go plan: the Free
+plan has no dedicated IPv4 addresses. The server can also run on any machine
+your friends can reach on UDP port 27630, with Python 3. The toolkit's
+[online_server/README.md](https://github.com/Joshspeakman/recompose/blob/main/tools/online_server/README.md)
+has the details and the steps by hand.
+
 Copies of this port can play each other without anything else. To play
 against xemu or a real console, you also need your console's `XboxLANKey` in
 `%APPDATA%\xboxrecomp\keys.ini` as `lan_key = ...`. The details are in the

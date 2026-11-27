@@ -34,6 +34,21 @@ TS2 keeps its profiles under `UDATA` in the game folder, which
 `RECOMP_SAVE_DIR` does not cover. Run scripted copies from copies of the game
 folder without `UDATA`.
 
+Through an online server (the README's "Through an online server"), every copy
+sets `RECOMP_ONLINE_SERVER=<address>` and the same `RECOMP_SYSLINK_CODE`, as
+host or join; the server is the session's switch. Measured on one PC through
+a local server (27 November 2026), two copies driven by input scripts that
+press at fixed times:
+
+- No delay or loss: host and joiner played a Mexican Mission match.
+- 40 ms held back and 2% of messages dropped, five runs: two played the match;
+  in two the joiner was back at the Network Game menu when the host started
+  it; in the first the joiner crashed in the game's network encryption (a read
+  of a bad guest address, under `XcHMAC`). The crash has not happened again
+  and is not explained. The same delay and loss between two copies directly,
+  without the server, played the match once with no crash.
+- The largest message in any match was 310 bytes.
+
 ## How TS2's network code runs
 
 The game links Microsoft's network library (XNet) into its own executable, in
@@ -135,6 +150,17 @@ opened on the host's side, as for System Link). Or without the launcher:
 host:  RECOMP_LOCKSTEP_NET=host                 (UDP 27620)
 join:  RECOMP_LOCKSTEP_NET=join RECOMP_LOCKSTEP_PEER=<host's address>
 ```
+
+Or both through an online server, with nothing opened on either side
+(Connect: Through an online server in the launcher):
+
+```text
+both:  RECOMP_LOCKSTEP_NET=host|join RECOMP_ONLINE_SERVER=<address> RECOMP_LOCKSTEP_CODE=<word>
+```
+
+Through a local server holding back 40 ms and dropping 2% (27 November 2026),
+TS2 and Future Perfect each played 1500 frames with no checkpoint differing
+between the machines, the round trip 78 to 93 ms.
 
 The joiner's game starts from the host's saves, handed over before it boots
 (the joiner's own are not touched). Then, as on one console: **2 Players** at
