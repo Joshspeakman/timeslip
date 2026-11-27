@@ -101,7 +101,13 @@ the shortcut `icon.png` from the release folder as its icon.
 
 ## Controls
 
-Controllers work as an Xbox pad. The keyboard and mouse play as controller 1,
+Controllers work as an Xbox pad, any kind (Xbox, PlayStation, others SDL
+knows): the sticks and triggers reach the game exactly as the controller
+reads them, as on the console and in xemu, with the game's own dead zone and
+turning and nothing added -- at full tilt both games turn at the speed xemu
+turns them (TimeSplitters 2 160 degrees a second, Future Perfect 280). White
+is the left shoulder and Black the right, as Microsoft's backward
+compatibility and xemu put them. The keyboard and mouse play as controller 1,
 laid out like a modern PC shooter:
 
 | Action | Keyboard and mouse |

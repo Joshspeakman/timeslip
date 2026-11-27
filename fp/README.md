@@ -92,12 +92,19 @@ build (25 November 2026), with the settings below on both.
   **wheel** changes weapon, or zooms while aiming a weapon that zooms (the
   scoped pistol), as the d-pad does. The keyboard only counts while the
   game's window is in front (Windows read it whatever was in front: Enter
-  typed in a chat paused the game). With mouse look
-  on, the profile's **Auto Lookahead** is set aside while the game's look
+  typed in a chat paused the game). For a player who looks with the
+  mouse, the profile's **Auto Lookahead** is set aside while the game's look
   step runs (`sub_0025D520`; the profile itself is untouched), as
   TimeSplitters 2 does it: it levelled the view as you walked, so a look up
   or down with the mouse was pulled back to the horizon within a second
-  (tried in 2401, before and after).
+  (tried in 2401, before and after). A player on a controller keeps it, as
+  on the console: from the first frame a controller's mouse look moves, its
+  player is a mouse player.
+- **Controllers** as on the console and in xemu: the sticks and triggers as
+  the controller reads them, the game's own dead zone and turning (280
+  degrees a second at full tilt, the same as xemu), White on the left
+  shoulder and Black on the right. The attract movie (left at the title
+  screen) ends on A or START, as on the console.
 - **The launcher's art** from your disc (`tools/make_disc_art.py --title
   fp`): the logo, the ship over the planet, the cockpit, the canyon, the same
   frames on Windows and the Mac (the run is timed by frame under lockstep).

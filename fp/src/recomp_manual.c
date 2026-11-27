@@ -604,10 +604,14 @@ static void fp_loading_screen_start(void (*gen)(void))
  * bit 3 of byte 2 of the profile's controls is set. Right for a stick,
  * which springs back to the middle; wrong for a mouse, which stays where it
  * was put: a look up or down was pulled back to the horizon within a second
- * of walking. With mouse look on, the bit is cleared while that step runs
- * and put back straight after, so the profile -- and what the game saves of
- * it -- is untouched. Every machine in a co-op session must do the same, so
- * mouse_look is one of the settings a session checks (src/main.c).
+ * of walking. For a player who looks with the mouse, the bit is cleared
+ * while that step runs and put back straight after, so the profile -- and
+ * what the game saves of it -- is untouched; a player on a controller keeps
+ * it, as on the console (it used to go for everyone whenever mouse look was
+ * on, the default: a pad player's view no longer levelled as they walked).
+ * A player looks with the mouse from the first frame their controller's
+ * latched look moves (recomp_input_look), which every machine in a co-op
+ * session sees alike, as TimeSplitters 2 decides it (ts2_look_spring).
  */
 extern int recomp_config_bool(const char *env_name, const char *key, int def);
 /* recompose src/hle/hle_input.h: the look for a guest port this frame, in
@@ -770,9 +774,13 @@ static void fp_editor_step(void (*gen)(void))
 static volatile int g_fp_p1_zoom;
 static void fp_zoom_state(uint32_t cam, uint32_t angle_off);
 
+/* The controllers whose player has looked with the mouse (fp_look_step). */
+static int g_fp_mouse_player[4];
+
 static void fp_look_step(void (*gen)(void), const FpLook *l)
 {
     static int mouse = -1;
+    uint32_t look_port;
     volatile uint8_t *flags = NULL;
     uint8_t was = 0;
     uint32_t p, c;
@@ -785,7 +793,12 @@ static void fp_look_step(void (*gen)(void), const FpLook *l)
         gen();
         return;
     }
-    if (mouse) {
+    {
+        uint32_t id = FP_M32(p);
+
+        look_port = FP_M32(l->port_direct) ? id : (id < 16u ? FP_M32(l->port_map + 4u * id) : 4u);
+    }
+    if (mouse && look_port < 4u && g_fp_mouse_player[look_port]) {
         c = FP_M32(p + l->controls_off);
         if (c >= 0x10000u && c < 0x84000000u) {
             flags = (volatile uint8_t *)((uintptr_t)(c + 2u) + g_xbox_mem_offset);
@@ -796,6 +809,19 @@ static void fp_look_step(void (*gen)(void), const FpLook *l)
     gen();
     if (flags)
         *flags = was;
+    /* RECOMP_FP_LOOKLOG=1: controller 1's player's look each frame, after the
+     * game's own step -- yaw and pitch in degrees -- to measure how a stick
+     * turns (against the console in xemu). */
+    {
+        static int log = -1;
+        if (log < 0) {
+            const char *v = getenv("RECOMP_FP_LOOKLOG");
+            log = v && *v && *v != '0';
+        }
+        if (log && look_port == 0u)
+            fprintf(stderr, "[FP-LOOK] tick %u yaw %.4f pitch %.4f\n", recomp_lockstep_tick(),
+                    FP_MF(p + l->yaw_off), FP_MF(p + l->pitch_off));
+    }
     g_fp_frame_play = 1;                   /* a player was updated: play (fp_menu_mouse_frame) */
     {
         uint32_t id = FP_M32(p);
@@ -812,6 +838,12 @@ static void fp_look_step(void (*gen)(void), const FpLook *l)
         port = FP_M32(l->port_direct) ? id : (id < 16u ? FP_M32(l->port_map + 4u * id) : 4u);
         if (port < 4u && recomp_input_look(port, &dx, &dy)) {
             float yaw = FP_MF(p + l->yaw_off) - dx;
+
+            if ((dx != 0.0f || dy != 0.0f) && !g_fp_mouse_player[port]) {
+                g_fp_mouse_player[port] = 1;
+                fprintf(stderr, "[FP] controller %u plays with a mouse: its Auto Lookahead is off\n",
+                        port + 1u);
+            }
             float pitch = FP_MF(p + l->pitch_off) - dy;   /* dy is down the screen */
             float limit = FP_MF(l->pitch_limit);
 
