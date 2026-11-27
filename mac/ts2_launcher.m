@@ -751,7 +751,7 @@ static NSUserDefaults *domain(NSString *bundleID)
     TSRow *abxy = info(fp ? @"A · B · X · Y" : @"A · B · Y", ^{ return wg.kbm ? (fp ? @"F, E, Space  ·  V, Backspace  ·  R  ·  Y" : @"F, E, Space  ·  Backspace  ·  R")
                                                                     : @"The pad's own"; }, nil);
     TSRow *wb = info(fp ? @"White · Black · Sticks" : @"Stick Clicks", ^{ return wg.kbm ? (fp ? @"T  ·  B  ·  Right Click, Shift / C, Ctrl" : @"Right Click  ·  C or Ctrl")
-                                                                            : fp ? @"Shoulders  ·  Stick Clicks" : @"Stick Clicks"; }, nil);
+                                                                            : fp ? @"Left Shoulder  ·  Right Shoulder  ·  Stick Clicks" : @"Stick Clicks"; }, nil);
     TSRow *menus = info(@"Start · Back · Menus", ^{ return wg.kbm ? (fp ? @"Return or P  ·  Tab  ·  Arrows" : @"Return or Tab  ·  Backspace  ·  Arrows")
                                                                   : @"Start  ·  Back  ·  D-Pad"; }, nil);
     TSPanel *cp = [TSPanel new]; cp.title = @"CONTROLS"; cp.rows = @[g.scheme, g.mouse, g.crosshair, move, fire, abxy, wb, menus];
