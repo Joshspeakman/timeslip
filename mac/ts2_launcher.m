@@ -16,24 +16,16 @@
  * the art the window writes the game's name in plain type.
  * Updates: install.sh gives the app an updater (Contents/MacOS/update, mac/update.sh) that rebuilds it from the newest
  * GitHub release.
- * Development: mac/README.md ("Development"): TS2_LAUNCHER_SHOT, _GAME, _PANEL, _ROWFOCUS, _HOVER, _PLAY;
+ * Development: mac/README.md ("Development"): TS2_LAUNCHER_SHOT, _GAME, _FOCUS, _EXTRAS, _PANEL, _ROWFOCUS, _HOVER, _PLAY;
  * TS2_CONF_DIR, TS2_LAUNCHER_PREFS and TS2_DATA_PATH_<TS2|FP> keep a test off the player's own settings and games. */
 #import <Cocoa/Cocoa.h>
+#import <QuartzCore/QuartzCore.h>
 #include <unistd.h>
 #include <ifaddrs.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <net/if.h>
 
-static NSColor *accent(void) { return [NSColor colorWithSRGBRed:0.47 green:0.70 blue:1.00 alpha:1]; }       /* the logo's blue 2 */
-static NSColor *accent_dim(void) { return [NSColor colorWithSRGBRed:0.22 green:0.35 blue:0.62 alpha:1]; }
-static NSColor *text_c(void) { return [NSColor colorWithSRGBRed:0.92 green:0.94 blue:0.98 alpha:1]; }      /* its silver */
-static NSColor *dim(void) { return [NSColor colorWithSRGBRed:0.60 green:0.67 blue:0.78 alpha:1]; }
-static NSColor *ink(CGFloat a) { return [NSColor colorWithSRGBRed:0.015 green:0.03 blue:0.07 alpha:a]; }
-static NSFont *heading(CGFloat size) { return [NSFont fontWithName:@"AvenirNext-Bold" size:size] ?: [NSFont systemFontOfSize:size weight:NSFontWeightBold]; }
-static NSFont *heavy(CGFloat size) { return [NSFont fontWithName:@"AvenirNext-Heavy" size:size] ?: heading(size); }
-static NSFont *body(CGFloat size, BOOL bold)
-{ return [NSFont fontWithName:bold ? @"AvenirNext-DemiBold" : @"AvenirNext-Medium" size:size] ?: [NSFont systemFontOfSize:size weight:bold ? NSFontWeightSemibold : NSFontWeightRegular]; }
 static void on_main(dispatch_block_t b) { CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, b); CFRunLoopWakeUp(CFRunLoopGetMain()); }
 
 // ---------------------------------------------------------------- settings
@@ -54,121 +46,340 @@ static void on_main(dispatch_block_t b) { CFRunLoopPerformBlock(CFRunLoopGetMain
 @implementation TSPanel @end
 
 // ---------------------------------------------------------------- the view
-enum { HIT_NONE = -1, HIT_PLAY = 100, HIT_QUIT = 101, HIT_BACK = 102, HIT_PLINK = 103, HIT_CARD = 200, HIT_TILE = 300, HIT_ROW = 400 };   /* + 10*k + 0 left / 1 value / 2 right */
-enum { W = 960, H = 660 };
+/* The hero layout, as the Windows launcher's (recompose src/launcher/launcher_hero.inc, with this repository's
+ * src/launcher_games.c): the game's key art across the whole window, slowly moving and handing over to the next, the
+ * logo bottom-left sitting on a menu row across the bottom, the other game's logo above the row's right end, and the
+ * settings in a column at the right. Window units are the Windows launcher's: 1280 by 720. */
+enum { W = 1280, H = 720, ROW_X = 60, ROW_Y = H - 116, ROW_H = 50, ROW_GAP = 34, ROW_R = W - 64,
+       PANEL_X = 610, PANEL_W = W - 64 - 610, ROWS_Y = 134, PITCH = 46,
+       EX_COLS = 4, EX_TW = 268, EX_TH = 151, EX_GAP = 24, EX_X0 = 64, EX_Y0 = 200, EX_PITCH = EX_TH + 66, EX_ROWS = 2 };
+enum { HIT_NONE = -1, HIT_QUIT = 101, HIT_BACK = 102, HIT_PLINK = 103, HIT_SWITCH = 104, HIT_OPEN = 105, HIT_FOLDER = 106,
+       HIT_ITEM = 200, HIT_ROW = 400, HIT_SECTION = 600, HIT_TILE = 700 };          /* HIT_ROW + 10*k + 0 left / 1 value / 2 right */
+enum { IT_PLAY, IT_GRAPHICS, IT_CONTROLS, IT_ONLINE, IT_SAVES, IT_EXTRAS, IT_UPDATES, IT_QUIT };
+#define HOLD 11.0                                         /* s a picture is up */
+#define FADE 1.8                                          /* the hand-over to the next */
+#define SWITCH 0.7                                        /* another game's: quicker, with a slide */
+#define SLIDE 70.0                                        /* how far, in window units */
+#define DOT @"  ·  "
 
-@interface TSLaunchView : NSView
-@property NSArray<TSRow *> *tiles; @property NSArray<TSPanel *> *panels;
-@property NSInteger card, hover, pressed, focus, open, rowFocus;   /* focus: -1 the cards, else a tile; open: a panel, or -1; rowFocus -1: the panel's link */
-@property NSImage *backdrop, *logo, *glow; @property NSString *hint;
-/* the games, a card each: name, line, image, ready (NO: not installed, dimmed and not chosen) */
-@property NSArray<NSDictionary *> *cards;
-@property NSString *titleText, *place;   /* the chosen game's name without its logo art; where its backdrop is */
-@property (copy) void (^onPlay)(void); @property (copy) void (^onQuit)(void); @property (copy) void (^onChange)(void);
-@property (copy) void (^onSelect)(NSInteger game);
+static NSColor *rgb(uint32_t c, CGFloat a) { return [NSColor colorWithSRGBRed:((c >> 16) & 255) / 255.0 green:((c >> 8) & 255) / 255.0 blue:(c & 255) / 255.0 alpha:a]; }
+static const uint32_t INK = 0x040812;
+static uint32_t brighter(uint32_t c)              /* halfway to white: the focused row's edge, the captions */
+{
+    uint32_t r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+    r += (255 - r) / 2; g += (255 - g) / 2; b += (255 - b) / 2;
+    return (r << 16) | (g << 8) | b;
+}
+static double ease(double t) { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); }
+static double now_s(void) { return CACurrentMediaTime(); }
+
+/* The faces (the Windows launcher's display, heavy, condensed and body faces), in Avenir Next. */
+enum { F_BODY, F_DISPLAY, F_HEAVY, F_COND, F_COND_BOLD };
+static NSFont *face(int f, CGFloat pt)
+{
+    static NSString *const names[] = {@"AvenirNext-Medium", @"AvenirNext-DemiBold", @"AvenirNext-Heavy", @"AvenirNextCondensed-DemiBold", @"AvenirNextCondensed-Bold"};
+    return [NSFont fontWithName:names[f] size:pt] ?: [NSFont systemFontOfSize:pt weight:f == F_HEAVY ? NSFontWeightHeavy : f == F_BODY ? NSFontWeightRegular : NSFontWeightBold];
+}
+static NSDictionary *attrs(int f, CGFloat pt, NSColor *c, CGFloat track, BOOL shadow, NSTextAlignment al)
+{
+    NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new]; ps.alignment = al; ps.lineBreakMode = NSLineBreakByTruncatingTail;
+    NSMutableDictionary *a = [@{NSFontAttributeName: face(f, pt), NSForegroundColorAttributeName: c, NSKernAttributeName: @(track),
+                                NSParagraphStyleAttributeName: ps} mutableCopy];
+    if (shadow) { NSShadow *s = [NSShadow new]; s.shadowColor = [NSColor colorWithWhite:0 alpha:0.8]; s.shadowOffset = NSMakeSize(0, -1); s.shadowBlurRadius = 2; a[NSShadowAttributeName] = s; }
+    return a;
+}
+static CGFloat text_w(NSString *s, int f, CGFloat pt, CGFloat track) { return ceil([s sizeWithAttributes:attrs(f, pt, NSColor.whiteColor, track, NO, NSTextAlignmentLeft)].width); }
+/* Text in r, centred on r's height. */
+static void text(NSString *s, NSRect r, int f, CGFloat pt, NSColor *c, NSTextAlignment al, CGFloat track, BOOL shadow)
+{
+    if (!s.length) return;
+    NSDictionary *a = attrs(f, pt, c, track, shadow, al); NSFont *fn = a[NSFontAttributeName];
+    CGFloat lh = ceil(fn.ascender - fn.descender);
+    [s drawInRect:NSMakeRect(r.origin.x, r.origin.y + (r.size.height - lh) / 2, r.size.width, lh + 2) withAttributes:a];
+}
+static void caps(NSString *s, NSRect r, int f, CGFloat pt, NSColor *c, NSTextAlignment al, CGFloat track, BOOL shadow)
+{ text(s.uppercaseString, r, f, pt, c, al, track, shadow); }
+static void fill(NSRect r, NSColor *c) { [c setFill]; NSRectFillUsingOperation(r, NSCompositingOperationSourceOver); }
+/* A gradient of one colour's alpha: down (vertical) or across. */
+static void grad(NSRect r, uint32_t c, int n, const CGFloat *at, const CGFloat *alpha, BOOL down)
+{
+    NSMutableArray *cs = [NSMutableArray array]; CGFloat loc[8];
+    for (int i = 0; i < n; i++) { [cs addObject:rgb(c, alpha[i])]; loc[i] = at[i]; }
+    [[[NSGradient alloc] initWithColors:cs atLocations:loc colorSpace:NSColorSpace.sRGBColorSpace] drawInRect:r angle:down ? 90 : 0];
+}
+static void chevron(CGFloat cx, CGFloat cy, BOOL right, CGFloat w, CGFloat h, NSColor *c)
+{
+    NSBezierPath *p = [NSBezierPath bezierPath]; p.lineWidth = 2; p.lineCapStyle = NSLineCapStyleRound; p.lineJoinStyle = NSLineJoinStyleRound;
+    CGFloat x0 = cx - w / 2, x1 = cx + w / 2;
+    if (right) { [p moveToPoint:NSMakePoint(x0, cy - h / 2)]; [p lineToPoint:NSMakePoint(x1, cy)]; [p lineToPoint:NSMakePoint(x0, cy + h / 2)]; }
+    else { [p moveToPoint:NSMakePoint(x1, cy - h / 2)]; [p lineToPoint:NSMakePoint(x0, cy)]; [p lineToPoint:NSMakePoint(x1, cy + h / 2)]; }
+    [c setStroke]; [p stroke];
+}
+/* A picture fitted into r, its aspect kept (never stretched), aligned left, right or centred. */
+static NSRect picture(NSImage *img, NSRect r, NSTextAlignment al, CGFloat alpha)
+{
+    if (img.size.width < 2) return NSZeroRect;
+    CGFloat s = MIN(r.size.width / img.size.width, r.size.height / img.size.height), w = img.size.width * s, h = img.size.height * s;
+    CGFloat x = al == NSTextAlignmentLeft ? r.origin.x : al == NSTextAlignmentRight ? NSMaxX(r) - w : NSMidX(r) - w / 2;
+    NSRect d = NSMakeRect(x, NSMidY(r) - h / 2, w, h);
+    [img drawInRect:d fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:alpha respectFlipped:YES hints:@{NSImageHintInterpolation: @(NSImageInterpolationHigh)}];
+    return d;
+}
+/* A picture covering r, its aspect kept: cropped, the crop at (fx, fy) of what is spare. */
+static void cover(NSImage *img, NSRect r, CGFloat fx, CGFloat fy, CGFloat alpha)
+{
+    if (img.size.width < 2) return;
+    CGFloat s = MAX(r.size.width / img.size.width, r.size.height / img.size.height), w = r.size.width / s, h = r.size.height / s;
+    NSRect from = NSMakeRect((img.size.width - w) * fx, img.size.height - h - (img.size.height - h) * fy, w, h);   /* NSImage rows: bottom-up */
+    [img drawInRect:r fromRect:from operation:NSCompositingOperationSourceOver fraction:alpha respectFlipped:YES hints:@{NSImageHintInterpolation: @(NSImageInterpolationHigh)}];
+}
+
+/* The key art: one picture up, a little larger than the window, drifting over its turn, then handed over to the next
+ * with a crossfade; another game's comes in sliding. Core Animation layers, so it moves on the GPU and costs the
+ * launcher nothing between hand-overs. A hero: image, zoom, fx, fy, dx, dy (launcher_games.c's LauncherHero). */
+@interface TSHeroView : NSView
+@property (nonatomic) BOOL still;                  /* a picture of the window (TS2_LAUNCHER_SHOT): drawn, not layered */
+- (void)showHeroes:(NSArray<NSDictionary *> *)heroes slide:(NSInteger)dir;
+@end
+@implementation TSHeroView {
+    NSArray<NSDictionary *> *_heroes; NSInteger _k; CALayer *_cur; NSTimer *_timer;
+}
+- (BOOL)isFlipped { return YES; }
+- (instancetype)initWithFrame:(NSRect)f
+{
+    if ((self = [super initWithFrame:f])) { self.wantsLayer = YES; self.layer.backgroundColor = rgb(INK, 1).CGColor; self.layer.masksToBounds = YES; }
+    return self;
+}
+/* Where a hero's picture sits, and how large, at a point d (0..1) of its turn. */
+static NSRect hero_frame(NSDictionary *h, double d)
+{
+    NSImage *img = h[@"image"]; double zoom = [h[@"zoom"] doubleValue];
+    double s = MAX(W / img.size.width, H / img.size.height) * zoom, w = img.size.width * s, hh = img.size.height * s;
+    double ox = (w - W) * [h[@"fx"] doubleValue] + [h[@"dx"] doubleValue] * (d - 0.5);
+    double oy = (hh - H) * [h[@"fy"] doubleValue] + [h[@"dy"] doubleValue] * (d - 0.5);
+    return NSMakeRect(-ox, -oy, w, hh);
+}
+- (void)drawRect:(NSRect)dirty
+{
+    fill(self.bounds, rgb(INK, 1));
+    if (!self.still || !_heroes.count) return;
+    NSDictionary *h = _heroes[_k]; NSImage *img = h[@"image"];
+    [img drawInRect:hero_frame(h, 0.5) fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1 respectFlipped:YES hints:@{NSImageHintInterpolation: @(NSImageInterpolationHigh)}];
+}
+- (CALayer *)layerFor:(NSDictionary *)h
+{
+    NSImage *img = h[@"image"];
+    CGImageRef cg = [img CGImageForProposedRect:NULL context:nil hints:nil];
+    CALayer *l = [CALayer layer]; l.contents = (__bridge id)cg; l.anchorPoint = CGPointZero;
+    l.minificationFilter = kCAFilterTrilinear; l.magnificationFilter = kCAFilterLinear;
+    NSRect a = hero_frame(h, 0), b = hero_frame(h, 1);
+    l.bounds = CGRectMake(0, 0, a.size.width, a.size.height); l.position = b.origin;       /* where it ends */
+    CABasicAnimation *drift = [CABasicAnimation animationWithKeyPath:@"position"];       /* over its whole turn */
+    drift.fromValue = [NSValue valueWithPoint:a.origin]; drift.toValue = [NSValue valueWithPoint:b.origin];
+    drift.duration = HOLD + FADE; drift.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear];
+    [l addAnimation:drift forKey:@"drift"];
+    return l;
+}
+- (void)handOver:(NSInteger)k slide:(NSInteger)dir
+{
+    if (self.still) { _k = k; self.needsDisplay = YES; return; }
+    CALayer *old = _cur, *now = [self layerFor:_heroes[k]]; _k = k; _cur = now;
+    double len = dir ? SWITCH : old ? FADE : 0;
+    [CATransaction begin]; [CATransaction setDisableActions:YES];
+    [self.layer addSublayer:now];
+    if (len > 0) {
+        CABasicAnimation *in = [CABasicAnimation animationWithKeyPath:@"opacity"];
+        in.fromValue = @0; in.toValue = @1; in.duration = len; in.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+        [now addAnimation:in forKey:@"in"];
+        if (dir) {                                                       /* the new game's slides in; the old one's out */
+            CABasicAnimation *s = [CABasicAnimation animationWithKeyPath:@"position"]; s.additive = YES;
+            s.fromValue = [NSValue valueWithPoint:NSMakePoint(dir * SLIDE, 0)]; s.toValue = [NSValue valueWithPoint:NSZeroPoint];
+            s.duration = len; s.timingFunction = in.timingFunction; [now addAnimation:s forKey:@"slide"];
+            if (old) {
+                CABasicAnimation *o = [CABasicAnimation animationWithKeyPath:@"position"]; o.additive = YES;
+                o.fromValue = [NSValue valueWithPoint:NSZeroPoint]; o.toValue = [NSValue valueWithPoint:NSMakePoint(-dir * SLIDE, 0)];
+                o.duration = len; o.timingFunction = in.timingFunction; o.fillMode = kCAFillModeForwards; o.removedOnCompletion = NO;
+                [old addAnimation:o forKey:@"slide"];
+            }
+        }
+    }
+    [CATransaction commit];
+    if (old) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((len + 0.05) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [old removeFromSuperlayer]; });
+}
+- (void)showHeroes:(NSArray<NSDictionary *> *)heroes slide:(NSInteger)dir
+{
+    [_timer invalidate]; _timer = nil;
+    _heroes = heroes;
+    if (!heroes.count) { [_cur removeFromSuperlayer]; _cur = nil; self.needsDisplay = YES; return; }
+    [self handOver:0 slide:dir];
+    if (heroes.count > 1 && !self.still) {
+        __weak TSHeroView *ws = self;
+        _timer = [NSTimer scheduledTimerWithTimeInterval:HOLD repeats:YES block:^(NSTimer *t) {
+            TSHeroView *s = ws; if (!s) return;
+            [s handOver:(s->_k + 1) % (NSInteger)s->_heroes.count slide:0];
+        }];
+    }
+}
 @end
 
-@implementation TSLaunchView
+/* The menu, the panels and the extras over the key art. */
+@interface TSLaunchView : NSView
+@property NSArray<NSNumber *> *items;                    /* IT_* along the row */
+@property NSInteger focus, hover, pressed, open, rowFocus;   /* open: a panel, or -1; rowFocus -1: its title-bar link */
+@property NSArray<TSPanel *> *panels;
+@property NSImage *logo, *otherLogo; @property NSString *gameName, *otherName, *cardName;
+@property uint32_t accentRGB, washRGB;
+@property (copy) NSString *(^caption)(NSInteger kind);
+@property (copy) void (^onItem)(NSInteger kind); @property (copy) void (^onSwitch)(NSInteger dir); @property (copy) void (^onChange)(void);
+/* the Extras: each {title, section, kind, target, picture (NSImage), about}; the folder; pictures for one without its own */
+@property BOOL extrasOpen; @property NSArray<NSDictionary *> *extras; @property NSString *extrasDir; @property NSArray<NSImage *> *fallback;
+@property NSInteger section, sel, top;
+@property (copy) void (^onOpenExtra)(NSDictionary *e); @property (copy) void (^onExtrasFolder)(void);
+@property double switchedAt;                               /* when the game was switched: its logo fades in */
+@property NSMutableArray<NSDictionary *> *hintRects;       /* where the hints were drawn, and what a click on each does */
+@end
+
+@implementation TSLaunchView { double _bar, _barW; NSTimer *_anim; }
 - (BOOL)isFlipped { return YES; }
 - (BOOL)acceptsFirstResponder { return YES; }
 - (BOOL)acceptsFirstMouse:(NSEvent *)e { return YES; }
+- (NSColor *)accent { return rgb(self.accentRGB, 1); }
+- (NSColor *)bright { return rgb(brighter(self.accentRGB), 1); }
 - (NSArray<TSRow *> *)rows { return self.open >= 0 ? self.panels[self.open].rows : @[]; }
-- (NSRect)cardRect:(NSInteger)i { return NSMakeRect(i == 0 ? 60 : 496, 250, 404, 224); }   /* a card for each game */
-- (BOOL)cardReady:(NSInteger)i { return i >= 0 && i < (NSInteger)self.cards.count && [self.cards[i][@"ready"] boolValue]; }
-- (NSRect)linkRect { NSRect p = self.panelRect; TSPanel *pn = self.panels[self.open];
-                     return pn.linkLeft ? NSMakeRect(p.origin.x + 24, p.origin.y + 21, 120, 28) : NSMakeRect(NSMaxX(p) - 24 - 132, p.origin.y + 21, 132, 28); }
-- (NSRect)tileRect:(NSInteger)k   /* a row under the cards (a wide tile counts twice) */
+- (BOOL)rowCycles:(NSInteger)k { return self.rows[k].choices.count > 1 || self.rows[k].activate != nil; }
+/* Redrawn while something moves (the focus sliding, a logo fading in), then left alone. */
+- (void)animate
 {
-    NSInteger units = 0, at = 0, n = (NSInteger)self.tiles.count;
-    for (NSInteger j = 0; j < n; j++) { if (j == k) at = units; units += self.tiles[j].wide ? 2 : 1; }
-    CGFloat u = (840 - 16 * (units - 1)) / (CGFloat)units;
-    return NSMakeRect(60 + at * (u + 16), 500, self.tiles[k].wide ? 2 * u + 16 : u, 66);
-}
-- (NSRect)arrow:(NSInteger)k right:(BOOL)right { NSRect r = [self tileRect:k]; return NSMakeRect(right ? NSMaxX(r) - 22 : r.origin.x + 1, r.origin.y + 26, 21, 34); }
-- (NSRect)playRect { return NSMakeRect(W - 60 - 200, H - 68, 200, 46); }
-- (NSRect)quitRect { return NSMakeRect(W - 60 - 200 - 20 - 150, H - 68, 150, 46); }
-- (CGFloat)rowPitch { return self.rows.count > 7 ? 55 : 58; }   /* eight rows still clear the buttons */
-- (NSRect)panelRect { CGFloat h = 92 + self.rowPitch * (CGFloat)self.rows.count; return NSMakeRect(120, MAX(30, 494 - h), 720, h); }
-- (NSRect)rowRect:(NSInteger)k { NSRect p = self.panelRect; return NSMakeRect(p.origin.x + 30, p.origin.y + 72 + self.rowPitch * k, p.size.width - 60, 50); }
-- (NSRect)rowArrow:(NSInteger)k right:(BOOL)right { NSRect r = [self rowRect:k]; return NSMakeRect(right ? NSMaxX(r) - 34 : NSMaxX(r) - 330, r.origin.y + 3, 30, 30); }
-- (NSRect)rowValue:(NSInteger)k { NSRect r = [self rowRect:k]; return NSMakeRect(NSMaxX(r) - 300, r.origin.y + 4, 262, 28); }
-- (BOOL)rowCycles:(NSInteger)k { return self.rows[k].choices.count > 1 || self.rows[k].activate != nil; }   /* cycles, or runs something */
-- (void)openPanel:(NSInteger)i
-{
-    self.open = i; self.hover = HIT_NONE; self.rowFocus = 0;
-    while (self.rowFocus < (NSInteger)self.rows.count - 1 && ![self rowCycles:self.rowFocus]) self.rowFocus++;
     self.needsDisplay = YES;
+    if (_anim) return;
+    __weak TSLaunchView *ws = self;
+    _anim = [NSTimer scheduledTimerWithTimeInterval:1.0 / 60 repeats:YES block:^(NSTimer *t) { ws.needsDisplay = YES; }];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        TSLaunchView *s = ws; if (!s) return; [s->_anim invalidate]; s->_anim = nil; s.needsDisplay = YES; });
 }
-- (void)selectCard:(NSInteger)i { if (![self cardReady:i] || i == self.card) return; if (self.onSelect) self.onSelect(i); self.needsDisplay = YES; }
-- (void)closePanel { self.open = -1; self.hover = HIT_NONE; self.needsDisplay = YES; }
+
+// ------------------------------------------------ where things are
+- (NSString *)itemName:(NSInteger)kind
+{
+    static NSString *const t[] = {@"PLAY", @"GRAPHICS", @"CONTROLS", @"PLAY TOGETHER", @"SAVES", @"EXTRAS", @"UPDATES", @"QUIT"};
+    return t[kind];
+}
+- (NSRect)itemRect:(NSInteger)i
+{
+    CGFloat x = ROW_X;
+    for (NSInteger k = 0; k < (NSInteger)self.items.count; k++) {
+        NSInteger kind = self.items[k].integerValue; BOOL big = kind == IT_PLAY;
+        CGFloat w = big ? text_w([self itemName:kind], F_HEAVY, 22, 6) : text_w([self itemName:kind], F_COND_BOLD, 14, 2);
+        if (k == i) return NSMakeRect(x - 18, ROW_Y, w + 36, ROW_H);
+        x += w + (big ? ROW_GAP + 18 : ROW_GAP);
+    }
+    return NSMakeRect(x, ROW_Y, 10, ROW_H);
+}
+- (CGFloat)switchTextW { return text_w(@"TAB  SWITCH GAME", F_DISPLAY, 9, 3); }
+- (NSRect)switchRect { CGFloat tw = self.switchTextW; return NSMakeRect(W - 56 - tw - 18 - 150 - 8, ROW_Y - 74 - 6, tw + 18 + 150 + 16, 68); }
+- (NSInteger)pitch
+{
+    NSInteger n = (NSInteger)self.rows.count, room = H - 96 - ROWS_Y - 48 - 40, p = n ? room / n : PITCH;
+    return p >= PITCH ? PITCH : p < 36 ? 36 : p;
+}
+- (NSRect)rowRect:(NSInteger)k { NSInteger p = self.pitch; return NSMakeRect(PANEL_X, ROWS_Y + p * k, PANEL_W, p - 6); }
+- (NSRect)rowArrow:(NSInteger)k right:(BOOL)right { NSRect r = [self rowRect:k]; return NSMakeRect(right ? NSMaxX(r) - 34 : NSMaxX(r) - 330, r.origin.y, 30, r.size.height); }
+- (NSRect)linkRect { return NSMakeRect(PANEL_X - 8, 70, 190, 34); }
+- (NSArray<NSDictionary *> *)shown
+{
+    if (!self.section) return self.extras;
+    NSString *s = self.sections[self.section - 1];
+    return [self.extras filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSDictionary *e, id b) { return [e[@"section"] isEqual:s]; }]];
+}
+- (NSArray<NSString *> *)sections
+{
+    NSMutableArray *a = [NSMutableArray array];
+    for (NSDictionary *e in self.extras) if (![a containsObject:e[@"section"]] && a.count < 8) [a addObject:e[@"section"]];
+    return a;
+}
+- (NSRect)sectionRect:(NSInteger)s
+{
+    CGFloat x = EX_X0; NSArray *secs = self.sections;
+    for (NSInteger i = 0; i < s; i++) x += text_w([(i ? secs[i - 1] : @"ALL") uppercaseString], F_COND_BOLD, 11, 3) + 32;
+    return NSMakeRect(x - 8, 140, text_w([(s ? secs[s - 1] : @"ALL") uppercaseString], F_COND_BOLD, 11, 3) + 24, 34);
+}
+- (NSRect)tileRect:(NSInteger)k
+{
+    NSInteger row = k / EX_COLS - self.top, col = k % EX_COLS;
+    return NSMakeRect(EX_X0 + col * (EX_TW + EX_GAP), EX_Y0 + row * EX_PITCH, EX_TW, EX_TH);
+}
 - (NSInteger)hit:(NSPoint)p
 {
-    if (NSPointInRect(p, self.playRect)) return HIT_PLAY;
-    if (NSPointInRect(p, self.quitRect)) return self.open >= 0 ? HIT_BACK : HIT_QUIT;
+    for (NSDictionary *h in self.hintRects) if (NSPointInRect(p, [h[@"rect"] rectValue])) return [h[@"code"] integerValue];
+    if (self.extrasOpen) {
+        for (NSInteger s = 0; s <= (NSInteger)self.sections.count; s++) if (NSPointInRect(p, [self sectionRect:s])) return HIT_SECTION + s;
+        NSInteger n = (NSInteger)self.shown.count;
+        for (NSInteger i = self.top * EX_COLS; i < n && i < (self.top + EX_ROWS) * EX_COLS; i++) if (NSPointInRect(p, [self tileRect:i])) return HIT_TILE + i;
+        return HIT_NONE;
+    }
     if (self.open >= 0) {
         if (self.panels[self.open].linkTitle && NSPointInRect(p, self.linkRect)) return HIT_PLINK;
         for (NSInteger k = 0; k < (NSInteger)self.rows.count; k++) {
             if (![self rowCycles:k]) continue;
-            if (NSPointInRect(p, [self rowArrow:k right:NO])) return HIT_ROW + 10 * k;
-            if (NSPointInRect(p, [self rowArrow:k right:YES])) return HIT_ROW + 10 * k + 2;
-            if (NSPointInRect(p, [self rowRect:k])) return HIT_ROW + 10 * k + 1;
+            if (self.rows[k].choices.count > 1 && NSPointInRect(p, [self rowArrow:k right:NO])) return HIT_ROW + 10 * k;
+            if (self.rows[k].choices.count > 1 && NSPointInRect(p, [self rowArrow:k right:YES])) return HIT_ROW + 10 * k + 2;
+            if (NSPointInRect(p, NSInsetRect([self rowRect:k], -10, 0))) return HIT_ROW + 10 * k + 1;
         }
-        return NSPointInRect(p, self.panelRect) ? HIT_NONE : HIT_BACK;    /* a click outside the panel closes it */
+        return HIT_NONE;
     }
-    for (NSInteger i = 0; i < (NSInteger)self.cards.count; i++) if (NSPointInRect(p, [self cardRect:i])) return HIT_CARD + i;
-    for (NSInteger k = 0; k < (NSInteger)self.tiles.count; k++) {
-        if (!NSPointInRect(p, [self tileRect:k])) continue;
-        if (self.tiles[k].activate) return HIT_TILE + 10 * k + 1;
-        if (NSPointInRect(p, [self arrow:k right:NO])) return HIT_TILE + 10 * k;
-        if (NSPointInRect(p, [self arrow:k right:YES])) return HIT_TILE + 10 * k + 2;
-        return HIT_TILE + 10 * k + 1;
-    }
+    for (NSInteger i = 0; i < (NSInteger)self.items.count; i++) if (NSPointInRect(p, [self itemRect:i])) return HIT_ITEM + i;
+    if (self.otherName && NSPointInRect(p, self.switchRect)) return HIT_SWITCH;
     return HIT_NONE;
 }
+
+// ------------------------------------------------ input
 - (void)updateTrackingAreas
 {
     for (NSTrackingArea *t in self.trackingAreas) [self removeTrackingArea:t];
     [self addTrackingArea:[[NSTrackingArea alloc] initWithRect:self.bounds options:NSTrackingMouseMoved | NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways | NSTrackingInVisibleRect owner:self userInfo:nil]];
 }
-- (void)mouseMoved:(NSEvent *)e { NSInteger h = [self hit:[self convertPoint:e.locationInWindow fromView:nil]]; if (h != self.hover) { self.hover = h; self.needsDisplay = YES; } }
+- (void)mouseMoved:(NSEvent *)e
+{
+    NSInteger h = [self hit:[self convertPoint:e.locationInWindow fromView:nil]];
+    if (h == self.hover) return;
+    self.hover = h;
+    if (!self.extrasOpen && self.open < 0 && h >= HIT_ITEM && h < HIT_ROW) { self.focus = h - HIT_ITEM; [self animate]; }   /* the focus follows the pointer */
+    self.needsDisplay = YES;
+}
 - (void)mouseExited:(NSEvent *)e { self.hover = HIT_NONE; self.needsDisplay = YES; }
 - (void)mouseDown:(NSEvent *)e
 {
     NSInteger h = [self hit:[self convertPoint:e.locationInWindow fromView:nil]];
-    if (h >= HIT_CARD && h < HIT_TILE && e.clickCount == 2 && [self cardReady:h - HIT_CARD]) {   /* double-click: play that game */
-        [self selectCard:h - HIT_CARD]; if (self.onPlay) self.onPlay(); return;
-    }
+    if (h >= HIT_TILE && e.clickCount == 2) { self.sel = h - HIT_TILE; [self openSelected]; return; }   /* double-click: open it */
     self.pressed = h; self.needsDisplay = YES;
 }
 - (void)mouseUp:(NSEvent *)e
 {
     NSInteger h = [self hit:[self convertPoint:e.locationInWindow fromView:nil]], p = self.pressed; self.pressed = HIT_NONE; self.needsDisplay = YES;
     if (h != p || h == HIT_NONE) return;
-    if (h == HIT_PLAY) { if (self.onPlay) self.onPlay(); return; }
-    if (h == HIT_QUIT) { if (self.onQuit) self.onQuit(); return; }
-    if (h == HIT_BACK) { [self closePanel]; return; }
+    if (h == HIT_BACK) { [self back]; return; }
+    if (h == HIT_QUIT) { if (self.onItem) self.onItem(IT_QUIT); return; }
+    if (h == HIT_OPEN) { if (self.extrasOpen) [self openSelected]; else [self activate]; return; }
+    if (h == HIT_FOLDER) { if (self.onExtrasFolder) self.onExtrasFolder(); return; }
+    if (h == HIT_SWITCH) { if (self.onSwitch) self.onSwitch(1); return; }
     if (h == HIT_PLINK) { [self openPanel:self.panels[self.open].linkPanel]; return; }
+    if (h >= HIT_TILE) { self.sel = h - HIT_TILE; return; }
+    if (h >= HIT_SECTION) { self.section = h - HIT_SECTION; self.sel = self.top = 0; return; }
     if (h >= HIT_ROW) { NSInteger k = (h - HIT_ROW) / 10; self.rowFocus = k; [self stepRow:k by:(h - HIT_ROW) % 10 == 0 ? -1 : 1]; return; }
-    if (h >= HIT_CARD && h < HIT_TILE) { self.focus = -1; [self selectCard:h - HIT_CARD]; self.needsDisplay = YES; return; }
-    NSInteger k = (h - HIT_TILE) / 10, part = (h - HIT_TILE) % 10; self.focus = k;
-    [self step:k by:part == 0 ? -1 : 1];
+    if (h >= HIT_ITEM) { self.focus = h - HIT_ITEM; [self activate]; }
 }
-- (void)step:(NSInteger)k by:(NSInteger)dir
+- (void)activate { if (self.onItem) self.onItem(self.items[self.focus].integerValue); }
+- (void)openPanel:(NSInteger)i
 {
-    if (k < 0) {                                                        /* the cards: the next game that is installed */
-        NSInteger n = (NSInteger)self.cards.count;
-        for (NSInteger j = 1; j < n; j++) { NSInteger c = ((self.card + dir * j) % n + n) % n; if ([self cardReady:c]) { [self selectCard:c]; break; } }
-        return;
-    }
-    TSRow *t = self.tiles[k];
-    if (t.activate) { t.activate(); self.needsDisplay = YES; return; }
-    NSInteger n = (NSInteger)t.choices.count; t.index = (t.index + dir + n) % n;
-    self.needsDisplay = YES; if (self.onChange) self.onChange();
+    self.open = i; self.hover = HIT_NONE; self.rowFocus = 0;
+    while (self.rowFocus < (NSInteger)self.rows.count - 1 && ![self rowCycles:self.rowFocus]) self.rowFocus++;
+    self.needsDisplay = YES;
 }
+- (void)back { self.open = -1; self.extrasOpen = NO; self.hover = HIT_NONE; self.needsDisplay = YES; }
 - (void)stepRow:(NSInteger)k by:(NSInteger)dir
 {
     TSRow *t = self.rows[k]; NSInteger n = (NSInteger)t.choices.count;
-    if (t.activate) { t.activate(); self.needsDisplay = YES; return; }       /* e.g. typing the host's address */
+    if (t.activate) { t.activate(); self.needsDisplay = YES; return; }        /* e.g. typing the host's address */
     if (n < 2) return;
     t.index = (t.index + dir + n) % n;
     self.needsDisplay = YES; if (self.onChange) self.onChange();
@@ -177,243 +388,229 @@ enum { W = 960, H = 660 };
 {
     NSInteger n = (NSInteger)self.rows.count, first = 0;
     while (first < n - 1 && ![self rowCycles:first]) first++;
-    if (self.panels[self.open].linkTitle) {                             /* up from the first row: the title bar's button */
+    if (self.panels[self.open].linkTitle) {                             /* up from the first row: the title bar's link */
         if (self.rowFocus == -1) { if (dir > 0) self.rowFocus = first; self.needsDisplay = YES; return; }
         if (dir < 0 && self.rowFocus == first) { self.rowFocus = -1; self.needsDisplay = YES; return; }
     }
     for (NSInteger i = 0; i < n; i++) { self.rowFocus = (self.rowFocus + dir + n) % n; if ([self rowCycles:self.rowFocus]) break; }
     self.needsDisplay = YES;
 }
+- (void)openSelected { NSArray *s = self.shown; if (self.sel >= 0 && self.sel < (NSInteger)s.count && self.onOpenExtra) self.onOpenExtra(s[self.sel]); }
 - (void)keyDown:(NSEvent *)e
 {
+    unsigned short c = e.keyCode; BOOL shift = (e.modifierFlags & NSEventModifierFlagShift) != 0;
+    NSString *chars = e.charactersIgnoringModifiers.lowercaseString;
+    if (self.extrasOpen) {
+        NSInteger n = (NSInteger)self.shown.count, ns = (NSInteger)self.sections.count + 1;
+        switch (c) {
+        case 0x35: [self back]; return;                                                   /* Escape */
+        case 0x24: case 0x4c: [self openSelected]; return;                                /* Return */
+        case 0x30: self.section = (self.section + (shift ? -1 : 1) + ns) % ns; self.sel = self.top = 0; self.needsDisplay = YES; return;   /* Tab: the sections */
+        case 0x7b: if (self.sel > 0) self.sel--; self.needsDisplay = YES; return;
+        case 0x7c: if (self.sel + 1 < n) self.sel++; self.needsDisplay = YES; return;
+        case 0x7e: if (self.sel >= EX_COLS) self.sel -= EX_COLS; self.needsDisplay = YES; return;
+        case 0x7d: if (self.sel + EX_COLS < n) self.sel += EX_COLS; else if (n) self.sel = n - 1; self.needsDisplay = YES; return;
+        }
+        if ([chars isEqual:@"o"]) { if (self.onExtrasFolder) self.onExtrasFolder(); return; }
+        [super keyDown:e]; return;
+    }
     if (self.open >= 0) {
-        switch (e.keyCode) {
-        case 0x24: case 0x4c: case 0x31: case 0x7b: case 0x7c:                              /* on the title bar's button: press it */
+        switch (c) {
+        case 0x24: case 0x4c: case 0x31: case 0x7b: case 0x7c:
             if (self.rowFocus == -1) { [self openPanel:self.panels[self.open].linkPanel]; return; }
-            if (e.keyCode == 0x7b) { [self stepRow:self.rowFocus by:-1]; return; }
-            if (e.keyCode == 0x7c) { [self stepRow:self.rowFocus by:1]; return; }
-            if (e.keyCode == 0x31) break;
-            [self closePanel]; return;                                                      /* Return: back */
-        case 0x35: [self closePanel]; return;                                               /* Escape: back */
+            if (c == 0x7b) { [self stepRow:self.rowFocus by:-1]; return; }
+            if (c == 0x7c) { [self stepRow:self.rowFocus by:1]; return; }
+            if (self.rows[self.rowFocus].activate) { [self stepRow:self.rowFocus by:1]; return; }
+            if (c == 0x31) break;
+            [self back]; return;                                                         /* Return: back */
+        case 0x35: [self back]; return;
         case 0x7e: [self moveRowFocus:-1]; return;
-        case 0x7d: case 0x30: [self moveRowFocus:1]; return;
+        case 0x7d: [self moveRowFocus:1]; return;
+        case 0x30: [self moveRowFocus:shift ? -1 : 1]; return;
         }
         [super keyDown:e]; return;
     }
-    NSInteger n = (NSInteger)self.tiles.count;
-    switch (e.keyCode) {
-    case 0x24: case 0x4c: if (self.focus >= 0 && self.tiles[self.focus].activate) { [self step:self.focus by:1]; return; }   /* Return */
-                          if (self.onPlay) self.onPlay(); return;
-    case 0x35: if (self.onQuit) self.onQuit(); return;                                       /* Escape */
-    case 0x7b: [self step:self.focus by:-1]; return;                                         /* left / right: the focused item */
-    case 0x7c: [self step:self.focus by:1]; return;
-    case 0x7e: self.focus = self.focus < 0 ? n - 1 : self.focus - 1; self.needsDisplay = YES; return;   /* up / down: cards, then each tile */
-    case 0x7d: case 0x30: self.focus = self.focus + 1 >= n ? -1 : self.focus + 1; self.needsDisplay = YES; return;   /* also Tab */
+    NSInteger n = (NSInteger)self.items.count;
+    switch (c) {
+    case 0x24: case 0x4c: case 0x31: [self activate]; return;                               /* Return, Space */
+    case 0x35: if (self.onItem) self.onItem(IT_QUIT); return;                              /* Escape */
+    case 0x7b: case 0x7e: self.focus = (self.focus + n - 1) % n; [self animate]; return;   /* left / up */
+    case 0x7c: case 0x7d: self.focus = (self.focus + 1) % n; [self animate]; return;       /* right / down */
+    case 0x30: if (self.onSwitch) self.onSwitch(shift ? -1 : 1); return;                   /* Tab: the other game */
     }
     [super keyDown:e];
 }
 
-static void draw_text(NSString *s, NSFont *f, NSColor *c, NSRect r, NSTextAlignment al, NSShadow *sh, CGFloat kern)
+// ------------------------------------------------ drawing
+/* The hints at the bottom right: each [key, what it does, its hit code]. */
+- (void)hints:(NSArray<NSArray *> *)hs
 {
-    NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new]; ps.alignment = al; ps.lineBreakMode = NSLineBreakByTruncatingTail;
-    NSMutableDictionary *a = [@{NSFontAttributeName: f, NSForegroundColorAttributeName: c, NSParagraphStyleAttributeName: ps, NSKernAttributeName: @(kern)} mutableCopy];
-    if (sh) a[NSShadowAttributeName] = sh;
-    [s drawInRect:r withAttributes:a];
-}
-static void brackets(NSRect r, CGFloat len, CGFloat w, NSColor *c)     /* corner marks */
-{
-    [c setStroke]; NSBezierPath *p = [NSBezierPath bezierPath]; p.lineWidth = w; p.lineCapStyle = NSLineCapStyleSquare;
-    CGFloat x0 = r.origin.x, y0 = r.origin.y, x1 = NSMaxX(r), y1 = NSMaxY(r);
-    [p moveToPoint:NSMakePoint(x0, y0 + len)]; [p lineToPoint:NSMakePoint(x0, y0)]; [p lineToPoint:NSMakePoint(x0 + len, y0)];
-    [p moveToPoint:NSMakePoint(x1 - len, y0)]; [p lineToPoint:NSMakePoint(x1, y0)]; [p lineToPoint:NSMakePoint(x1, y0 + len)];
-    [p moveToPoint:NSMakePoint(x1, y1 - len)]; [p lineToPoint:NSMakePoint(x1, y1)]; [p lineToPoint:NSMakePoint(x1 - len, y1)];
-    [p moveToPoint:NSMakePoint(x0 + len, y1)]; [p lineToPoint:NSMakePoint(x0, y1)]; [p lineToPoint:NSMakePoint(x0, y1 - len)];
-    [p stroke];
-}
-static void fill_over(NSRect r) { NSRectFillUsingOperation(r, NSCompositingOperationSourceOver); }
-/* an image filling a rectangle, aspect kept (cropped); `keep` = the share of the image's height to use, from the top */
-static void draw_cover(NSImage *img, NSRect r, CGFloat fraction, CGFloat keep, CGFloat focusX, CGFloat focusY)
-{
-    NSSize is = img.size; is.height *= keep;
-    CGFloat sc = MAX(r.size.width / is.width, r.size.height / is.height), w = r.size.width / sc, h = r.size.height / sc;
-    NSRect from = NSMakeRect((img.size.width - w) * focusX, img.size.height - h - (is.height - h) * focusY, w, h);   /* NSImage rows: bottom-up */
-    [img drawInRect:r fromRect:from operation:NSCompositingOperationSourceOver fraction:fraction respectFlipped:YES hints:@{NSImageHintInterpolation: @(NSImageInterpolationHigh)}];
-}
-static NSRect fit_rect(NSImage *img, NSRect r)
-{
-    CGFloat sc = MIN(r.size.width / img.size.width, r.size.height / img.size.height), w = img.size.width * sc, h = img.size.height * sc;
-    return NSMakeRect(NSMidX(r) - w / 2, NSMidY(r) - h / 2, w, h);
-}
-- (void)drawButton:(NSRect)r title:(NSString *)title code:(NSInteger)code primary:(BOOL)primary
-{
-    BOOL hot = self.hover == code, down = self.pressed == code;
-    if (primary) {
-        NSGradient *g = [[NSGradient alloc] initWithStartingColor:[accent() colorWithAlphaComponent:down ? 0.85 : hot ? 0.72 : 0.58] endingColor:[accent_dim() colorWithAlphaComponent:down ? 0.9 : 0.72]];
-        [g drawInRect:r angle:90];
-        NSShadow *glow = [NSShadow new]; glow.shadowColor = [accent() colorWithAlphaComponent:hot ? 0.9 : 0.55]; glow.shadowBlurRadius = hot ? 18 : 12; glow.shadowOffset = NSZeroSize;
-        [NSGraphicsContext saveGraphicsState]; [glow set]; [accent() setStroke]; NSBezierPath *b = [NSBezierPath bezierPathWithRect:NSInsetRect(r, 0.5, 0.5)]; b.lineWidth = 1.2; [b stroke]; [NSGraphicsContext restoreGraphicsState];
-    } else {
-        [ink(down ? 0.95 : 0.78) setFill]; fill_over(r);
-        [(hot ? accent() : accent_dim()) setStroke]; NSBezierPath *b = [NSBezierPath bezierPathWithRect:NSInsetRect(r, 0.5, 0.5)]; b.lineWidth = 1; [b stroke];
-    }
-    brackets(NSInsetRect(r, -4, -4), 9, 2, primary || hot ? accent() : accent_dim());
-    NSShadow *sh = [NSShadow new]; sh.shadowColor = [NSColor colorWithWhite:0 alpha:0.8]; sh.shadowOffset = NSMakeSize(0, -1); sh.shadowBlurRadius = 2;
-    NSFont *f = heading(primary ? 19 : 16);
-    NSDictionary *at = @{NSFontAttributeName: f, NSForegroundColorAttributeName: primary || hot ? NSColor.whiteColor : text_c(), NSShadowAttributeName: sh, NSKernAttributeName: @5};
-    NSSize sz = [title sizeWithAttributes:at];
-    [title drawAtPoint:NSMakePoint(NSMidX(r) - sz.width / 2 + 2.5, round(NSMidY(r) - f.capHeight / 2 - (f.ascender - f.capHeight))) withAttributes:at];
-}
-- (void)drawCard:(NSInteger)i shadow:(NSShadow *)sh
-{
-    NSDictionary *cd = self.cards[i]; BOOL ready = [cd[@"ready"] boolValue];
-    NSRect r = [self cardRect:i]; BOOL sel = self.card == i, hot = ready && self.hover == HIT_CARD + i, foc = sel && self.focus == -1 && self.open < 0;
-    if (sel) {                                                           /* the chosen game: a glow behind its card */
-        NSShadow *glow = [NSShadow new]; glow.shadowColor = [accent() colorWithAlphaComponent:0.55]; glow.shadowBlurRadius = 26; glow.shadowOffset = NSZeroSize;
-        [NSGraphicsContext saveGraphicsState]; [glow set]; [NSColor.blackColor setFill]; NSRectFill(r); [NSGraphicsContext restoreGraphicsState];
-    }
-    [NSColor.blackColor setFill]; NSRectFill(r);
-    NSImage *shot = cd[@"image"];
-    if (shot.size.width > 16) draw_cover(shot, r, sel ? 1 : hot ? 0.85 : ready ? 0.6 : 0.3, 0.78, 0.5, 0.35);   /* the place, above the HUD */
-    NSGradient *foot = [[NSGradient alloc] initWithColorsAndLocations:[NSColor colorWithWhite:0 alpha:0], 0.0, [NSColor colorWithWhite:0 alpha:0.3], 0.42, ink(0.94), 1.0, nil];
-    [foot drawInRect:r angle:90];
-    if (!sel) { [ink(!ready ? 0.5 : hot ? 0.16 : 0.32) setFill]; fill_over(r); }
-    NSColor *tc = sel || hot ? NSColor.whiteColor : [text_c() colorWithAlphaComponent:ready ? 0.82 : 0.5];
-    draw_text(ready ? @"READY TO PLAY" : @"NOT INSTALLED", heading(11), sel || hot ? accent() : dim(), NSMakeRect(r.origin.x + 20, NSMaxY(r) - 92, 360, 16), NSTextAlignmentLeft, sh, 3.5);
-    draw_text(cd[@"name"], heavy(25), tc, NSMakeRect(r.origin.x + 18, NSMaxY(r) - 74, r.size.width - 36, 36), NSTextAlignmentLeft, sh, 4);
-    draw_text(ready ? cd[@"line"] : @"Install it from its disc to play it here", body(13, NO), sel || hot ? text_c() : dim(), NSMakeRect(r.origin.x + 20, NSMaxY(r) - 32, r.size.width - 40, 20), NSTextAlignmentLeft, sh, 0.2);
-    [(sel ? accent() : hot ? [accent() colorWithAlphaComponent:0.7] : [accent_dim() colorWithAlphaComponent:ready ? 0.7 : 0.4]) setStroke];
-    NSBezierPath *b = [NSBezierPath bezierPathWithRect:NSInsetRect(r, 0.5, 0.5)]; b.lineWidth = sel ? 1.5 : 1; [b stroke];
-    if (sel) {
-        brackets(NSInsetRect(r, -6, -6), foc ? 22 : 16, foc ? 3 : 2.5, accent());
-        NSRect badge = NSMakeRect(NSMaxX(r) - 104, r.origin.y + 14, 90, 22);   /* SELECTED */
-        [accent() setFill]; NSRectFill(badge);
-        draw_text(@"SELECTED", heading(10.5), ink(1), NSMakeRect(badge.origin.x, badge.origin.y + 4, badge.size.width, 16), NSTextAlignmentCenter, nil, 2.5);
+    self.hintRects = [NSMutableArray array];
+    CGFloat x = W - 64;
+    for (NSInteger i = (NSInteger)hs.count - 1; i >= 0; i--) {
+        NSString *key = hs[i][0], *label = hs[i][1]; NSInteger code = [hs[i][2] integerValue];
+        BOOL hot = code != HIT_NONE && self.hover == code;
+        CGFloat lw = text_w(label, F_DISPLAY, 11, 0) + 8, kw = text_w(key.uppercaseString, F_DISPLAY, 10, 1) + 4;
+        NSRect lr = NSMakeRect(x - lw, H - 50, lw, 28), kr = NSMakeRect(lr.origin.x - 8 - kw, H - 50, kw, 28);
+        text(label, lr, F_DISPLAY, 11, hot ? NSColor.whiteColor : rgb(0xD2DEF0, 1), NSTextAlignmentLeft, 0, YES);
+        caps(key, kr, F_DISPLAY, 10, hot ? NSColor.whiteColor : self.accent, NSTextAlignmentRight, 1, YES);
+        if (code != HIT_NONE) [self.hintRects addObject:@{@"rect": [NSValue valueWithRect:NSMakeRect(kr.origin.x - 4, kr.origin.y - 4, NSMaxX(lr) - kr.origin.x + 8, 36)], @"code": @(code)}];
+        x = kr.origin.x - 30;
     }
 }
-- (void)drawArrow:(NSRect)r right:(BOOL)right lit:(BOOL)lit
+/* Ink washed in from the right (under a panel), down from the top and up from the bottom. */
+- (void)scrimsFrom:(CGFloat)from strength:(CGFloat)s
 {
-    NSBezierPath *p = [NSBezierPath bezierPath]; CGFloat x0 = NSMidX(r) - 4, x1 = NSMidX(r) + 4, y0 = NSMidY(r) - 7, y1 = NSMidY(r) + 7, ym = NSMidY(r);
-    if (right) { [p moveToPoint:NSMakePoint(x0, y0)]; [p lineToPoint:NSMakePoint(x1, ym)]; [p lineToPoint:NSMakePoint(x0, y1)]; }
-    else { [p moveToPoint:NSMakePoint(x1, y0)]; [p lineToPoint:NSMakePoint(x0, ym)]; [p lineToPoint:NSMakePoint(x1, y1)]; }
-    p.lineWidth = 2; p.lineCapStyle = NSLineCapStyleRound; p.lineJoinStyle = NSLineJoinStyleRound;
-    [(lit ? NSColor.whiteColor : accent()) setStroke]; [p stroke];
-}
-- (void)drawTile:(NSInteger)k shadow:(NSShadow *)sh
-{
-    TSRow *t = self.tiles[k]; NSRect r = [self tileRect:k]; NSDictionary *c = t.choices[t.index];
-    BOOL hot = self.hover >= HIT_TILE + 10 * k && self.hover <= HIT_TILE + 10 * k + 2, foc = self.focus == k, special = [c[@"accent"] boolValue];
-    [ink(hot ? 0.9 : 0.76) setFill]; fill_over(r);
-    [((hot || foc) ? accent() : [accent_dim() colorWithAlphaComponent:0.8]) setStroke];
-    NSBezierPath *b = [NSBezierPath bezierPathWithRect:NSInsetRect(r, 0.5, 0.5)]; b.lineWidth = 1; [b stroke];
-    [((hot || foc) ? accent() : accent_dim()) setFill]; NSRectFill(NSMakeRect(r.origin.x, r.origin.y, r.size.width, 2));   /* a lit top edge */
-    if (foc) brackets(NSInsetRect(r, -4, -4), 8, 2, accent());
-    draw_text(t.title.uppercaseString, heading(10.5), (hot || foc) ? accent() : dim(), NSMakeRect(r.origin.x, r.origin.y + 11, r.size.width, 16), NSTextAlignmentCenter, nil, 3);
-    NSColor *vc = special ? accent() : self.hover == HIT_TILE + 10 * k + 1 ? NSColor.whiteColor : text_c();
-    NSString *val = t.summary ? t.summary() : c[@"label"]; CGFloat pt = 15;      /* made to fit a narrow tile */
-    while (pt > 12 && [val sizeWithAttributes:@{NSFontAttributeName: body(pt, YES)}].width > r.size.width - 34) pt -= 0.5;
-    draw_text(val, body(pt, YES), vc, NSMakeRect(r.origin.x + 17, r.origin.y + 34 + (15 - pt) / 2, r.size.width - 34, 24), NSTextAlignmentCenter, sh, 0.2);
-    if (!t.activate && t.choices.count > 1) {
-        [self drawArrow:[self arrow:k right:NO] right:NO lit:self.hover == HIT_TILE + 10 * k];
-        [self drawArrow:[self arrow:k right:YES] right:YES lit:self.hover == HIT_TILE + 10 * k + 2];
-    }
-}
-- (void)drawPanel:(NSShadow *)sh                        /* a group of settings over the window, a row each */
-{
-    TSPanel *pn = self.panels[self.open];
-    [ink(0.66) setFill]; fill_over(NSMakeRect(0, 0, W, H - 92));
-    NSRect p = self.panelRect;
-    NSShadow *glow = [NSShadow new]; glow.shadowColor = [accent() colorWithAlphaComponent:0.35]; glow.shadowBlurRadius = 30; glow.shadowOffset = NSZeroSize;
-    [NSGraphicsContext saveGraphicsState]; [glow set]; [ink(0.97) setFill]; NSRectFill(p); [NSGraphicsContext restoreGraphicsState];
-    [accent_dim() setStroke]; NSBezierPath *bp = [NSBezierPath bezierPathWithRect:NSInsetRect(p, 0.5, 0.5)]; bp.lineWidth = 1; [bp stroke];
-    brackets(NSInsetRect(p, -6, -6), 22, 3, accent());
-    draw_text(pn.title, heading(20), accent(), NSMakeRect(p.origin.x, p.origin.y + 22, p.size.width, 28), NSTextAlignmentCenter, sh, 6);
-    if (pn.linkTitle) {                                                  /* ADVANCED > · < GRAPHICS */
-        NSRect lr = self.linkRect; BOOL lit = self.hover == HIT_PLINK || self.rowFocus == -1;
-        [ink(lit ? 0.95 : 0.8) setFill]; fill_over(lr);
-        [(lit ? accent() : accent_dim()) setStroke]; NSBezierPath *lb = [NSBezierPath bezierPathWithRect:NSInsetRect(lr, 0.5, 0.5)]; lb.lineWidth = 1; [lb stroke];
-        if (self.rowFocus == -1) brackets(NSInsetRect(lr, -4, -4), 8, 2, accent());
-        /* the word and a chevron drawn beside it (a font's ‹ › can be clipped) */
-        NSDictionary *at = @{NSFontAttributeName: heading(12), NSKernAttributeName: @3};
-        CGFloat tw = [pn.linkTitle sizeWithAttributes:at].width, gap = 10, cw = 5, x0 = NSMidX(lr) - (tw + gap + cw) / 2;
-        CGFloat tx = pn.linkLeft ? x0 + cw + gap : x0, cx = pn.linkLeft ? x0 : x0 + tw + gap, cy = NSMidY(lr);
-        draw_text(pn.linkTitle, heading(12), lit ? NSColor.whiteColor : text_c(), NSMakeRect(tx, lr.origin.y + 6, tw + 4, 18), NSTextAlignmentLeft, nil, 3);
-        NSBezierPath *ch = [NSBezierPath bezierPath]; ch.lineWidth = 2; ch.lineCapStyle = NSLineCapStyleRound; ch.lineJoinStyle = NSLineJoinStyleRound;
-        if (pn.linkLeft) { [ch moveToPoint:NSMakePoint(cx + cw, cy - 5)]; [ch lineToPoint:NSMakePoint(cx, cy)]; [ch lineToPoint:NSMakePoint(cx + cw, cy + 5)]; }
-        else { [ch moveToPoint:NSMakePoint(cx, cy - 5)]; [ch lineToPoint:NSMakePoint(cx + cw, cy)]; [ch lineToPoint:NSMakePoint(cx, cy + 5)]; }
-        [(lit ? NSColor.whiteColor : accent()) setStroke]; [ch stroke];
-    }
-    [[accent_dim() colorWithAlphaComponent:0.6] setFill]; fill_over(NSMakeRect(p.origin.x + 30, p.origin.y + 60, p.size.width - 60, 1));
-    for (NSInteger k = 0; k < (NSInteger)self.rows.count; k++) {
-        TSRow *t = self.rows[k]; NSRect r = [self rowRect:k]; NSDictionary *c = t.choices[t.index]; BOOL cycles = [self rowCycles:k];
-        BOOL hot = cycles && self.hover >= HIT_ROW + 10 * k && self.hover <= HIT_ROW + 10 * k + 2, foc = cycles && self.rowFocus == k;
-        if (foc || hot) { [[accent() colorWithAlphaComponent:foc ? 0.12 : 0.07] setFill]; fill_over(NSInsetRect(r, -10, -2));
-                          if (foc) { [accent() setFill]; NSRectFill(NSMakeRect(r.origin.x - 10, r.origin.y - 2, 3, r.size.height + 4)); } }
-        draw_text(t.title.uppercaseString, heading(15), foc || hot ? accent() : cycles ? text_c() : dim(), NSMakeRect(r.origin.x + 6, r.origin.y + 8, 300, 24), NSTextAlignmentLeft, sh, 3);
-        if (cycles && t.choices.count > 1) {                                  /* a row that runs something has no arrows */
-            [self drawArrow:[self rowArrow:k right:NO] right:NO lit:self.hover == HIT_ROW + 10 * k];
-            [self drawArrow:[self rowArrow:k right:YES] right:YES lit:self.hover == HIT_ROW + 10 * k + 2];
-        }
-        draw_text(t.summary ? t.summary() : c[@"label"], body(cycles ? 18 : 16, YES), self.hover == HIT_ROW + 10 * k + 1 ? NSColor.whiteColor : text_c(),
-                  cycles ? [self rowValue:k] : NSMakeRect(NSMaxX(r) - 420, r.origin.y + 7, 414, 28), cycles ? NSTextAlignmentCenter : NSTextAlignmentRight, sh, 0.3);
-        draw_text(c[@"note"] ?: @"", body(12, NO), dim(), NSMakeRect(r.origin.x + 6, r.origin.y + 31, r.size.width - 12, 18), NSTextAlignmentRight, nil, 0);
-        if (k + 1 < (NSInteger)self.rows.count) { [[accent_dim() colorWithAlphaComponent:0.3] setFill]; fill_over(NSMakeRect(r.origin.x, NSMaxY(r) + 3, r.size.width, 1)); }
-    }
-    if (pn.footnote.length) draw_text(pn.footnote, body(11.5, NO), dim(), NSMakeRect(p.origin.x + 30, NSMaxY(p) - 26, p.size.width - 60, 18), NSTextAlignmentCenter, nil, 0);
-}
-- (NSString *)currentHint
-{
-    if (self.open >= 0 && self.hover == HIT_PLINK) return self.panels[self.open].linkLeft ? @"Back to Graphics Options" : @"The renderer, and what is seldom changed";
-    if (self.open >= 0) return @"←/→ change  ·  ↑/↓ move  ·  Return or Esc goes back";
-    NSInteger k = -1;
-    if (self.hover >= HIT_TILE && self.hover < HIT_ROW) k = (self.hover - HIT_TILE) / 10; else if (self.hover == HIT_NONE && self.focus >= 0) k = self.focus;
-    if (k >= 0 && k < (NSInteger)self.tiles.count) { TSRow *t = self.tiles[k]; return t.choices[t.index][@"note"]; }
-    if (self.hover >= HIT_CARD && self.hover < HIT_TILE) {
-        NSInteger i = self.hover - HIT_CARD;
-        return [self cardReady:i] ? [NSString stringWithFormat:@"%@: click to choose it, double-click to play.", self.cards[i][@"title"]]
-                                  : [NSString stringWithFormat:@"%@: not installed (%@)", self.cards[i][@"title"], self.cards[i][@"missing"]];
-    }
-    return self.hint;
+    CGFloat at3[3] = {0, 0.5, 1}, a3[3] = {0, s * 0.78, s}, at2[2] = {0, 1}, top[2] = {0.55, 0}, bot[2] = {0, 0.86};
+    grad(NSMakeRect(from, 0, W - from, H), INK, 3, at3, a3, NO);
+    grad(NSMakeRect(0, 0, W, 96), INK, 2, at2, top, YES);
+    grad(NSMakeRect(0, H - 150, W, 150), INK, 2, at2, bot, YES);
 }
 - (void)drawRect:(NSRect)dirty
 {
-    NSRect b = self.bounds;
-    NSShadow *sh = [NSShadow new]; sh.shadowColor = [NSColor colorWithWhite:0 alpha:0.85]; sh.shadowOffset = NSMakeSize(0, -1); sh.shadowBlurRadius = 3;
-    [ink(1) setFill]; NSRectFill(b);
-    if (self.backdrop.size.width > 16) {
-        draw_cover(self.backdrop, NSMakeRect(0, 0, W, 470), 1, 0.84, 0.5, 0.2);   /* the dam, its caption at the foot left off */
-        [ink(0.16) setFill]; fill_over(NSMakeRect(0, 0, W, 470));                  /* snow is bright: a little dark for the logo */
-        NSGradient *down = [[NSGradient alloc] initWithColorsAndLocations:ink(0.45), 0.0, ink(0.08), 0.32, ink(0.5), 0.66, ink(1.0), 1.0, nil];
-        [down drawInRect:NSMakeRect(0, 0, W, 470) angle:-90];
+    if (self.extrasOpen) [self drawExtras];
+    else if (self.open >= 0) [self drawPanel];
+    else [self drawHome];
+}
+- (void)drawHome
+{
+    NSInteger n = (NSInteger)self.items.count;
+    if (self.focus >= n) self.focus = n - 1;
+    if (self.focus < 0) self.focus = 0;
+    {   /* ink up from the bottom for the menu, darker at its left; a little at the top */
+        CGFloat at3[3] = {0, 0.45, 1}, a3[3] = {0, 0.72, 0.95}, at2[2] = {0, 1}, l2[2] = {0.55, 0}, top[2] = {0.5, 0};
+        grad(NSMakeRect(0, H - 320, W, 320), INK, 3, at3, a3, YES);
+        for (int k = 0; k < 20; k++) {                                    /* the left's extra, fading in downward: no edge */
+            double t = (k + 0.5) / 20.0; l2[0] = 0.55 * t * t;
+            grad(NSMakeRect(0, H - 320 + k * 16, 780, 16), INK, 2, at2, l2, NO);
+        }
+        grad(NSMakeRect(0, 0, W, 70), INK, 2, at2, top, YES);
     }
-    NSGradient *vig = [[NSGradient alloc] initWithColorsAndLocations:[NSColor colorWithWhite:0 alpha:0], 0.0, [NSColor colorWithWhite:0 alpha:0.55], 1.0, nil];
-    [vig drawInRect:b relativeCenterPosition:NSMakePoint(0, 0.25)];
-    /* the logo, its own glow beneath it; the project's name under it as its subtitle */
-    if (self.logo.size.width > 16) {
-        NSRect lr = fit_rect(self.logo, NSMakeRect(230, 16, 500, 132));
-        if (self.glow.size.width > 16) [self.glow drawInRect:NSInsetRect(lr, -2, -2) fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:0.85 respectFlipped:YES hints:nil];
-        NSShadow *halo = [NSShadow new]; halo.shadowColor = [accent() colorWithAlphaComponent:0.45]; halo.shadowOffset = NSZeroSize; halo.shadowBlurRadius = 24;
-        [NSGraphicsContext saveGraphicsState]; [halo set];
-        [self.logo drawInRect:lr fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1 respectFlipped:YES hints:@{NSImageHintInterpolation: @(NSImageInterpolationHigh)}];
+    double la = ease((now_s() - self.switchedAt) / 0.5);                 /* a switched-to game's logo fades in */
+    if (self.logo.size.width > 2) {
+        CGFloat h = MIN(170, 430 * self.logo.size.height / self.logo.size.width);
+        picture(self.logo, NSMakeRect(ROW_X - 6, ROW_Y - 14 - h, 430, h), NSTextAlignmentLeft, la);
+    } else {
+        caps(self.gameName, NSMakeRect(ROW_X, ROW_Y - 70, 1000, 56), F_HEAVY, 24, rgb(0xEBF0FA, la), NSTextAlignmentLeft, 4, YES);
+    }
+    caps(@"TIMESLIP" DOT @"NATIVE FOR APPLE SILICON" DOT @"RECOMPILED FROM YOUR XBOX DISC", NSMakeRect(24, 16, 900, 18), F_DISPLAY, 8, rgb(0xA4B2CA, 1), NSTextAlignmentLeft, 3, YES);
+
+    /* the focus: a block of the game's colour that slides to its item */
+    NSRect r = [self itemRect:self.focus];
+    if (_barW <= 0) { _bar = r.origin.x; _barW = r.size.width; }
+    _bar += (r.origin.x - _bar) * 0.34; _barW += (r.size.width - _barW) * 0.34;
+    if (fabs(_bar - r.origin.x) < 0.5) _bar = r.origin.x;
+    if (fabs(_barW - r.size.width) < 0.5) _barW = r.size.width;
+    CGFloat at[2] = {0, 1}, a[2] = {0.92, 0.78};
+    grad(NSMakeRect(round(_bar), r.origin.y, round(_barW), r.size.height), self.washRGB, 2, at, a, YES);
+    fill(NSMakeRect(round(_bar), NSMaxY(r) - 3, round(_barW), 3), self.bright);
+    for (NSInteger i = 0; i < n; i++) {
+        NSInteger kind = self.items[i].integerValue; BOOL on = i == self.focus, big = kind == IT_PLAY; NSRect ir = [self itemRect:i];
+        if (big && !on) fill(ir, rgb(self.washRGB, 0.34));                       /* Play stands out unfocused too */
+        if (big) caps([self itemName:kind], ir, F_HEAVY, 22, NSColor.whiteColor, NSTextAlignmentCenter, 6, YES);
+        else caps([self itemName:kind], ir, F_COND_BOLD, 14, on ? NSColor.whiteColor : rgb(0xC6D0E2, 1), NSTextAlignmentCenter, 2, YES);
+    }
+    NSString *cap = self.caption ? self.caption(self.items[self.focus].integerValue) : nil;
+    caps(cap, NSMakeRect(ROW_X, H - 54, 760, 28), F_COND, 10, self.bright, NSTextAlignmentLeft, 2, YES);
+
+    if (self.otherName) {                                                /* the other game, over the row's right end */
+        BOOL hot = self.hover == HIT_SWITCH; CGFloat tw = self.switchTextW;
+        NSRect lr = NSMakeRect(W - 56 - tw - 18 - 150, ROW_Y - 74, 150, 56);
+        if (self.otherLogo.size.width > 2) picture(self.otherLogo, lr, NSTextAlignmentRight, hot ? 1.0 : 0.75);
+        else caps(self.otherName, NSMakeRect(lr.origin.x - 80, lr.origin.y, lr.size.width + 80, lr.size.height), F_HEAVY, 10, hot ? NSColor.whiteColor : rgb(0xB4C0D4, 1), NSTextAlignmentRight, 2, YES);
+        caps(@"TAB  SWITCH GAME", NSMakeRect(W - 56 - tw, lr.origin.y, tw, lr.size.height), F_DISPLAY, 9, hot ? NSColor.whiteColor : rgb(0xA4B2CA, 1), NSTextAlignmentRight, 3, YES);
+    }
+    [self hints:@[@[@"ENTER", @"Select", @(HIT_OPEN)], @[@"ESC", @"Quit", @(HIT_QUIT)]]];
+    if (_bar != r.origin.x || _barW != r.size.width || la < 1) [self animate];
+}
+- (void)drawPanel
+{
+    TSPanel *pn = self.panels[self.open];
+    fill(self.bounds, rgb(INK, 0.22));
+    [self scrimsFrom:260 strength:0.95];
+    caps(pn.title, NSMakeRect(ROW_R - 600, 26, 600, 44), F_HEAVY, 28, NSColor.whiteColor, NSTextAlignmentRight, 7, YES);
+    caps([@"FOR " stringByAppendingString:self.cardName ?: @""], NSMakeRect(ROW_R - 600, 74, 600, 20), F_DISPLAY, 9, self.accent, NSTextAlignmentRight, 4, YES);
+    if (pn.linkTitle) {                                                  /* ADVANCED ›, or ‹ GRAPHICS back */
+        NSRect a = self.linkRect; BOOL back = pn.linkLeft, foc = self.rowFocus == -1, hot = self.hover == HIT_PLINK;
+        if (foc) { CGFloat at[2] = {0, 1}, al[2] = {0.66, 0}; grad(a, self.washRGB, 2, at, al, NO); fill(NSMakeRect(a.origin.x - 4, a.origin.y, 4, a.size.height), self.bright); }
+        chevron(back ? a.origin.x + 12 : a.origin.x + text_w(pn.linkTitle, F_COND_BOLD, 10, 3) + 22, NSMidY(a), !back, 5, 10, hot || foc ? NSColor.whiteColor : self.accent);
+        caps(pn.linkTitle, NSMakeRect(back ? a.origin.x + 26 : a.origin.x + 8, a.origin.y, a.size.width - 34, a.size.height), F_COND_BOLD, 10,
+             hot || foc ? NSColor.whiteColor : rgb(0xBFCADC, 1), NSTextAlignmentLeft, 3, YES);
+    }
+    NSInteger n = (NSInteger)self.rows.count, p = self.pitch;
+    for (NSInteger k = 0; k < n; k++) {
+        TSRow *t = self.rows[k]; NSRect rr = [self rowRect:k]; NSDictionary *c = t.choices[t.index];
+        BOOL cycles = [self rowCycles:k], foc = cycles && k == self.rowFocus, arrows = cycles && !t.activate && t.choices.count > 1;
+        if (foc) { CGFloat at[2] = {0, 1}, al[2] = {0, 0.66}; grad(NSMakeRect(rr.origin.x - 40, rr.origin.y - 2, rr.size.width + 80, rr.size.height + 4), self.washRGB, 2, at, al, NO);
+                   fill(NSMakeRect(NSMaxX(rr) + 36, rr.origin.y - 2, 4, rr.size.height + 4), self.bright); }
+        if (k + 1 < n) fill(NSMakeRect(rr.origin.x, NSMaxY(rr) + 2, rr.size.width, 1), [NSColor colorWithWhite:1 alpha:0.07]);
+        caps(t.title, NSMakeRect(rr.origin.x + 2, rr.origin.y, 300, rr.size.height), F_COND_BOLD, 13, foc ? NSColor.whiteColor : cycles ? rgb(0xBFCADC, 1) : rgb(0x8E9CB4, 1), NSTextAlignmentLeft, 2, YES);
+        NSString *val = t.summary ? t.summary() : c[@"label"];
+        if (arrows) {
+            text(val, NSMakeRect(NSMaxX(rr) - 300, rr.origin.y, 262, rr.size.height), F_COND, 13, rgb(0xE6ECF6, 1), NSTextAlignmentCenter, 0, YES);
+            chevron(NSMaxX(rr) - 315, NSMidY(rr), NO, 7, 13, foc || self.hover == HIT_ROW + 10 * k ? NSColor.whiteColor : self.accent);
+            chevron(NSMaxX(rr) - 19, NSMidY(rr), YES, 7, 13, foc || self.hover == HIT_ROW + 10 * k + 2 ? NSColor.whiteColor : self.accent);
+        } else {                                                         /* a value to read, or one to type: at the right */
+            text(val, NSMakeRect(rr.origin.x + 230, rr.origin.y, rr.size.width - 238, rr.size.height), F_COND, 13,
+                 t.activate ? (foc ? NSColor.whiteColor : self.bright) : rgb(0xE6ECF6, 1), NSTextAlignmentRight, 0, YES);
+        }
+    }
+    /* the focused row's help, then the panel's own note */
+    CGFloat y = ROWS_Y + n * p + 8;
+    NSString *help = self.rowFocus >= 0 && self.rowFocus < n ? self.rows[self.rowFocus].choices[self.rows[self.rowFocus].index][@"note"] : nil;
+    NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new]; ps.lineBreakMode = NSLineBreakByWordWrapping;
+    if (help.length) [help drawInRect:NSMakeRect(PANEL_X + 2, y, PANEL_W - 4, 40) withAttributes:@{NSFontAttributeName: face(F_BODY, 11), NSForegroundColorAttributeName: rgb(0x9AA8C0, 1), NSParagraphStyleAttributeName: ps}];
+    if (pn.footnote.length) [pn.footnote drawInRect:NSMakeRect(PANEL_X + 2, y + 40, PANEL_W - 4, 40) withAttributes:@{NSFontAttributeName: face(F_BODY, 10.5), NSForegroundColorAttributeName: rgb(0x7C8AA4, 1), NSParagraphStyleAttributeName: ps}];
+    [self hints:@[@[@"← →", @"Change", @(HIT_NONE)], @[@"ESC", @"Back", @(HIT_BACK)]]];
+}
+- (void)drawExtras
+{
+    NSArray<NSDictionary *> *shown = self.shown; NSInteger n = (NSInteger)shown.count; NSArray *secs = self.sections;
+    if (self.sel >= n) self.sel = n ? n - 1 : 0;
+    fill(self.bounds, rgb(INK, 0.5)); fill(self.bounds, rgb(INK, 0.3));
+    [self scrimsFrom:0 strength:0.5];
+    caps(@"EXTRAS", NSMakeRect(EX_X0, 30, 600, 50), F_HEAVY, 28, NSColor.whiteColor, NSTextAlignmentLeft, 7, YES);
+    caps([NSString stringWithFormat:@"%@%@MANUALS, VIDEOS AND PICTURES", self.cardName ?: @"", DOT], NSMakeRect(EX_X0, 82, 900, 20), F_DISPLAY, 9, self.accent, NSTextAlignmentLeft, 4, YES);
+    if (self.logo.size.width > 2) picture(self.logo, NSMakeRect(ROW_R - 300 + 8, 22, 300, 96), NSTextAlignmentRight, 0.9);
+    if (!self.extras.count) {
+        text(@"Nothing here yet.", NSMakeRect(EX_X0, 190, 1000, 40), F_DISPLAY, 20, rgb(0xE6ECF6, 1), NSTextAlignmentLeft, 0, YES);
+        text(@"Manuals (PDF), videos, pictures and links (.url, .webloc) put in this game's Extras folder show up here:", NSMakeRect(EX_X0, 240, 1100, 26), F_BODY, 12, rgb(0xAEBBD0, 1), NSTextAlignmentLeft, 0, NO);
+        text([self.extrasDir stringByAbbreviatingWithTildeInPath], NSMakeRect(EX_X0, 274, 1150, 28), F_BODY, 13, self.bright, NSTextAlignmentLeft, 0, YES);
+        text(@"An extras.json beside them can name, order and sort them, give each a picture, and add links.", NSMakeRect(EX_X0, 312, 1100, 26), F_BODY, 12, rgb(0xAEBBD0, 1), NSTextAlignmentLeft, 0, NO);
+        [self hints:@[@[@"O", @"Open folder", @(HIT_FOLDER)], @[@"ESC", @"Back", @(HIT_BACK)]]];
+        return;
+    }
+    for (NSInteger s = 0; s <= (NSInteger)secs.count; s++) {             /* the sections: ALL, then each one found */
+        NSRect sr = [self sectionRect:s]; BOOL on = s == self.section, hot = self.hover == HIT_SECTION + s;
+        caps(s ? secs[s - 1] : @"ALL", NSMakeRect(sr.origin.x + 8, sr.origin.y, sr.size.width, sr.size.height), F_COND_BOLD, 11, on || hot ? NSColor.whiteColor : rgb(0x96A6C0, 1), NSTextAlignmentLeft, 3, YES);
+        if (on) fill(NSMakeRect(sr.origin.x + 8, NSMaxY(sr) - 4, sr.size.width - 24, 3), self.bright);
+    }
+    if (self.sel / EX_COLS < self.top) self.top = self.sel / EX_COLS;
+    if (self.sel / EX_COLS >= self.top + EX_ROWS) self.top = self.sel / EX_COLS - EX_ROWS + 1;
+    for (NSInteger i = self.top * EX_COLS; i < n && i < (self.top + EX_ROWS) * EX_COLS; i++) {
+        NSDictionary *e = shown[i]; NSRect tr = [self tileRect:i]; BOOL on = i == self.sel, hot = self.hover == HIT_TILE + i;
+        fill(tr, [NSColor colorWithWhite:0 alpha:0.6]);
+        NSImage *pic = e[@"picture"]; BOOL own = pic != nil;
+        if (!pic && self.fallback.count) pic = self.fallback[(NSUInteger)i % self.fallback.count];   /* one without a picture: the key art */
+        [NSGraphicsContext saveGraphicsState]; NSRectClip(tr);
+        cover(pic, tr, 0.5, own ? 0.5 : 0.42, on ? 1.0 : hot ? 0.9 : 0.62);
         [NSGraphicsContext restoreGraphicsState];
-    } else {                                                            /* no logo art yet: the name in type, made to fit */
-        NSString *name = self.titleText.uppercaseString; CGFloat pt = 60;
-        while (pt > 24 && [name sizeWithAttributes:@{NSFontAttributeName: heavy(pt), NSKernAttributeName: @8}].width > W - 80) pt -= 2;
-        draw_text(name, heavy(pt), text_c(), NSMakeRect(0, 62 + (60 - pt) * 0.6, W, 80), NSTextAlignmentCenter, sh, 8);
+        if (on) { [self.bright setStroke]; NSBezierPath *b = [NSBezierPath bezierPathWithRect:NSInsetRect(tr, -1.5, -1.5)]; b.lineWidth = 3; [b stroke]; }
+        caps(e[@"title"], NSMakeRect(tr.origin.x, NSMaxY(tr) + 8, tr.size.width, 24), F_COND_BOLD, 13, on ? NSColor.whiteColor : rgb(0xBFCADC, 1), NSTextAlignmentLeft, 2, YES);
+        caps([NSString stringWithFormat:@"%@%@%@", e[@"section"], DOT, e[@"kind"]], NSMakeRect(tr.origin.x, NSMaxY(tr) + 32, tr.size.width, 18), F_DISPLAY, 8, on ? self.bright : rgb(0x8494AE, 1), NSTextAlignmentLeft, 2, YES);
     }
-    draw_text(@"TIMESLIP", heavy(22), text_c(), NSMakeRect(0, 150, W, 30), NSTextAlignmentCenter, sh, 14);
-    draw_text(@"NATIVE FOR APPLE SILICON  ·  RECOMPILED FROM YOUR XBOX DISC", heading(11.5), accent(), NSMakeRect(0, 184, W, 18), NSTextAlignmentCenter, sh, 4);
-    draw_text(@"CHOOSE YOUR GAME", heading(10.5), dim(), NSMakeRect(60, 226, 400, 16), NSTextAlignmentLeft, sh, 3.5);
-    draw_text(self.place.uppercaseString, heading(10.5), dim(), NSMakeRect(W - 460, 226, 400, 16), NSTextAlignmentRight, sh, 3.5);
-    for (NSInteger i = 0; i < (NSInteger)self.cards.count; i++) [self drawCard:i shadow:sh];
-    NSInteger hov = self.hover, foc = self.focus; if (self.open >= 0) self.hover = self.focus = HIT_NONE;   /* under a panel: nothing lit */
-    for (NSInteger k = 0; k < (NSInteger)self.tiles.count; k++) [self drawTile:k shadow:sh];
-    self.hover = hov; self.focus = foc;
-    [[accent_dim() colorWithAlphaComponent:0.5] setFill]; fill_over(NSMakeRect(60, H - 92, 840, 1));
-    if (self.open >= 0) [self drawPanel:sh];
-    NSString *hint = [self currentHint];
-    if (hint.length) draw_text(hint, body(12.5, NO), dim(), NSMakeRect(60, H - 58, 410, 40), NSTextAlignmentLeft, sh, 0.2);
-    [self drawButton:self.quitRect title:self.open >= 0 ? @"BACK" : @"QUIT" code:self.open >= 0 ? HIT_BACK : HIT_QUIT primary:NO];
-    [self drawButton:self.playRect title:@"PLAY" code:HIT_PLAY primary:YES];
+    if ((self.top + EX_ROWS) * EX_COLS < n) chevron(W / 2.0, EX_Y0 + EX_ROWS * EX_PITCH - 8, YES, 6, 12, self.accent);
+    if (self.sel < n) {
+        NSDictionary *e = shown[self.sel]; NSString *k = e[@"kind"];
+        NSString *about = [e[@"about"] length] ? e[@"about"] : [k isEqual:@"MANUAL"] ? @"Opens in your PDF reader." : [k isEqual:@"VIDEO"] ? @"Plays in your video player."
+                        : [k isEqual:@"PICTURE"] ? @"Opens in your picture viewer." : [k isEqual:@"LINK"] ? @"Opens in your web browser."
+                        : [k isEqual:@"FOLDER"] ? @"Opens the folder." : @"Opens with the program your Mac has for it.";
+        text(about, NSMakeRect(EX_X0, H - 50, 580, 28), F_BODY, 12, rgb(0xC6D0E2, 1), NSTextAlignmentLeft, 0, NO);
+    }
+    NSMutableArray *hs = [@[@[@"ENTER", @"Open", @(HIT_OPEN)], @[@"O", @"Open folder", @(HIT_FOLDER)]] mutableCopy];
+    if (secs.count > 1) [hs addObject:@[@"TAB", @"Section", @(HIT_NONE)]];
+    [hs addObject:@[@"ESC", @"Back", @(HIT_BACK)]];
+    [self hints:hs];
 }
 @end
 
@@ -591,8 +788,10 @@ static BOOL off_word(NSString *v)
 @property NSString *key, *name, *cardName, *line, *place, *exe, *titleID, *dataPath, *confPath, *peerAddr, *missing;
 @property NSUserDefaults *defaults; @property NSString *domainName;   /* its settings domain, and that domain's name */
 @property BOOL ready;
-@property NSImage *backdrop, *logo, *glow, *card;
-@property NSArray<TSRow *> *tiles; @property NSArray<TSPanel *> *panels;
+@property NSImage *logo;                       /* logo_hd (tools/fetch_art.py), else the disc's logo */
+@property NSArray<NSDictionary *> *heroes;      /* its key art, as the hero layout shows it (launcher_games.c) */
+@property uint32_t accentRGB, washRGB;          /* its colour, and the wash behind what is focused */
+@property NSArray<TSPanel *> *panels;
 @property TSRow *display, *resolution, *widescreen, *filtering, *framerate, *soften, *interp, *fps, *renderer,
                 *scheme, *mouse, *crosshair, *link, *router, *saves;
 @end
@@ -619,6 +818,7 @@ static TSRow *conf_row(NSString *title, NSArray<NSDictionary *> *choices, NSStri
 @property (strong) NSArray<TSGame *> *games; @property NSInteger current;
 @property NSString *lastPickPath;                   /* <user dir>/launcher_game.txt: the game last picked, "ts2" or "fp" (the PC's launcher keeps it there too) */
 @property (strong) TSRow *updates;
+@property (strong) TSHeroView *hero; @property NSString *userDir;
 @end
 
 @implementation Launcher
@@ -670,8 +870,20 @@ static NSUserDefaults *domain(NSString *bundleID)
     NSArray *artDirs = @[[g.dataPath stringByAppendingPathComponent:@"art"],
                          [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:[@"art_" stringByAppendingString:key]] ?: @"",
                          ownGame ? [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"art"] ?: @"" : @""];
-    g.backdrop = image_at(artDirs, @"backdrop.jpg"); g.logo = image_at(artDirs, @"logo.png"); g.glow = image_at(artDirs, @"glow.png");
-    g.card = image_at(artDirs, @"card_vulkan.jpg") ?: image_at(artDirs, @"card_metal.jpg") ?: g.backdrop;
+    g.logo = image_at(artDirs, @"logo_hd.png") ?: image_at(artDirs, @"logo.png");
+    /* The key art (tools/fetch_art.py, from the LaunchBox Games Database), as src/launcher_games.c frames it: a little
+     * larger than the window so it can drift, its crop kept high, the menu being across the bottom. Never a
+     * screenshot: without the key art the ink alone. */
+    NSArray *spec = [key isEqual:@"fp"] ? @[@[@"key_portal", @0.20, @-40], @[@"key_corridor", @0.25, @40]]
+                                        : @[@[@"key_cover", @0.30, @-40], @[@"key_pair", @0.25, @40], @[@"key_alley", @0.30, @-40]];
+    NSMutableArray *heroes = [NSMutableArray array];
+    for (NSArray *h in spec) {
+        NSImage *img = image_at(artDirs, [h[0] stringByAppendingString:@".jpg"]) ?: image_at(artDirs, [h[0] stringByAppendingString:@".png"]);
+        if (img) [heroes addObject:@{@"image": img, @"zoom": @1.06, @"fx": @0.5, @"fy": h[1], @"dx": h[2], @"dy": @0}];
+    }
+    g.heroes = heroes;
+    g.accentRGB = [key isEqual:@"fp"] ? 0x7CB6FF : 0x9C8CFF;            /* its front end's blue; TimeSplitters 2's violet */
+    g.washRGB = [key isEqual:@"fp"] ? 0x2A6EE0 : 0x6A4CF0;
     [self buildRows:g];
     return g;
 }
@@ -717,7 +929,7 @@ static NSUserDefaults *domain(NSString *bundleID)
                                                   @{@"value": @"4", @"label": @"4x", @"note": @"Four frames for each the game draws"}], c[@"frame_interp"], oldInterp, @"1");
     g.fps = conf_row(@"FPS Counter", @[@{@"value": @"0", @"label": @"Off", @"note": @"F9 shows it in the game"},
                                        @{@"value": @"1", @"label": @"On", @"note": @"The frame rate in the corner; F9 hides it"}], b(@"fps_overlay"), oldb(@"fps"), @"0");
-    TSPanel *gp = [TSPanel new]; gp.title = @"GRAPHICS OPTIONS";
+    TSPanel *gp = [TSPanel new]; gp.title = @"GRAPHICS";
     gp.rows = @[g.display, g.resolution, g.widescreen, g.filtering, g.soften, g.framerate, g.interp, g.fps];
     gp.linkTitle = @"ADVANCED"; gp.linkPanel = 3;
     /* Advanced: the renderer. Metal is the Mac's; Vulkan through MoltenVK is kept here for a Mac Metal does not suit.
@@ -726,7 +938,7 @@ static NSUserDefaults *domain(NSString *bundleID)
     g.renderer = conf_row(@"Renderer", @[@{@"value": @"metal", @"label": @"Metal (default)", @"short": @"Metal", @"note": @"Apple's own graphics API, drawn by the port's own renderer: nothing in between"},
                                          @{@"value": @"moltenvk", @"label": @"Vulkan (MoltenVK)", @"short": @"MoltenVK", @"note": @"The Vulkan renderer through MoltenVK; Metal again if it cannot start"}],
                           rv, nil, @"metal");
-    TSPanel *ap = [TSPanel new]; ap.title = @"ADVANCED OPTIONS"; ap.rows = @[g.renderer];
+    TSPanel *ap = [TSPanel new]; ap.title = @"ADVANCED"; ap.rows = @[g.renderer];
     ap.linkTitle = @"GRAPHICS"; ap.linkPanel = 0; ap.linkLeft = YES;
     ap.footnote = @"The renderer changes from the next start. The in-game menu (Esc) has it too, under Display › Advanced.";
 
@@ -779,36 +991,195 @@ static NSUserDefaults *domain(NSString *bundleID)
     np.footnote = @"Both machines need this same version. The first time you host, macOS asks to allow incoming connections.";
     g.panels = @[gp, cp, np, ap];
 
-    TSRow *gfx = [TSRow new]; gfx.title = @"Graphics Options"; gfx.wide = YES;
-    gfx.choices = @[@{@"value": @"", @"label": @"", @"note": @"Display, resolution, widescreen, filtering, post-processing, frame rate, interpolation; the renderer under Advanced"}];
-    gfx.summary = ^NSString * {
-        NSMutableArray *a = [NSMutableArray array];
-        for (TSRow *t in @[wg.display, wg.resolution, wg.widescreen, wg.filtering]) [a addObject:t.choices[t.index][@"short"] ?: t.choices[t.index][@"label"]];
-        return [a componentsJoinedByString:@"  ·  "];
-    };
-    gfx.activate = ^{ [wl.view openPanel:0]; };
-    TSRow *controls = [TSRow new]; controls.title = @"Controls";
-    controls.choices = @[@{@"value": @"", @"label": @"", @"note": @"Keyboard & Mouse or a controller, and which key does what"}];
-    controls.summary = ^NSString * { return wg.kbm ? @"Keys & Mouse" : @"Controller"; };
-    controls.activate = ^{ [wl.view openPanel:1]; };
-    TSRow *net = [TSRow new]; net.title = @"Play Together";
-    net.choices = @[@{@"value": @"", @"label": @"", @"note": @"System Link and online co-op with another Mac or PC"}];
-    net.summary = ^NSString * { NSDictionary *ch = wg.link.choices[wg.link.index]; return ch[@"short"] ?: ch[@"label"]; };
-    net.activate = ^{ [wl.view openPanel:2]; };
     /* the game's own save folder: UDATA/<its title id> */
     NSString *saves = [g.dataPath stringByAppendingPathComponent:[@"game/UDATA" stringByAppendingPathComponent:g.titleID.lowercaseString]];
     g.saves = [TSRow new]; g.saves.title = @"Saves";
     g.saves.choices = @[@{@"value": @"", @"label": @"Open", @"note": [@"Your profiles and story progress: " stringByAppendingString:[saves stringByAbbreviatingWithTildeInPath]]}];
     g.saves.activate = ^{ [[NSFileManager defaultManager] createDirectoryAtPath:saves withIntermediateDirectories:YES attributes:nil error:nil];
                           [[NSWorkspace sharedWorkspace] openURL:[NSURL fileURLWithPath:saves isDirectory:YES]]; };
-    g.tiles = @[gfx, controls, net, g.saves];
 }
-- (void)showGame:(NSInteger)i
+/* The game the window shows: its key art (sliding in from the side it is on, `dir`), its logo and colours, its
+ * panels; the other game's logo over the row's end. */
+- (void)showGame:(NSInteger)i slide:(NSInteger)dir
 {
     self.current = i; TSGame *g = self.game; TSLaunchView *v = self.view;
-    v.card = i; v.backdrop = g.backdrop; v.logo = g.logo; v.glow = g.glow; v.titleText = g.name; v.place = g.place;
-    v.tiles = [g.tiles arrayByAddingObject:self.updates]; v.panels = g.panels;
-    v.needsDisplay = YES;
+    [self.hero showHeroes:g.heroes slide:dir];
+    v.logo = g.logo; v.gameName = g.name; v.cardName = g.cardName; v.accentRGB = g.accentRGB; v.washRGB = g.washRGB;
+    v.panels = g.panels; v.fallback = [g.heroes valueForKey:@"image"];
+    NSInteger other = [self otherGame:1];
+    v.otherName = other >= 0 ? self.games[other].cardName : nil; v.otherLogo = other >= 0 ? self.games[other].logo : nil;
+    NSMutableArray *items = [@[@(IT_PLAY), @(IT_GRAPHICS), @(IT_CONTROLS), @(IT_ONLINE), @(IT_SAVES), @(IT_EXTRAS)] mutableCopy];
+    if (![self.updates.choices[0][@"label"] isEqual:@"Unavailable"]) [items addObject:@(IT_UPDATES)];   /* with an updater */
+    [items addObject:@(IT_QUIT)];
+    v.items = items;
+    if (v.extrasOpen) [self scanExtras];
+    v.switchedAt = dir ? CACurrentMediaTime() : 0;
+    [v animate];
+}
+/* The next game along the list, `dir` +1 or -1, that is installed; -1 for none. */
+- (NSInteger)otherGame:(NSInteger)dir
+{
+    NSInteger n = (NSInteger)self.games.count;
+    for (NSInteger k = 1; k < n; k++) { NSInteger i = ((self.current + dir * k) % n + n) % n; if (self.games[i].ready) return i; }
+    return -1;
+}
+- (void)switchGame:(NSInteger)dir
+{
+    NSInteger i = [self otherGame:dir];
+    if (i < 0 || i == self.current) return;
+    [self showGame:i slide:dir];
+    [[NSFileManager defaultManager] createDirectoryAtPath:self.lastPickPath.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+    [[self.game.key stringByAppendingString:@"\n"] writeToFile:self.lastPickPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
+/* What a menu item is set to, or what it does: under the row while it is focused. */
+- (NSString *)captionFor:(NSInteger)kind
+{
+    TSGame *g = self.game;
+    switch (kind) {
+    case IT_PLAY: return g.ready ? g.line : [@"Not installed: " stringByAppendingString:g.missing];
+    case IT_GRAPHICS: {
+        NSString *res = [g.resolution.value isEqual:@"1"] ? @"CONSOLE RESOLUTION" : [g.resolution.value stringByAppendingString:@"×"];
+        return [NSString stringWithFormat:@"%@%@%@%@%@", [g.display.value isEqual:@"1"] ? @"FULLSCREEN" : @"WINDOW", DOT, res, DOT, [g.widescreen.value isEqual:@"1"] ? @"16:9" : @"4:3"];
+    }
+    case IT_CONTROLS: return g.kbm ? @"KEYS & MOUSE" : @"CONTROLLER";
+    case IT_ONLINE: {
+        NSString *m = g.link.value;
+        return [m isEqual:@"coop-host"] ? @"CO-OP" DOT @"HOSTING" : [m isEqual:@"coop-join"] ? @"CO-OP" DOT @"JOINING"
+             : [m isEqual:@"host"] ? @"SYSTEM LINK" DOT @"HOST" : [m isEqual:@"join"] ? @"SYSTEM LINK" DOT @"JOIN" : @"ONLINE CO-OP" DOT @"SYSTEM LINK";
+    }
+    case IT_SAVES: return @"OPENS THE GAME'S SAVES FOLDER";
+    case IT_EXTRAS: {
+        NSUInteger n = [self extrasOf:g].count;
+        return n ? [NSString stringWithFormat:@"%lu %@%@MANUALS, VIDEOS, PICTURES", (unsigned long)n, n == 1 ? @"ITEM" : @"ITEMS", DOT] : @"MANUALS, VIDEOS, PICTURES";
+    }
+    case IT_UPDATES: return self.updates.choices[0][@"label"];
+    }
+    return nil;
+}
+- (void)item:(NSInteger)kind
+{
+    TSLaunchView *v = self.view;
+    switch (kind) {
+    case IT_PLAY: [self play]; break;
+    case IT_GRAPHICS: [v openPanel:0]; break;
+    case IT_CONTROLS: [v openPanel:1]; break;
+    case IT_ONLINE: [v openPanel:2]; break;
+    case IT_SAVES: self.game.saves.activate(); break;
+    case IT_EXTRAS: [self scanExtras]; v.section = v.sel = v.top = 0; v.extrasOpen = YES; v.needsDisplay = YES; break;
+    case IT_UPDATES: if (self.updates.activate) self.updates.activate(); v.needsDisplay = YES; break;
+    case IT_QUIT: [NSApp terminate:nil]; break;
+    }
+}
+
+// ------------------------------------------------ the extras
+/* A game's extras folders: the one the launcher opens and makes (<user dir>/extras/<ID>, as the Windows launcher's
+ * %APPDATA%\xboxrecomp\extras\<ID>), and an extras folder in the game's own data folder. */
+- (NSString *)extrasDirOf:(TSGame *)g { return [[self.userDir stringByAppendingPathComponent:@"extras"] stringByAppendingPathComponent:g.titleID.uppercaseString]; }
+static NSString *extra_kind(NSString *name, BOOL dir)
+{
+    if (dir) return @"FOLDER";
+    NSString *e = name.pathExtension.lowercaseString;
+    if ([@[@"pdf", @"epub", @"xps", @"djvu", @"cbz", @"cbr"] containsObject:e]) return @"MANUAL";
+    if ([@[@"mp4", @"m4v", @"mkv", @"webm", @"mov", @"avi", @"wmv", @"mpg", @"mpeg"] containsObject:e]) return @"VIDEO";
+    if ([@[@"jpg", @"jpeg", @"png", @"gif", @"webp", @"bmp"] containsObject:e]) return @"PICTURE";
+    if ([@[@"url", @"webloc"] containsObject:e]) return @"LINK";
+    return @"FILE";
+}
+static NSString *extra_section(NSString *kind)
+{
+    return [kind isEqual:@"MANUAL"] ? @"Manuals" : [kind isEqual:@"VIDEO"] ? @"Videos" : [kind isEqual:@"PICTURE"] || [kind isEqual:@"FOLDER"] ? @"Gallery"
+         : [kind isEqual:@"LINK"] ? @"Links" : @"Other";
+}
+static NSString *extra_title(NSString *name)
+{
+    return [[name.stringByDeletingPathExtension stringByReplacingOccurrencesOfString:@"_" withString:@" "] stringByReplacingOccurrencesOfString:@"-" withString:@" "];
+}
+/* A link file's address: a .url's URL= line, a .webloc's URL. */
+static NSString *link_of(NSString *path)
+{
+    if ([path.pathExtension.lowercaseString isEqual:@"webloc"]) return [NSDictionary dictionaryWithContentsOfFile:path][@"URL"];
+    for (NSString *l in [[NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil] componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet])
+        if ([l hasPrefix:@"URL="]) return [l substringFromIndex:4];
+    return nil;
+}
+/* What a folder of extras has, as the Windows launcher reads it (recompose launcher_extras.c): first what its
+ * extras.json lists, in its order and with its titles, sections and pictures; then every other file, by name. A
+ * picture named as another file is that file's picture. */
+static void extras_in(NSString *dir, NSMutableArray<NSMutableDictionary *> *out)
+{
+    NSFileManager *fm = NSFileManager.defaultManager; BOOL isDir = NO;
+    if (![fm fileExistsAtPath:dir isDirectory:&isDir] || !isDir) return;
+    NSMutableSet *listed = [NSMutableSet set];
+    NSData *json = [NSData dataWithContentsOfFile:[dir stringByAppendingPathComponent:@"extras.json"]];
+    id doc = json ? [NSJSONSerialization JSONObjectWithData:json options:0 error:nil] : nil;
+    NSArray *items = [doc isKindOfClass:NSDictionary.class] ? doc[@"items"] : [doc isKindOfClass:NSArray.class] ? doc : nil;
+    for (NSDictionary *o in [items isKindOfClass:NSArray.class] ? items : @[]) {
+        if (![o isKindOfClass:NSDictionary.class]) continue;
+        NSMutableDictionary *e = [NSMutableDictionary dictionary]; NSString *file = o[@"file"], *url = o[@"url"];
+        if ([url isKindOfClass:NSString.class] && url.length) { e[@"target"] = url; e[@"kind"] = @"LINK"; }
+        else if ([file isKindOfClass:NSString.class] && file.length) {
+            NSString *path = [dir stringByAppendingPathComponent:file]; BOOL d = NO;
+            if (![fm fileExistsAtPath:path isDirectory:&d]) continue;            /* named, but not there */
+            e[@"target"] = path; e[@"kind"] = extra_kind(file, d); [listed addObject:path.lowercaseString];
+        } else continue;
+        e[@"title"] = [o[@"title"] isKindOfClass:NSString.class] ? o[@"title"] : extra_title(file ?: url);
+        e[@"about"] = [o[@"about"] isKindOfClass:NSString.class] ? o[@"about"] : @"";
+        e[@"section"] = [o[@"section"] isKindOfClass:NSString.class] ? o[@"section"] : extra_section(e[@"kind"]);
+        if ([o[@"picture"] isKindOfClass:NSString.class]) { e[@"picturePath"] = [dir stringByAppendingPathComponent:o[@"picture"]]; [listed addObject:[e[@"picturePath"] lowercaseString]]; }
+        else if ([e[@"kind"] isEqual:@"PICTURE"]) e[@"picturePath"] = e[@"target"];
+        [out addObject:e];
+    }
+    NSArray *names = [[fm contentsOfDirectoryAtPath:dir error:nil] sortedArrayUsingSelector:@selector(caseInsensitiveCompare:)];
+    for (NSString *name in names) {
+        if ([name hasPrefix:@"."] || [name.lowercaseString isEqual:@"extras.json"]) continue;
+        NSString *path = [dir stringByAppendingPathComponent:name]; BOOL d = NO;
+        if ([listed containsObject:path.lowercaseString]) continue;
+        [fm fileExistsAtPath:path isDirectory:&d];
+        NSString *kind = extra_kind(name, d), *stem = name.stringByDeletingPathExtension, *pic = nil; BOOL paired = NO;
+        for (NSString *other in names)
+            if (![other isEqual:name] && [other.stringByDeletingPathExtension isEqual:stem]) {
+                BOOL otherPic = [extra_kind(other, NO) isEqual:@"PICTURE"];
+                if ([kind isEqual:@"PICTURE"] && !otherPic) paired = YES;        /* this picture is that file's */
+                if (![kind isEqual:@"PICTURE"] && otherPic && !pic) pic = [dir stringByAppendingPathComponent:other];
+            }
+        if (paired) continue;
+        NSMutableDictionary *e = [@{@"target": path, @"kind": kind, @"title": d ? name : extra_title(name), @"about": @"", @"section": extra_section(kind)} mutableCopy];
+        if ([kind isEqual:@"LINK"]) { NSString *u = link_of(path); if (u.length) e[@"target"] = u; }
+        if ([kind isEqual:@"PICTURE"]) pic = path;
+        if ([kind isEqual:@"FOLDER"])
+            for (NSString *inner in [[fm contentsOfDirectoryAtPath:path error:nil] sortedArrayUsingSelector:@selector(caseInsensitiveCompare:)])
+                if ([extra_kind(inner, NO) isEqual:@"PICTURE"]) { pic = [path stringByAppendingPathComponent:inner]; break; }
+        if (pic) e[@"picturePath"] = pic;
+        [out addObject:e];
+    }
+}
+- (NSArray<NSMutableDictionary *> *)extrasOf:(TSGame *)g
+{
+    NSMutableArray *out = [NSMutableArray array];
+    extras_in([self extrasDirOf:g], out);
+    extras_in([g.dataPath stringByAppendingPathComponent:@"extras"], out);
+    return out;
+}
+- (void)scanExtras
+{
+    NSArray<NSMutableDictionary *> *ex = [self extrasOf:self.game];
+    for (NSMutableDictionary *e in ex) {                                    /* each one's own picture, if it has one */
+        NSImage *img = e[@"picturePath"] ? [[NSImage alloc] initWithContentsOfFile:e[@"picturePath"]] : nil;
+        if (img.size.width > 2) e[@"picture"] = img;
+    }
+    self.view.extras = ex; self.view.extrasDir = [self extrasDirOf:self.game];
+}
+- (void)openExtra:(NSDictionary *)e
+{
+    NSString *t = e[@"target"];
+    NSURL *u = [t hasPrefix:@"/"] ? [NSURL fileURLWithPath:t] : [NSURL URLWithString:t];
+    if (u) [[NSWorkspace sharedWorkspace] openURL:u];
+}
+- (void)openExtrasFolder
+{
+    NSString *dir = [self extrasDirOf:self.game];
+    [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    [[NSWorkspace sharedWorkspace] openURL:[NSURL fileURLWithPath:dir isDirectory:YES]];
 }
 - (void)applicationDidFinishLaunching:(NSNotification *)n
 {
@@ -823,13 +1194,12 @@ static NSUserDefaults *domain(NSString *bundleID)
                     place:@"2401 · Time to Split" exe:@"timeslip_fp" titleID:@"45410066" bundleID:@"io.github.joshspeakman.timesplitters-fp"
                      data:@"~/Games/TimeSplittersFPNative"]];
 
-    TSLaunchView *v = [[TSLaunchView alloc] initWithFrame:NSMakeRect(0, 0, W, H)]; self.view = v;
-    v.hover = v.pressed = HIT_NONE; v.focus = -1; v.open = -1;
-    NSMutableArray *cards = [NSMutableArray array];
-    for (TSGame *g in self.games)
-        [cards addObject:@{@"name": g.cardName, @"title": g.name, @"line": g.line, @"image": g.card ?: [NSImage new], @"ready": @(g.ready), @"missing": g.missing}];
-    v.cards = cards;
-    v.hint = @"←/→ game · ↑/↓ settings · Return plays · Esc quits";
+    self.userDir = userDir;
+    NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, W, H)]; root.wantsLayer = YES;
+    self.hero = [[TSHeroView alloc] initWithFrame:root.bounds]; self.hero.still = getenv("TS2_LAUNCHER_SHOT") != NULL;
+    [root addSubview:self.hero];
+    TSLaunchView *v = [[TSLaunchView alloc] initWithFrame:root.bounds]; self.view = v; [root addSubview:v];
+    v.hover = v.pressed = HIT_NONE; v.focus = 0; v.open = -1;
     [self setupUpdates];
     /* the game picked last time, if it is still here; else the first that is (a one-game app: its own) */
     NSInteger pick = -1; NSString *last = getenv("TS2_LAUNCHER_GAME") ? @(getenv("TS2_LAUNCHER_GAME")) : [[NSString stringWithContentsOfFile:self.lastPickPath encoding:NSUTF8StringEncoding error:nil]
@@ -838,31 +1208,31 @@ static NSUserDefaults *domain(NSString *bundleID)
     for (NSInteger i = 0; i < (NSInteger)self.games.count; i++) if ([self.games[i].key isEqual:last] && self.games[i].ready) pick = i;
     for (NSInteger i = 0; pick < 0 && i < (NSInteger)self.games.count; i++) if (own && [self.games[i].exe isEqual:own] && self.games[i].ready) pick = i;
     for (NSInteger i = 0; pick < 0 && i < (NSInteger)self.games.count; i++) if (self.games[i].ready) pick = i;
-    [self showGame:MAX(pick, 0)];
+    [self showGame:MAX(pick, 0) slide:0];
     __weak Launcher *ws = self;
-    v.onPlay = ^{ [ws play]; };
-    v.onQuit = ^{ [NSApp terminate:nil]; };
+    v.caption = ^NSString *(NSInteger kind) { return [ws captionFor:kind]; };
+    v.onItem = ^(NSInteger kind) { [ws item:kind]; };
+    v.onSwitch = ^(NSInteger dir) { [ws switchGame:dir]; };
     v.onChange = ^{ [ws save]; };
-    v.onSelect = ^(NSInteger i) {
-        [ws showGame:i];
-        [[NSFileManager defaultManager] createDirectoryAtPath:ws.lastPickPath.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
-        [[ws.game.key stringByAppendingString:@"\n"] writeToFile:ws.lastPickPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
-    };
+    v.onOpenExtra = ^(NSDictionary *e) { [ws openExtra:e]; };
+    v.onExtrasFolder = ^{ [ws openExtrasFolder]; };
 
     const char *shot = getenv("TS2_LAUNCHER_SHOT");
     if (shot) {                                                          /* development: the window as an image */
         if (getenv("TS2_LAUNCHER_HOVER")) v.hover = atoi(getenv("TS2_LAUNCHER_HOVER"));
+        if (getenv("TS2_LAUNCHER_FOCUS")) v.focus = atoi(getenv("TS2_LAUNCHER_FOCUS"));
         if (getenv("TS2_LAUNCHER_PANEL")) [v openPanel:atoi(getenv("TS2_LAUNCHER_PANEL"))];
         if (getenv("TS2_LAUNCHER_ROWFOCUS")) v.rowFocus = atoi(getenv("TS2_LAUNCHER_ROWFOCUS"));
-        NSBitmapImageRep *rep = [v bitmapImageRepForCachingDisplayInRect:v.bounds]; [v cacheDisplayInRect:v.bounds toBitmapImageRep:rep];
+        if (getenv("TS2_LAUNCHER_EXTRAS")) [self item:IT_EXTRAS];
+        NSBitmapImageRep *rep = [root bitmapImageRepForCachingDisplayInRect:root.bounds]; [root cacheDisplayInRect:root.bounds toBitmapImageRep:rep];
         [[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:@(shot) atomically:YES];
         exit(0);
     }
     if (getenv("TS2_LAUNCHER_PLAY")) { [self play]; return; }    /* development: Play at once, no window to take the focus */
-    NSWindow *w = [[NSWindow alloc] initWithContentRect:v.frame styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskFullSizeContentView
+    NSWindow *w = [[NSWindow alloc] initWithContentRect:root.frame styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskFullSizeContentView
                                                 backing:NSBackingStoreBuffered defer:NO];
     w.releasedWhenClosed = NO; w.titlebarAppearsTransparent = YES; w.titleVisibility = NSWindowTitleHidden; w.movableByWindowBackground = YES;
-    w.title = NSBundle.mainBundle.infoDictionary[@"CFBundleName"] ?: @"Timeslip"; w.backgroundColor = NSColor.blackColor; w.contentView = v;
+    w.title = NSBundle.mainBundle.infoDictionary[@"CFBundleName"] ?: @"Timeslip"; w.backgroundColor = NSColor.blackColor; w.contentView = root;
     self.window = w; [w center]; [w makeKeyAndOrderFront:nil]; [w makeFirstResponder:v];
     [NSApp activateIgnoringOtherApps:YES];
 }

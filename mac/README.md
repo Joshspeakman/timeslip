@@ -1,12 +1,18 @@
 # Timeslip for the Mac: the app
 
-`Timeslip.app`: one launch window for both games, TimeSplitters 2 and TimeSplitters: Future Perfect, in the style of the
-other native Mac ports; then the recompiled game you picked, in the same process.
+`Timeslip.app`: one launch window for both games, TimeSplitters 2 and TimeSplitters: Future Perfect, laid out as the
+Windows launcher (recompose's `launcher_hero.inc`); then the recompiled game you picked, in the same process.
 
-- **Choose your game**: a card for each, with its own art from your disc. A game whose build or disc files are missing
-  shows as Not Installed. The tiles below show and change the chosen game's settings; Play (or a double-click on its
-  card) starts it, and the launcher opens on the game you picked last.
-- **Graphics Options**: window or full screen, resolution 1x–4x, 16:9 or 4:3, texture filtering, post-processing,
+- **The window**: the chosen game's key art fills it, slowly moving and handing over to the next picture, with its logo
+  bottom-left over a menu row across the bottom: Play, Graphics, Controls, Play Together, Saves, Extras, Updates, Quit
+  (arrow keys or the mouse; Return chooses). The other game's logo sits above the row's right end: Tab, or a click on
+  it, switches game. The launcher opens on the game picked last. A game whose build or disc files are missing is not
+  offered. The key art and the clear logos come from the LaunchBox Games Database by `tools/fetch_art.py` (run once
+  per game with `--out <its data folder>/art`); only where they are is in this repository. Never a screenshot.
+- **Extras**: manuals, videos, pictures and links for the chosen game, from
+  `~/Library/Application Support/xboxrecomp/extras/<title id>` (O opens it) and `<data>/extras`, with an optional
+  `extras.json` to name, order and section them and give each a picture; each opens in the Mac's own app for it.
+- **Graphics**: window or full screen, resolution 1x–4x, 16:9 or 4:3, texture filtering, post-processing,
   frame rate, frame interpolation, FPS counter. **Advanced**: the renderer, **Metal** (the default: the toolkit's own
   Metal renderer, `recompose/src/d3d/rhi_metal.m`) or **Vulkan through MoltenVK**, from the next start. A MoltenVK that
   cannot start gives way to Metal, and an old settings file's `renderer = vulkan` stays Metal (only `moltenvk` picks it).
@@ -46,7 +52,7 @@ draws, from your copy, into `<data>/art`. The app holds the games' recompiled co
 ## Development
 
 `TS2_LAUNCHER_SHOT=<png>` renders the window to an image (`TS2_LAUNCHER_GAME=ts2|fp` picks the game,
-`TS2_LAUNCHER_PANEL=0-3` opens Graphics Options, Controls, Play Together or Advanced, `TS2_LAUNCHER_ROWFOCUS=-1`
+`TS2_LAUNCHER_FOCUS=<n>` focuses a menu item, `TS2_LAUNCHER_EXTRAS=1` opens Extras, `TS2_LAUNCHER_PANEL=0-3` opens Graphics, Controls, Play Together or Advanced, `TS2_LAUNCHER_ROWFOCUS=-1`
 focuses a panel's title-bar button, `TS2_LAUNCHER_HOVER=<code>` lights an item); `TS2_LAUNCHER_PLAY=1` presses Play
 without showing the window. For a test that leaves your own settings alone: `TS2_CONF_DIR=<dir>` (the settings files,
 and `launcher_game.txt` in its parent), `TS2_LAUNCHER_PREFS=<prefix>` (the launcher's own settings domains),

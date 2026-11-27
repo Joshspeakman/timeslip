@@ -88,22 +88,27 @@ for g in $GAMES; do
 done
 
 echo "== the launcher"
-clang -O2 -fobjc-arc -Wall -Wno-unused-parameter -framework Cocoa -o "$A/Contents/MacOS/$LAUNCHER" "$HERE/mac/ts2_launcher.m"
+clang -O2 -fobjc-arc -Wall -Wno-unused-parameter -framework Cocoa -framework QuartzCore -o "$A/Contents/MacOS/$LAUNCHER" "$HERE/mac/ts2_launcher.m"
 # the updater rebuilds this game, from this data folder (mac/update.sh)
 printf '#!/bin/bash\nTIMESLIP_TITLE=%q TIMESLIP_DATA_TS2=%q TIMESLIP_DATA_FP=%q exec /bin/bash %q "$@"\n' \
     "$TITLE" "$DATA_ts2" "$DATA_fp" "$HERE/mac/update.sh" > "$A/Contents/MacOS/update"
 chmod +x "$A/Contents/MacOS/update"
 
 echo "== the icon"
-# The game's own, made here from the player's disc (tools/make_icon.py; nothing of the game is in the repository): the
-# title screen's logo on the front end's blue for 128 px and up, and the Xbox dashboard's emblem, which stays sharp
-# small, for 16-64. For the collection (both games), or without the launcher's art (mac/make_art.sh) or Pillow,
-# Timeslip's own icon (art/icon/png/1024.png, tools/art/make_art.py). Either is fitted to macOS's icon grid (824 of 1024 px).
+# The game's own (tools/make_icon.py; nothing of the game is in the repository): a square of its key art
+# (tools/fetch_art.py's icon.png) at every size; else, from the player's disc, the title screen's logo on the front
+# end's blue for 128 px and up and the Xbox dashboard's emblem for 16-64. The collection takes TimeSplitters 2's.
+# Without either, or Pillow, Timeslip's own icon (art/icon/png/1024.png). Fitted to macOS's icon grid (824 of 1024 px).
 swiftc -O -o "$STAGE/icongrid" "$HERE/mac/tools/icongrid.swift" 2>/dev/null
 IS="$STAGE/AppIcon.iconset"; mkdir -p "$IS"
 small="$STAGE/icon1024.png"
-DATA=""; [ "$TITLE" = all ] || { d=DATA_$TITLE; DATA=${!d}; }
-if [ -n "$DATA" ] && [ -f "$DATA/game/default.xbe" ] && [ -f "$DATA/art/logo.png" ] && [ -f "$DATA/art/glow.png" ] &&
+# the collection's: TimeSplitters 2's (its key art's square: Hart and Cortez on red)
+DATA=""; if [ "$TITLE" = all ]; then DATA=$DATA_ts2; else d=DATA_$TITLE; DATA=${!d}; fi
+if [ -n "$DATA" ] && [ -f "$DATA/art/icon.png" ] &&
+   "$PY" "$HERE/tools/make_icon.py" --game "$DATA/game" --art "$DATA/art" --png "$STAGE/game1024.png" --size 1024 >/dev/null; then
+    "$STAGE/icongrid" "$STAGE/game1024.png" "$STAGE/icon1024.png" 0          # the key art's square at every size
+    echo "   the game's key art (tools/fetch_art.py's icon.png)"
+elif [ -n "$DATA" ] && [ -f "$DATA/game/default.xbe" ] && [ -f "$DATA/art/logo.png" ] && [ -f "$DATA/art/glow.png" ] &&
    "$PY" "$HERE/tools/make_icon.py" --game "$DATA/game" --art "$DATA/art" --png "$STAGE/game1024.png" --size 1024 >/dev/null &&
    "$PY" "$HERE/tools/make_icon.py" --game "$DATA/game" --png "$STAGE/emblem.png" --out "$STAGE/emblem.ico" >/dev/null; then
     "$STAGE/icongrid" "$STAGE/game1024.png" "$STAGE/icon1024.png" 0
