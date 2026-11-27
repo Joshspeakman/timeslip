@@ -66,7 +66,7 @@ build (25 November 2026), with the settings below on both.
   renderer took for 2D and squeezed back to a 4:3 band; `src/main.c` has it
   squeeze none of Future Perfect's 2D (`fp/CMakeLists.txt`).
 - **Installs** on Windows and the Mac, with its own icon from the disc and
-  the launcher's Updates tile (see "Building").
+  the launcher's Updates (see "Building").
 - **Native mouse look**, as TimeSplitters 2's: the mouse turns the player
   as an angle, added after the game's look step (`sub_0025D520`) to the
   look state's yaw and pitch ([0x007B0C7C] +0x100, +0x104, degrees; the
@@ -276,7 +276,7 @@ shortcuts named "TimeSplitters Future Perfect", an entry in Settings > Apps,
 FFmpeg's three libraries beside the game for its movies, the launcher's art
 made once from your disc by `tools/make_disc_art.py --title fp` and the icon
 from it), or on a Mac `mac/install.sh`, whose `Timeslip.app` has both games
-(`--title fp` for this one alone). The launcher's Updates tile
+(`--title fp` for this one alone). The launcher's Updates
 updates it from the collection's releases as it does TimeSplitters 2.
 
 ## Layout

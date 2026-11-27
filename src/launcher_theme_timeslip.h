@@ -1,18 +1,18 @@
 /*
  * The launcher's look for Timeslip (recompose src/launcher/launcher_theme.h,
- * launcher_showcase.inc): the showcase layout, as the Mac app's launch window
- * (mac/ts2_launcher.m) has it -- TimeSplitters 2's logo over its own art,
- * TIMESLIP under it, a card for each renderer -- in the logo's blue and
- * silver, the same numbers as that window's.
+ * launcher_hero.inc): the hero layout -- the picked game's key art across the
+ * window, its logo and a menu across the bottom -- in the logo's blue and
+ * silver; each game's own colour and pictures are in src/launcher_games.c.
  *
- * The pictures are the player's own, made from their disc: tools/make_art.py
- * here, mac/make_art.sh on a Mac, both into the launcher's art folder
- * (%LOCALAPPDATA%\xboxrecomp\art\4553000A, ~/Library/Application
- * Support/xboxrecomp/art/4553000A or ~/.local/share/...): backdrop, logo,
- * glow, card_metal and card_vulkan (the Mac's names: the hub's portal and
- * Siberia's base). Nothing of the game's is in this repository, and nothing
- * is downloaded unless the player asks (RECOMP_LAUNCHER_FETCH_ART=1, the two
- * addresses below). Without the pictures the window writes the game's name.
+ * The pictures are fetched when the game is installed (tools/fetch_art.py:
+ * the key art and clear logos from the LaunchBox Games Database) and made
+ * from the player's own disc (tools/make_disc_art.py, mac/make_art.sh: a
+ * logo), into the launcher's art folder
+ * (%LOCALAPPDATA%\xboxrecomp\art\<id>, ~/Library/Application
+ * Support/xboxrecomp/art/<id> or ~/.local/share/...). Nothing of the game's
+ * is in this repository. The two addresses below are the launcher's own
+ * fetch (RECOMP_LAUNCHER_FETCH_ART=1), for a launcher started without an
+ * install. Without the pictures the window writes the game's name.
  */
 #ifndef TIMESLIP_LAUNCHER_THEME_H
 #define TIMESLIP_LAUNCHER_THEME_H

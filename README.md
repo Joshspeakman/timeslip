@@ -148,14 +148,17 @@ the button that closed it does nothing in the game until it is let go.
 
 ## Settings
 
-The launcher is one for both games: its two cards choose TimeSplitters 2 or
-Future Perfect (it remembers the last), and everything under them -- Graphics
-Options, Controls, Online, Saves, Updates, Play -- is that game's, each with its
-own settings file and its own keys (`titles\<id>.input.json` once you change
-one). The renderer is in Graphics Options > Advanced on Windows: Vulkan (the
+The launcher is one for both games. It shows the picked game's key art behind
+a menu across the bottom: Play, Graphics, Controls, Play Together, Saves,
+Extras, Updates (when the install has an updater) and Quit. Left and right (or
+the d-pad) move along the menu, Enter or A chooses, Tab or LB/RB changes the
+game, and so does a click on the other game's logo at the menu's right. It
+remembers the last game picked. Everything in the menu is that game's, each
+with its own settings file and its own keys (`titles\<id>.input.json` once
+you change one). The renderer is in Graphics > Advanced on Windows: Vulkan (the
 default) or Direct3D 11; so is the in-game menu's (Esc > Display > Advanced >
 Renderer, from the next start). Linux draws with Vulkan, the Mac with Metal.
-Its Graphics Options:
+Its Graphics:
 
 | Setting | What it does |
 | --- | --- |
@@ -175,13 +178,52 @@ To keep the front end at 4:3 between bars while the levels are 16:9, add
 `ts2_menus = 43` to the settings file (see [Where things are
 kept](#where-things-are-kept)).
 
+### Extras
+
+The launcher's Extras shows manuals, videos, pictures and links you put in a
+game's Extras folder, and opens each with the program your system has for it
+(a PDF reader, a video player, the browser). When the folder is empty, Extras
+shows where it is, and Y (or O) opens it:
+
+| | TimeSplitters 2 | Future Perfect |
+| --- | --- | --- |
+| Windows | `%APPDATA%\xboxrecomp\extras\4553000A` | `%APPDATA%\xboxrecomp\extras\45410066` |
+| macOS | `~/Library/Application Support/xboxrecomp/extras/4553000A` | `.../extras/45410066` |
+| Linux | `~/.local/share/xboxrecomp/extras/4553000A` | `.../extras/45410066` |
+
+An install can bring its own too, in `extras\<id>` beside the launcher; those
+are listed first. Every file and folder is one item:
+
+- PDF, EPUB and XPS files are manuals; MP4, MKV, WebM, MOV and AVI files are
+  videos; JPEG, PNG, GIF and WebP files are pictures; `.url` files are links;
+  a folder opens in the file browser.
+- A picture with the same name as another file (`manual.jpg` beside
+  `manual.pdf`) is that file's tile picture. A folder's is the first picture
+  in it. Without one, the tile shows the game's key art.
+
+An `extras.json` in the folder names, orders and sorts them, and adds links
+that are not files. Items it names come first, in its order; the rest follow
+by name:
+
+```json
+{ "items": [
+    { "title": "Instruction manual", "file": "manual.pdf", "section": "Manuals",
+      "picture": "manual-cover.jpg", "about": "The manual from the game's case." },
+    { "title": "Making of", "url": "https://example.com/making-of", "section": "Behind the scenes" }
+] }
+```
+
+`section` is the tab it is under (by default Manuals, Videos, Gallery, Links
+or Other, from the kind of file); `about` is the line shown when it is
+selected.
+
 ## System Link
 
 Windows, and macOS between copies on one Mac so far (see
 [docs/multiplayer.md](docs/multiplayer.md)). On Linux it is not checked yet.
 
 One player hosts a session and everyone else joins it. Up to 16 copies can be
-in one session. In the launcher's Online:
+in one session. In the launcher's Play Together:
 
 - Host a session. The launcher shows the address to give the others: your PC's
   address on your own network, and your internet address once your router
@@ -362,9 +404,8 @@ If you cloned without `--recursive`, run `git submodule update --init --recursiv
 ### Installing it, and updates
 
 On Windows, `tools\install_windows.ps1` installs what you built into
-`%LOCALAPPDATA%\Programs\Timeslip` with Start menu and desktop shortcuts (the
-game's own logo as their icon, made from your disc) and an entry in Settings >
-Apps; on a Mac, `mac/install.sh` makes one app, `Timeslip.app`, with both
+`%LOCALAPPDATA%\Programs\Timeslip` with Start menu and desktop shortcuts (their
+icon a square of the game's key art) and an entry in Settings > Apps; on a Mac, `mac/install.sh` makes one app, `Timeslip.app`, with both
 games and a card for each in its launcher (mac/README.md). `tools\build_windows.ps1` builds
 again with the same toolchain. Future Perfect (`fp/`) installs beside it with
 `-Title fp` on both (`tools\build_windows.ps1 -Title fp`, then
@@ -374,7 +415,7 @@ Perfect"), with its own shortcuts, icon and updater; on a Mac it is in
 `Timeslip.app` already (`mac/install.sh --title fp` still makes it an app of
 its own).
 
-The launcher's **Updates** tile offers the newest
+The launcher's **Updates** offers the newest
 [release](https://github.com/Joshspeakman/timeslip/releases) (pre-releases
 included) when it is newer than what is installed, and installs it: it moves
 your clone to that release, lifts and builds the game again from your own disc,
@@ -479,15 +520,16 @@ and this repository, are drawn by `tools/art/make_art.py` and set in
 [Exo 2](https://github.com/googlefonts/Exo-2.0) (SIL Open Font License,
 `tools/art/fonts/OFL.txt`).
 
-The launcher shows the game's own logo and art, made from your own copy of
-the game: `tools/make_disc_art.py` on Windows (the installer,
-`tools/install_windows.ps1`, runs it once) and `mac/make_art.sh` on a Mac
-play into the Siberia level and keep a few of its frames. None of the
-game's art files are in this repository or its releases, and nothing is
-downloaded unless you ask: `RECOMP_LAUNCHER_FETCH_ART=1` fetches the key art
-and logo once from the [LaunchBox Games Database](https://gamesdb.launchbox-app.com/)
-(`src/launcher_theme_timeslip.h`). Without either, the launcher writes the
-game's name.
+The launcher's pictures are the games' key art and clear logos, and the
+desktop icon a square of the key art, from the
+[LaunchBox Games Database](https://gamesdb.launchbox-app.com/):
+`tools/fetch_art.py` downloads them into the launcher's art folder when the
+game is installed (`tools/install_windows.ps1`; `-NoArt` leaves them out). Its
+list says which pictures and where they are; the pictures themselves are not
+in this repository or its releases. `tools/make_disc_art.py` (and
+`mac/make_art.sh` on a Mac) also makes a logo from your own copy of the game,
+which the launcher uses when the key art could not be fetched. Without any of
+them the launcher writes the game's name.
 
 # Legal
 

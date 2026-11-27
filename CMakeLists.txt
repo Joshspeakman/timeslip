@@ -143,6 +143,6 @@ if(COMMAND recomp_add_launcher)
     # opens on both; each game keeps its own settings, controls and art.
     recomp_add_launcher(${PROJECT_NAME}_launcher ${PROJECT_NAME}.exe COOP
         GAMES ${CMAKE_CURRENT_SOURCE_DIR}/src/launcher_games.c
-        BRAND "Timeslip" SHOWCASE
+        BRAND "Timeslip" HERO
         THEME ${CMAKE_CURRENT_SOURCE_DIR}/src/launcher_theme_timeslip.h)
 endif()

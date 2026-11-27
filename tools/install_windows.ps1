@@ -16,7 +16,9 @@ Future Perfect" shortcuts of before are taken away.
 -Game is the game's folder (default.xbe beside its data, and the saves in UDATA): the
 install links to it rather than copying it, so saves and settings carry on where they
 were. The launcher's art is made from it once (tools\make_disc_art.py) if it is not there
-yet. Nothing of the game is copied anywhere.
+yet, and the game's key art, clear logo and the icon's picture are fetched from the
+LaunchBox Games Database (tools\fetch_art.py; -NoArt leaves both out). Nothing of the
+game is copied anywhere.
 
 The install has an updater beside the launcher (update.ps1, which runs this checkout's
 tools\update_windows.ps1): the launcher's Updates tile offers the newest GitHub release
@@ -195,10 +197,17 @@ if (-not $NoArt -and -not (Test-Path (Join-Path $art "backdrop.jpg")) -and -not 
     } else { "No Python here: the launcher writes the game's name until tools\make_disc_art.py is run." }
 }
 
-# The icon, from this copy of the game (tools\make_icon.py): the title screen's
-# own logo, sharp, from the launcher's art above (the Xbox dashboard picture,
-# 128 pixels, at 48 and below, and alone when there is no art), or the
-# launcher's own when there is no Python or game.
+# The key art the launcher shows, the clear logo, and the icon's picture (a square of
+# the key art), from the LaunchBox Games Database (tools\fetch_art.py); what is there
+# already is kept. Without them (offline) the launcher shows the logo from the disc.
+if (-not $NoArt -and $py) {
+    "Fetching the game's key art (LaunchBox Games Database)..."
+    & $py (Join-Path $repo "tools\fetch_art.py") --title $Title --out $art
+}
+
+# The icon (tools\make_icon.py): the key art's square above, at every size; without
+# it, the title screen's logo from the disc's art, or the launcher's own when there is
+# no Python or game.
 $icon = (Join-Path $Dest $launcher) + ",0"
 if ($py -and (Test-Path (Join-Path $Game "default.xbe"))) {
     $ico = Join-Path $Dest $t.Icon

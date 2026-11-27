@@ -6,13 +6,13 @@ repository.
     py -3 tools/make_icon.py --game <folder with default.xbe> [--art <dir>]
                              [--out <file.ico>] [--png <file.png> [--size 1024]]
 
-With --art (the launcher's art from the same disc, tools/make_disc_art.py):
-the title screen's own logo, sharp, across the front end's deep blue in a
-rounded square, at 256, 128 and 64; at 48 and below, where a word cannot be
-read, the Xbox dashboard picture made smaller. Without it, that picture alone
--- the title image in default.xbe's $$XTIMAGE, an XPR0 holding one DXT1 or
-DXT3/5 texture, 128x128 on this disc, so soft when it is made bigger (Josh,
-25 Nov 2026: "really poor and low res"). Needs Pillow.
+With --art holding icon.png (tools/fetch_art.py: a square of the game's
+key art, 1024 pixels -- Hart and Cortez for TimeSplitters 2, Cortez in the
+time portal's light for Future Perfect): that, at every size, sharpened a
+little at the small ones. Else, with --art from the disc alone
+(tools/make_disc_art.py), the title screen's logo in a rounded square; and
+without --art the Xbox dashboard picture, the title image in default.xbe's
+$$XTIMAGE (128x128, soft made bigger). Needs Pillow.
 """
 import argparse
 import struct
@@ -164,6 +164,22 @@ def main():
                                   'its logo makes a sharper icon than the 128-pixel title image')
     a = ap.parse_args()
     import os
+    if a.art and os.path.exists(os.path.join(a.art, 'icon.png')):
+        from PIL import ImageFilter
+        src = Image.open(os.path.join(a.art, 'icon.png')).convert('RGBA')
+        sizes = (256, 128, 64, 48, 32, 24, 16)
+        imgs = []
+        for sz in sizes:
+            im = src.resize((sz, sz), Image.LANCZOS)
+            if sz <= 48:                         # a little crisper, so a face still reads
+                im = im.filter(ImageFilter.UnsharpMask(radius=0.8, percent=60, threshold=1))
+            imgs.append(im)
+        if a.out:
+            imgs[0].save(a.out, format='ICO', sizes=[(z, z) for z in sizes], append_images=imgs[1:])
+        if a.png:
+            src.resize((a.size, a.size), Image.LANCZOS).save(a.png)
+        print('make_icon: the key art from %s -> %s' % (a.art, a.out or a.png))
+        return 0
     if a.art and os.path.exists(a.art + '/logo.png') and os.path.exists(a.art + '/glow.png'):
         big = logo_icon(a.art, max(a.size, 256))
         if a.out:
