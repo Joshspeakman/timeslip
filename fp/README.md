@@ -104,7 +104,9 @@ build (25 November 2026), with the settings below on both.
   the controller reads them, the game's own dead zone and turning (280
   degrees a second at full tilt, the same as xemu), White on the left
   shoulder and Black on the right. The attract movie (left at the title
-  screen) ends on A or START, as on the console.
+  screen) ends on A or START, as on the console. The PC menu (Esc) opens from
+  a controller on its Guide button, or Back and Start together, and is
+  worked with the controller (the README beside this folder says how).
 - **The launcher's art** from your disc (`tools/make_disc_art.py --title
   fp`): the logo, the ship over the planet, the cockpit, the canyon, the same
   frames on Windows and the Mac (the run is timed by frame under lockstep).

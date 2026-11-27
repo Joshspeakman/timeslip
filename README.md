@@ -139,6 +139,13 @@ While playing:
 | F11 | Save a screenshot and a capture of the frame, for bug reports |
 | Alt+Enter | Switch between fullscreen and a window |
 
+From a controller the PC menu opens and closes on the Guide button (Xbox, PS,
+Home), or on Back and Start pressed together where the system keeps the
+Guide button for itself (Windows' Game Bar, Steam). In it the d-pad or the
+left stick moves, A chooses (on a slider, A and then left and right change
+it), B goes back or closes it, LB and RB change the tab and Start resumes;
+the button that closed it does nothing in the game until it is let go.
+
 ## Settings
 
 The launcher is one for both games: its two cards choose TimeSplitters 2 or
