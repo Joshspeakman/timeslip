@@ -166,9 +166,14 @@ The joiner's game starts from the host's saves, handed over before it boots
 (the joiner's own are not touched). Then, as on one console: **2 Players** at
 the title screen, each player presses A to claim a controller and picks or
 creates a profile, and **Story Co-op** in the main menu. Both copies must be
-the same build (both repositories' commits, stamped at build time) with the
-same Widescreen and front-end (`ts2_menus`) settings; a joiner that differs
-is refused, told why, in the log beside the game.
+the same build (both repositories' commits, stamped at build time). The
+settings that change the game -- Widescreen, the field of view, the crosshair,
+the front end's layout (`ts2_menus`), the co-op view -- are the host's: a
+joiner whose differ takes the host's for the session and says so in the log
+beside the game, its own settings file untouched. A copy that cannot join
+(a different build, or its saves could not be written) is told why, and the
+host goes on waiting for another; once the game has begun, the host turns new
+copies away.
 
 Each player has the whole screen, as in GoldenEye's online co-op: the game
 lays every player's view out as the whole screen, as in one-player play, on

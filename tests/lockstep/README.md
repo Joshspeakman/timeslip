@@ -16,7 +16,9 @@ A gate replay must run without `RECOMP_TS2_VIEW_PORT`: offline it turns on
 each player's own screen, which lays the game out differently (the co-op one
 differs from frame 4,680 with it).
 
-Both are recorded at the default settings and replay the same only at them:
+Both are recorded at the default settings of their day, widescreen off, and
+replay the same only at them. Widescreen has been on by default since 27
+November 2026, so a replay turns it off (`RECOMP_WIDESCREEN=0`, as above):
 widescreen (and each player's own screen, `RECOMP_TS2_VIEW_PORT`) change the
 game's memory, so a replay with them on differs from the recording early on
 -- which is fine for comparing pictures between two replays, which agree with
@@ -27,7 +29,7 @@ starts from a fresh profile) and an empty save folder, muted:
 
 ```bash
 RECOMP_GAME_DIR=<game copy without UDATA> RECOMP_SAVE_DIR=<empty folder> \
-RECOMP_MUTE=1 RECOMP_WINDOW_BACKGROUND=1 \
+RECOMP_MUTE=1 RECOMP_WINDOW_BACKGROUND=1 RECOMP_WIDESCREEN=0 \
 RECOMP_LOCKSTEP_REPLAY=tests/lockstep/coop-siberia-us.trace RECOMP_LOCKSTEP_END=8000 \
 ./timeslip 2> replay.log
 grep LOCKSTEP replay.log | tail -2

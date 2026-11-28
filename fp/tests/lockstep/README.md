@@ -43,7 +43,7 @@ folder, muted:
 
 ```bash
 RECOMP_GAME_DIR=<game copy without UDATA> RECOMP_SAVE_DIR=<empty folder> \
-RECOMP_MUTE=1 RECOMP_WINDOW_BACKGROUND=1 \
+RECOMP_MUTE=1 RECOMP_WINDOW_BACKGROUND=1 RECOMP_WIDESCREEN=0 \
 RECOMP_LOCKSTEP_REPLAY=fp/tests/lockstep/arcade-vietnam-us.trace \
 fp/build/Release/timeslip_fp 2> replay.log
 grep LOCKSTEP replay.log | tail -1
@@ -54,9 +54,11 @@ first that did. Both were recorded at Future Perfect's defaults and replay
 the same only at them: mouse look on (`mouse_look = 1`, the title's default;
 with it Auto Lookahead is set aside, so a replay with it off plays another
 game -- the Mac's first replays with an older settings file differed from
-tick 6,890), the game's own field of view (`fov = 0`), widescreen off. A
-recording keeps no settings, so a replay at other ones just differs; an
-online session checks them and refuses. Both were recorded split screen; an
+tick 6,890), the game's own field of view (`fov = 0`), widescreen off
+(on by default since 27 November 2026: `RECOMP_WIDESCREEN=0`, as above). A
+recording keeps no settings, so a replay at other ones just differs. In an
+online session the joiner takes the host's, so the host's are the ones to
+set. Both were recorded split screen; an
 online session lays each player's view out as the whole screen unless
 `coop_view = split`, so replayed online at the default the two machines agree
 with each other at every check but differ from the recording for a few

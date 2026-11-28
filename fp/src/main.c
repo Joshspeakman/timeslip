@@ -750,6 +750,13 @@ static int title_main(int argc, char **argv)
             recomp_lockstep_add_setting("crosshair", hle_crosshair_always() ? "1" : "0");
         }
         recomp_lockstep_start();
+        /* A joiner takes the host's settings for the session where they
+         * differ (recompose's recomp_lockstep_net.c): the two read above,
+         * read again. */
+        {
+            extern void hle_session_settings_reread(void);
+            hle_session_settings_reread();
+        }
     }
 
     /* Step 7: Call the recompiled entry point */

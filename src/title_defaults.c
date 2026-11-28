@@ -61,5 +61,6 @@ const char *const recomp_title_bindings[] = {
 const char *const recomp_title_settings[] = {
     "mouse_look", "1",
     "renderer", "vulkan",
+    "widescreen", "1",      /* Josh, 27 Nov 2026: 16:9 by default, as the Mac's launcher */
     NULL
 };

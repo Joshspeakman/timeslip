@@ -45,6 +45,9 @@ foreach ($k in "RECOMP_LOCKSTEP", "RECOMP_LOCKSTEP_REPLAY", "RECOMP_LOCKSTEP_TRA
 $env:RECOMP_GAME_DIR = "$Out\game"; $env:RECOMP_SAVE_DIR = "$Out\saves"
 $env:RECOMP_MUTE = "1"; $env:RECOMP_WINDOW_BACKGROUND = "1"; $env:RECOMP_WINDOW_SIZE = "1600x900"
 if ($Settings) { $env:RECOMP_DISPLAY_CONFIG = $Settings }
+# 4:3 unless the settings file says otherwise, as the sweep has always run (the
+# title's default became widescreen on, 27 Nov 2026).
+else { $env:RECOMP_WIDESCREEN = "0" }
 $env:RECOMP_TS2_SWEEP = "$Out\corridor.sweep"
 $env:RECOMP_LOCKSTEP_END = "7320"
 if ($Replay) {

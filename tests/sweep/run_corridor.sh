@@ -51,6 +51,9 @@ export RECOMP_GAME_DIR="$GAME" RECOMP_SAVE_DIR="$OUT/saves"
 WIN=1600x900; [ "$(uname)" = Darwin ] && system_profiler SPDisplaysDataType 2>/dev/null | grep -q Retina && WIN=800x450
 export RECOMP_MUTE=1 RECOMP_WINDOW_BACKGROUND=1 RECOMP_WINDOW_SIZE=${RECOMP_WINDOW_SIZE:-$WIN}
 [ -z "$SETTINGS" ] || export RECOMP_DISPLAY_CONFIG="$SETTINGS"
+# 4:3 unless the settings file says otherwise, as the sweep has always run (the
+# title's default became widescreen on, 27 Nov 2026).
+[ -n "$SETTINGS" ] || export RECOMP_WIDESCREEN=0
 # A Mac draws with Metal only: said outright, and the run's log is checked for it below.
 [ "$(uname)" = Darwin ] && export RECOMP_D3D8_BACKEND=metal
 export RECOMP_TS2_SWEEP="$OUT/corridor.sweep" RECOMP_LOCKSTEP_END=7320
