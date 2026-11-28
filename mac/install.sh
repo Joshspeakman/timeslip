@@ -88,7 +88,12 @@ for g in $GAMES; do
 done
 
 echo "== the launcher"
-clang -O2 -fobjc-arc -Wall -Wno-unused-parameter -framework Cocoa -framework QuartzCore -o "$A/Contents/MacOS/$LAUNCHER" "$HERE/mac/ts2_launcher.m"
+# with recompose's net_upnp.c (the router's internet address, as the Windows launcher asks it), built with the games
+first_bin=BIN_${GAMES%% *}; NETLIB=$(dirname "${!first_bin}")/xboxrecomp
+[ -f "$NETLIB/src/net/libxbox_net.a" ] || die "no $NETLIB/src/net/libxbox_net.a: build the game first"
+clang -O2 -fobjc-arc -Wall -Wno-unused-parameter -I"$HERE/recompose/src/net" -framework Cocoa -framework QuartzCore \
+    -o "$A/Contents/MacOS/$LAUNCHER" "$HERE/mac/ts2_launcher.m" \
+    "$NETLIB/src/net/libxbox_net.a" "$NETLIB/third_party/miniupnp/miniupnpc/libminiupnpc.a"
 # the updater rebuilds this game, from this data folder (mac/update.sh)
 printf '#!/bin/bash\nTIMESLIP_TITLE=%q TIMESLIP_DATA_TS2=%q TIMESLIP_DATA_FP=%q exec /bin/bash %q "$@"\n' \
     "$TITLE" "$DATA_ts2" "$DATA_fp" "$HERE/mac/update.sh" > "$A/Contents/MacOS/update"
@@ -126,6 +131,13 @@ for s in 16 32 128 256 512; do
     sips -z $((s * 2)) $((s * 2)) "$src" --out "$IS/icon_${s}x${s}@2x.png" >/dev/null
 done
 iconutil -c icns "$IS" -o "$A/Contents/Resources/AppIcon.icns"
+
+echo "== the online server"
+# recompose's tools/online_server, for Play Together's SET UP A SERVER page: its folder, and the setup it runs
+mkdir -p "$A/Contents/Resources/online_server"
+for f in server.py Dockerfile fly.toml.template deploy.sh deploy.ps1 README.md; do
+    cp "$HERE/recompose/tools/online_server/$f" "$A/Contents/Resources/online_server/" || die "no recompose/tools/online_server/$f"
+done
 
 echo "== the art"
 # each game's launcher art (its backdrop, logo and card), a copy beside its data folder's: Resources/art_<game>

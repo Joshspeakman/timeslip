@@ -20,6 +20,7 @@
  * TS2_CONF_DIR, TS2_LAUNCHER_PREFS and TS2_DATA_PATH_<TS2|FP> keep a test off the player's own settings and games. */
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
+#include "net_upnp.h"                                      /* recompose src/net: the router's address, as the Windows launcher asks it */
 #include <unistd.h>
 #include <ifaddrs.h>
 #include <netinet/in.h>
@@ -31,6 +32,7 @@ static void on_main(dispatch_block_t b) { CFRunLoopPerformBlock(CFRunLoopGetMain
 // ---------------------------------------------------------------- settings
 @interface TSRow : NSObject
 @property NSString *title; @property NSArray<NSDictionary *> *choices; @property NSInteger index;
+@property NSString *placeholder;                    /* a text row's dim words while it is empty ("type a code") */
 @property (copy) void (^activate)(void);            /* runs something instead of cycling (Saves, Updates, a panel) */
 @property (copy) NSString *(^summary)(void);        /* shows a value worked out elsewhere */
 @property BOOL wide;
@@ -53,7 +55,7 @@ static void on_main(dispatch_block_t b) { CFRunLoopPerformBlock(CFRunLoopGetMain
 enum { W = 1280, H = 720, ROW_X = 60, ROW_Y = H - 116, ROW_H = 50, ROW_GAP = 34, ROW_R = W - 64,
        PANEL_X = 610, PANEL_W = W - 64 - 610, ROWS_Y = 134, PITCH = 46,
        EX_COLS = 4, EX_TW = 268, EX_TH = 151, EX_GAP = 24, EX_X0 = 64, EX_Y0 = 200, EX_PITCH = EX_TH + 66, EX_ROWS = 2 };
-enum { HIT_NONE = -1, HIT_QUIT = 101, HIT_BACK = 102, HIT_PLINK = 103, HIT_SWITCH = 104, HIT_OPEN = 105, HIT_FOLDER = 106,
+enum { HIT_NONE = -1, HIT_QUIT = 101, HIT_BACK = 102, HIT_PLINK = 103, HIT_SWITCH = 104, HIT_OPEN = 105, HIT_FOLDER = 106, HIT_PRICES = 107, HIT_SHARE = 108, HIT_CMD = 800,
        HIT_ITEM = 200, HIT_ROW = 400, HIT_SECTION = 600, HIT_TILE = 700 };          /* HIT_ROW + 10*k + 0 left / 1 value / 2 right */
 enum { IT_PLAY, IT_GRAPHICS, IT_CONTROLS, IT_ONLINE, IT_SAVES, IT_EXTRAS, IT_UPDATES, IT_QUIT };
 #define HOLD 11.0                                         /* s a picture is up */
@@ -236,7 +238,13 @@ static NSRect hero_frame(NSDictionary *h, double d)
 @property NSInteger section, sel, top;
 @property (copy) void (^onOpenExtra)(NSDictionary *e); @property (copy) void (^onExtrasFolder)(void);
 @property double switchedAt;                               /* when the game was switched: its logo fades in */
+/* Setting up an online server (Play Together's SET UP A SERVER): the page, the server's files (recompose
+ * tools/online_server, in the app beside the launcher), and which command line was last copied. */
+@property BOOL helpOpen; @property NSString *serverFolder; @property NSInteger copiedBox; @property double copiedAt;
+/* Play Together's box under its rows (the launcher's linkInfo: heading, lines, body, share), and copying what it shows */
+@property (copy) NSDictionary *(^linkInfo)(void); @property (copy) void (^onCopyShare)(void); @property NSRect shareRect;
 @property NSMutableArray<NSDictionary *> *hintRects;       /* where the hints were drawn, and what a click on each does */
+@property NSMutableArray<NSValue *> *cmdRects;             /* the setup page's command lines */
 @end
 
 @implementation TSLaunchView { double _bar, _barW; NSTimer *_anim; }
@@ -311,6 +319,10 @@ static NSRect hero_frame(NSDictionary *h, double d)
 - (NSInteger)hit:(NSPoint)p
 {
     for (NSDictionary *h in self.hintRects) if (NSPointInRect(p, [h[@"rect"] rectValue])) return [h[@"code"] integerValue];
+    if (self.helpOpen) {
+        for (NSInteger k = 0; k < (NSInteger)self.cmdRects.count; k++) if (NSPointInRect(p, [self.cmdRects[k] rectValue])) return HIT_CMD + k;
+        return HIT_NONE;
+    }
     if (self.extrasOpen) {
         for (NSInteger s = 0; s <= (NSInteger)self.sections.count; s++) if (NSPointInRect(p, [self sectionRect:s])) return HIT_SECTION + s;
         NSInteger n = (NSInteger)self.shown.count;
@@ -319,6 +331,7 @@ static NSRect hero_frame(NSDictionary *h, double d)
     }
     if (self.open >= 0) {
         if (self.panels[self.open].linkTitle && NSPointInRect(p, self.linkRect)) return HIT_PLINK;
+        if (NSPointInRect(p, self.shareRect)) return HIT_SHARE;
         for (NSInteger k = 0; k < (NSInteger)self.rows.count; k++) {
             if (![self rowCycles:k]) continue;
             if (self.rows[k].choices.count > 1 && NSPointInRect(p, [self rowArrow:k right:NO])) return HIT_ROW + 10 * k;
@@ -359,8 +372,11 @@ static NSRect hero_frame(NSDictionary *h, double d)
     if (h != p || h == HIT_NONE) return;
     if (h == HIT_BACK) { [self back]; return; }
     if (h == HIT_QUIT) { if (self.onItem) self.onItem(IT_QUIT); return; }
-    if (h == HIT_OPEN) { if (self.extrasOpen) [self openSelected]; else [self activate]; return; }
-    if (h == HIT_FOLDER) { if (self.onExtrasFolder) self.onExtrasFolder(); return; }
+    if (h >= HIT_CMD) { [self copyCommand:h - HIT_CMD]; return; }
+    if (h == HIT_SHARE) { if (self.onCopyShare) self.onCopyShare(); return; }
+    if (h == HIT_PRICES) { [self openPrices]; return; }
+    if (h == HIT_OPEN) { if (self.helpOpen) [self copyCommand:0]; else if (self.extrasOpen) [self openSelected]; else [self activate]; return; }
+    if (h == HIT_FOLDER) { if (self.helpOpen) [self openServerFolder]; else if (self.onExtrasFolder) self.onExtrasFolder(); return; }
     if (h == HIT_SWITCH) { if (self.onSwitch) self.onSwitch(1); return; }
     if (h == HIT_PLINK) { [self openPanel:self.panels[self.open].linkPanel]; return; }
     if (h >= HIT_TILE) { self.sel = h - HIT_TILE; return; }
@@ -371,11 +387,17 @@ static NSRect hero_frame(NSDictionary *h, double d)
 - (void)activate { if (self.onItem) self.onItem(self.items[self.focus].integerValue); }
 - (void)openPanel:(NSInteger)i
 {
+    if (i == -2) { self.helpOpen = YES; self.hover = HIT_NONE; self.needsDisplay = YES; return; }   /* the online server's page */
     self.open = i; self.hover = HIT_NONE; self.rowFocus = 0;
     while (self.rowFocus < (NSInteger)self.rows.count - 1 && ![self rowCycles:self.rowFocus]) self.rowFocus++;
     self.needsDisplay = YES;
 }
-- (void)back { self.open = -1; self.extrasOpen = NO; self.hover = HIT_NONE; self.needsDisplay = YES; }
+- (void)back
+{
+    if (self.helpOpen) { self.helpOpen = NO; self.hover = HIT_NONE; self.needsDisplay = YES; return; }   /* back to Play Together */
+    [self backHome];
+}
+- (void)backHome { self.open = -1; self.extrasOpen = NO; self.hover = HIT_NONE; self.needsDisplay = YES; }
 - (void)stepRow:(NSInteger)k by:(NSInteger)dir
 {
     TSRow *t = self.rows[k]; NSInteger n = (NSInteger)t.choices.count;
@@ -400,6 +422,13 @@ static NSRect hero_frame(NSDictionary *h, double d)
 {
     unsigned short c = e.keyCode; BOOL shift = (e.modifierFlags & NSEventModifierFlagShift) != 0;
     NSString *chars = e.charactersIgnoringModifiers.lowercaseString;
+    if (self.helpOpen) {
+        if (c == 0x35) { [self back]; return; }                                         /* Escape: back to Play Together */
+        if (c == 0x24 || c == 0x4c) { [self copyCommand:0]; return; }                    /* Return: the install line */
+        if ([chars isEqual:@"f"]) { [self openServerFolder]; return; }
+        if ([chars isEqual:@"p"]) { [self openPrices]; return; }
+        [super keyDown:e]; return;
+    }
     if (self.extrasOpen) {
         NSInteger n = (NSInteger)self.shown.count, ns = (NSInteger)self.sections.count + 1;
         switch (c) {
@@ -414,6 +443,7 @@ static NSRect hero_frame(NSDictionary *h, double d)
         if ([chars isEqual:@"o"]) { if (self.onExtrasFolder) self.onExtrasFolder(); return; }
         [super keyDown:e]; return;
     }
+    if (self.open == 2 && (e.modifierFlags & NSEventModifierFlagCommand) && [chars isEqual:@"c"]) { if (self.onCopyShare) self.onCopyShare(); return; }
     if (self.open >= 0) {
         switch (c) {
         case 0x24: case 0x4c: case 0x31: case 0x7b: case 0x7c:
@@ -468,7 +498,8 @@ static NSRect hero_frame(NSDictionary *h, double d)
 }
 - (void)drawRect:(NSRect)dirty
 {
-    if (self.extrasOpen) [self drawExtras];
+    if (self.helpOpen) [self drawHelp];
+    else if (self.extrasOpen) [self drawExtras];
     else if (self.open >= 0) [self drawPanel];
     else [self drawHome];
 }
@@ -551,8 +582,9 @@ static NSRect hero_frame(NSDictionary *h, double d)
             chevron(NSMaxX(rr) - 315, NSMidY(rr), NO, 7, 13, foc || self.hover == HIT_ROW + 10 * k ? NSColor.whiteColor : self.accent);
             chevron(NSMaxX(rr) - 19, NSMidY(rr), YES, 7, 13, foc || self.hover == HIT_ROW + 10 * k + 2 ? NSColor.whiteColor : self.accent);
         } else {                                                         /* a value to read, or one to type: at the right */
-            text(val, NSMakeRect(rr.origin.x + 230, rr.origin.y, rr.size.width - 238, rr.size.height), F_COND, 13,
-                 t.activate ? (foc ? NSColor.whiteColor : self.bright) : rgb(0xE6ECF6, 1), NSTextAlignmentRight, 0, YES);
+            BOOL empty = !val.length && t.placeholder;
+            text(empty ? t.placeholder : val, NSMakeRect(rr.origin.x + 230, rr.origin.y, rr.size.width - 238, rr.size.height), F_COND, 13,
+                 empty ? rgb(0x7C8AA4, 1) : t.activate ? (foc ? NSColor.whiteColor : self.bright) : rgb(0xE6ECF6, 1), NSTextAlignmentRight, 0, YES);
         }
     }
     /* the focused row's help, then the panel's own note */
@@ -561,7 +593,79 @@ static NSRect hero_frame(NSDictionary *h, double d)
     NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new]; ps.lineBreakMode = NSLineBreakByWordWrapping;
     if (help.length) [help drawInRect:NSMakeRect(PANEL_X + 2, y, PANEL_W - 4, 40) withAttributes:@{NSFontAttributeName: face(F_BODY, 11), NSForegroundColorAttributeName: rgb(0x9AA8C0, 1), NSParagraphStyleAttributeName: ps}];
     if (pn.footnote.length) [pn.footnote drawInRect:NSMakeRect(PANEL_X + 2, y + 40, PANEL_W - 4, 40) withAttributes:@{NSFontAttributeName: face(F_BODY, 10.5), NSForegroundColorAttributeName: rgb(0x7C8AA4, 1), NSParagraphStyleAttributeName: ps}];
+    self.shareRect = NSZeroRect;
+    NSDictionary *info = self.open == 2 && self.linkInfo ? self.linkInfo() : nil;
+    if (info) {                                                          /* draw_link's box: what to tell friends, or what to do */
+        NSArray *lines = info[@"lines"];
+        CGFloat bh = MIN(H - 96 - (y + 48), 46 + 26.0 * lines.count + 70);
+        NSRect box = NSMakeRect(PANEL_X - 10, y + 48, PANEL_W + 20, bh);
+        BOOL hot = [info[@"share"] boolValue] && self.hover == HIT_SHARE;
+        fill(box, [NSColor colorWithWhite:0 alpha:hot ? 0.45 : 0.3]); fill(NSMakeRect(box.origin.x, box.origin.y, 3, box.size.height), self.accent);
+        caps(info[@"heading"], NSMakeRect(box.origin.x + 16, box.origin.y + 12, box.size.width - 32, 20), F_DISPLAY, 9, self.accent, NSTextAlignmentLeft, 3, YES);
+        CGFloat ly = box.origin.y + 40;
+        for (NSArray *l in lines) {
+            text(l[0], NSMakeRect(box.origin.x + 16, ly, box.size.width - 32, 22), F_BODY, 12, [l[1] boolValue] ? rgb(0xEBF0FA, 1) : rgb(0x8E9CB4, 1), NSTextAlignmentLeft, 0, NO);
+            ly += 26;
+        }
+        [info[@"body"] drawInRect:NSMakeRect(box.origin.x + 16, ly + 4, box.size.width - 32, NSMaxY(box) - ly - 8)
+                   withAttributes:@{NSFontAttributeName: face(F_BODY, 11), NSForegroundColorAttributeName: rgb(0x9AA8C0, 1), NSParagraphStyleAttributeName: ps}];
+        if ([info[@"share"] boolValue]) self.shareRect = box;
+    }
     [self hints:@[@[@"← →", @"Change", @(HIT_NONE)], @[@"ESC", @"Back", @(HIT_BACK)]]];
+}
+// ------------------------------------------------ setting up an online server
+/* Fly.io's own commands (fly.io/docs/flyctl/install): 0 installs flyctl, 1 runs the setup from the server's folder. */
+- (NSString *)command:(NSInteger)k
+{
+    if (k == 0) return @"curl -L https://fly.io/install.sh | sh";
+    return [NSString stringWithFormat:@"sh \"%@/deploy.sh\"", self.serverFolder ?: @"online_server"];
+}
+- (void)copyCommand:(NSInteger)k
+{
+    [NSPasteboard.generalPasteboard clearContents]; [NSPasteboard.generalPasteboard setString:[self command:k] forType:NSPasteboardTypeString];
+    self.copiedBox = k; self.copiedAt = now_s(); self.needsDisplay = YES;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ self.needsDisplay = YES; });
+}
+- (void)openServerFolder { if (self.serverFolder) [[NSWorkspace sharedWorkspace] openURL:[NSURL fileURLWithPath:self.serverFolder isDirectory:YES]]; }
+- (void)openPrices { [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@"https://fly.io/docs/about/pricing/"]]; }
+/* The page, as the Windows launcher's: five steps, two of them a line to type, which a click copies. */
+- (void)drawHelp
+{
+    fill(self.bounds, rgb(INK, 0.5)); fill(self.bounds, rgb(INK, 0.45));
+    caps(@"SET UP AN ONLINE SERVER", NSMakeRect(EX_X0, 30, 900, 50), F_HEAVY, 26, NSColor.whiteColor, NSTextAlignmentLeft, 6, YES);
+    caps(@"ON FLY.IO" DOT @"ONCE, BY ONE OF YOU", NSMakeRect(EX_X0, 80, 900, 20), F_DISPLAY, 9, self.accent, NSTextAlignmentLeft, 4, YES);
+    if (self.logo.size.width > 2) picture(self.logo, NSMakeRect(ROW_R - 300 + 8, 22, 300, 96), NSTextAlignmentRight, 0.9);
+    NSString *shown = self.serverFolder ?: @"the online_server folder of the game's source";
+    NSArray *head = @[@"WHAT IT IS", @"A FLY.IO ACCOUNT, ON PAY AS YOU GO", @"INSTALL FLYCTL", @"RUN THE SETUP", @"CONNECT"];
+    NSArray *body = @[
+        @"One server every copy connects to, for System Link and online co-op: nobody opens a port on their router. One of you runs it and shares its address. At Fly's prices it costs about $4.20 a month: a small machine, $2.19, and the dedicated IPv4 address UDP needs, $2.",
+        @"Sign up at fly.io and add a card. Then, on Fly's dashboard, Billing, switch to Pay As You Go: Fly's Free plan has no dedicated IPv4 addresses, and a game's traffic (UDP) needs one. P shows Fly's prices.",
+        @"Fly's command line. In Terminal, run this (Return, or a click on it, copies it):",
+        [NSString stringWithFormat:@"In a new Terminal window, run this (a click copies it). It signs you in to Fly, asks a name and the region nearest you, and makes and starts the server; at the end it prints its address, like name.fly.dev. Its files: %@ (F opens the folder).", shown],
+        @"Back here: Connect, Through an online server; Server Address, what it printed; Session Code, any word of four letters or more. Everyone playing types the same two. To remove the server, and its cost: flyctl apps destroy, with its name."];
+    const int lines[5] = {2, 2, 1, 2, 2}, box[5] = {-1, -1, 0, 1, -1};
+    CGFloat y = 112, wide = W - EX_X0 * 2 - 44;
+    NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new]; ps.lineBreakMode = NSLineBreakByWordWrapping;
+    self.cmdRects = [NSMutableArray array];
+    for (int i = 0; i < 5; i++) {
+        text([NSString stringWithFormat:@"%d", i + 1], NSMakeRect(EX_X0, y, 40, 30), F_HEAVY, 20, self.bright, NSTextAlignmentLeft, 0, YES);
+        caps(head[i], NSMakeRect(EX_X0 + 44, y + 2, 900, 22), F_COND_BOLD, 12, NSColor.whiteColor, NSTextAlignmentLeft, 3, YES);
+        [body[i] drawInRect:NSMakeRect(EX_X0 + 44, y + 28, wide, 20 * lines[i] + 4)
+             withAttributes:@{NSFontAttributeName: face(F_BODY, 12), NSForegroundColorAttributeName: rgb(0xC6D0E2, 1), NSParagraphStyleAttributeName: ps}];
+        y += 28 + 20 * lines[i] + 8;
+        if (box[i] >= 0) {
+            NSInteger k = box[i]; BOOL hot = self.hover == HIT_CMD + k, copied = self.copiedBox == k && now_s() - self.copiedAt < 1.5;
+            NSRect c = NSMakeRect(EX_X0 + 44, y, wide, 30); [self.cmdRects addObject:[NSValue valueWithRect:c]];
+            NSString *cmd = [self command:k]; CGFloat room = wide - 14 - 80, pt = 12;
+            while (pt > 9 && text_w(cmd, F_BODY, pt, 0) > room) pt -= 0.5;              /* a long folder: smaller, to show it whole */
+            fill(c, [NSColor colorWithWhite:0 alpha:hot ? 0.7 : 0.55]); fill(NSMakeRect(c.origin.x, y, 3, 30), self.bright);
+            text(cmd, NSMakeRect(c.origin.x + 14, y, room, 30), F_BODY, pt, rgb(0xEAF2FF, 1), NSTextAlignmentLeft, 0, NO);
+            if (copied || hot) caps(copied ? @"COPIED" : @"COPY", NSMakeRect(NSMaxX(c) - 80, y, 70, 30), F_COND_BOLD, 9, copied ? self.bright : rgb(0xBFCADC, 1), NSTextAlignmentRight, 3, YES);
+            y += 36;
+        }
+        y += 10;
+    }
+    [self hints:@[@[@"ENTER", @"Copy the install line", @(HIT_OPEN)], @[@"F", @"Server folder", @(HIT_FOLDER)], @[@"P", @"Fly's prices", @(HIT_PRICES)], @[@"ESC", @"Back", @(HIT_BACK)]]];
 }
 - (void)drawExtras
 {
@@ -794,6 +898,10 @@ static BOOL off_word(NSString *v)
 @property NSArray<TSPanel *> *panels;
 @property TSRow *display, *resolution, *widescreen, *filtering, *framerate, *soften, *interp, *fps, *renderer,
                 *scheme, *mouse, *crosshair, *link, *router, *saves;
+/* Play Together: directly or through an online server (recompose tools/online_server), its address and the session
+ * code everyone types; the rows the panel shows for what is chosen. */
+@property TSRow *via, *peerRow, *serverRow, *codeRow, *portRow, *joinCodeRow; @property TSPanel *netPanel;
+@property NSString *serverAddr, *code, *sysPort, *coopPort;   /* code: the session code through a server, the join code directly */
 @end
 @implementation TSGame
 - (BOOL)kbm { return [self.scheme.value isEqual:@"1"]; }
@@ -819,9 +927,10 @@ static TSRow *conf_row(NSString *title, NSArray<NSDictionary *> *choices, NSStri
 @property NSString *lastPickPath;                   /* <user dir>/launcher_game.txt: the game last picked, "ts2" or "fp" (the PC's launcher keeps it there too) */
 @property (strong) TSRow *updates;
 @property (strong) TSHeroView *hero; @property NSString *userDir;
+@property NSInteger probeState; @property double copiedAt;   /* the router asked: 0 not yet, 1 asking, 2 answered; when the address was copied */
 @end
 
-@implementation Launcher
+@implementation Launcher { NetUpnpResult _probe; }
 - (TSGame *)game { return self.games[self.current]; }
 /* The settings domain a game's launcher used as its own app; a test (TS2_LAUNCHER_PREFS=<prefix>) gets its own. */
 static NSString *domain_name(NSString *bundleID)
@@ -889,7 +998,7 @@ static NSUserDefaults *domain(NSString *bundleID)
 }
 - (void)buildRows:(TSGame *)g
 {
-    NSUserDefaults *d = g.defaults; NSDictionary<NSString *, NSString *> *c = conf_read(g.confPath);
+    NSDictionary<NSString *, NSString *> *c = conf_read(g.confPath);
     /* what the earlier launcher saved: only what is stored, not the defaults registered above */
     NSDictionary *stored = [NSUserDefaults.standardUserDefaults persistentDomainForName:g.domainName] ?: @{};
     g_legacy_first = ![stored[@"confSaved"] boolValue];
@@ -968,27 +1077,54 @@ static NSUserDefaults *domain(NSString *bundleID)
                                                                   : @"Start  ·  Back  ·  D-Pad"; }, nil);
     TSPanel *cp = [TSPanel new]; cp.title = @"CONTROLS"; cp.rows = @[g.scheme, g.mouse, g.crosshair, move, fire, abxy, wb, menus];
     cp.footnote = @"In the game: 1-9 weapons · the wheel swaps or zooms · Esc the PC menu · F9 frame rate · F11 screenshot · Alt-Return full screen";
-    /* Play Together: System Link (the game's own LAN play, over the network or the internet) and online co-op (each
-     * machine runs the whole game and sends only its controller). Chosen for each start, so given to the game as
-     * RECOMP_SYSLINK / RECOMP_SYSLINK_HOST / RECOMP_SYSLINK_UPNP and RECOMP_LOCKSTEP_NET / RECOMP_LOCKSTEP_PEER. */
-    g.link = row(@"Mode", @[@{@"value": @"off", @"label": @"Off", @"note": @"Play on this Mac alone"},
-                            @{@"value": @"host", @"label": @"System Link: Host", @"short": @"Link Host", @"note": @"Others join this Mac's System Link game (UDP 27610)"},
-                            @{@"value": @"join", @"label": @"System Link: Join", @"short": @"Link Join", @"note": @"Join the System Link game at the host's address below"},
-                            @{@"value": @"coop-host", @"label": @"Co-op: Host", @"short": @"Co-op Host", @"note": @"Story co-op online: this Mac plays controller 1, the other machine joins (UDP 27620)"},
-                            @{@"value": @"coop-join", @"label": @"Co-op: Join", @"short": @"Co-op Join", @"note": @"Story co-op online: join the host below as controller 2"}],
-                 [d stringForKey:@"link"], 0);
-    g.peerAddr = [d stringForKey:@"peer"] ?: @"";
+    /* Play Together, as the Windows launcher's (recompose launcher.c build_link_rows, draw_link): System Link and
+     * online co-op, directly or through an online server (recompose tools/online_server). Kept in the settings file
+     * under the same names as everywhere (syslink, coop, online_via, online_server, syslink_host, syslink_port,
+     * coop_port, syslink_code, syslink_upnp), and handed to the game for each start. */
+    NSString *(^cs)(NSString *) = ^NSString *(NSString *k) { return c[k].length ? c[k] : nil; };
+    NSString *oldLink = stored[@"link"], *mode = nil;
+    if ([cs(@"coop") isEqual:@"host"] || [cs(@"coop") isEqual:@"join"]) mode = [@"coop-" stringByAppendingString:c[@"coop"]];
+    else if ([cs(@"syslink") isEqual:@"host"] || [cs(@"syslink") isEqual:@"join"]) mode = c[@"syslink"];
+    NSString *linkNote = @"Play with other copies over a network. Host: this Mac is the session your friends join. Join: play in a friend's session.";
+    g.link = row(@"System Link", @[@{@"value": @"off", @"label": @"Off", @"note": linkNote}, @{@"value": @"host", @"label": @"Host a session", @"note": linkNote},
+                                   @{@"value": @"join", @"label": @"Join a session", @"note": linkNote}, @{@"value": @"coop-host", @"label": @"Host online co-op", @"note": linkNote},
+                                   @{@"value": @"coop-join", @"label": @"Join online co-op", @"note": linkNote}],
+                 g_legacy_first ? (oldLink ?: mode ?: @"off") : (mode ?: oldLink ?: @"off"), 0);
+    g.via = row(@"Connect", @[@{@"value": @"direct", @"label": @"Directly", @"note": @"Directly: the host's router lets friends in (UPnP, or a port forwarded by hand). Through an online server: everyone connects to one server, nobody opens a port. SET UP A SERVER, above the rows, shows how to run one."},
+                              @{@"value": @"server", @"label": @"Through an online server", @"note": @"Directly: the host's router lets friends in (UPnP, or a port forwarded by hand). Through an online server: everyone connects to one server, nobody opens a port. SET UP A SERVER, above the rows, shows how to run one."}],
+                cs(@"online_via") ?: stored[@"via"] ?: @"direct", 0);
+    g.serverAddr = cs(@"online_server") ?: stored[@"server"] ?: @"";
+    g.code = cs(@"syslink_code") ?: stored[@"code"] ?: @"";
+    g.peerAddr = cs(@"syslink_host") ?: stored[@"peer"] ?: @"";
+    g.sysPort = [cs(@"syslink_port") isEqual:@"27610"] ? @"" : cs(@"syslink_port") ?: @"";
+    g.coopPort = [cs(@"coop_port") isEqual:@"27620"] ? @"" : cs(@"coop_port") ?: @"";
     __weak Launcher *wl = self;
-    TSRow *peer = [TSRow new]; peer.title = @"Host's Address";
-    peer.choices = @[@{@"value": @"", @"label": @"", @"note": @"When joining: the hosting machine's address, with :port if not the usual one"}];
-    peer.summary = ^NSString * { return wg.peerAddr.length ? wg.peerAddr : @"Click to Type It"; };
-    peer.activate = ^{ [wl askPeer]; };
-    g.router = row(@"Router", @[@{@"value": @NO, @"label": @"Leave It", @"note": @"Hosting on your own network: nothing to open"},
-                                @{@"value": @YES, @"label": @"Open the Port (UPnP)", @"short": @"UPnP", @"note": @"Hosting for friends on the internet: the router is asked to forward the port"}],
-                   @([d boolForKey:@"upnp"]), 0);
-    TSRow *me = info(@"This Mac", ^{ return lan_address(); }, @"When hosting, the other player joins this address");
-    TSPanel *np = [TSPanel new]; np.title = @"PLAY TOGETHER"; np.rows = @[g.link, peer, g.router, me];
-    np.footnote = @"Both machines need this same version. The first time you host, macOS asks to allow incoming connections.";
+    /* a text row: typed in a small sheet; its dim words while empty */
+    TSRow *(^textRow)(NSString *, NSString *, NSString *, NSString *, NSString *(^)(void), void (^)(void)) =
+        ^TSRow *(NSString *title, NSString *note, NSString *empty, NSString *key, NSString *(^value)(void), void (^ask)(void)) {
+            TSRow *r = [TSRow new]; r.title = title; r.placeholder = empty;
+            r.choices = @[@{@"value": @"", @"label": @"", @"note": note}]; r.summary = value; r.activate = ask; return r; };
+    g.serverRow = textRow(@"Server address", @"The online server everyone uses, like name.fly.dev, with :port if not 27630. Type it, or ⌘V to paste.",
+                          @"type the server's address", @"serverAddr", ^NSString * { return wg.serverAddr; },
+                          ^{ [wl askText:@"Server address" info:@"The online server everyone uses, like name.fly.dev, with :port if not 27630." placeholder:@"name.fly.dev" key:@"serverAddr"]; });
+    g.codeRow = textRow(@"Session code", @"Everyone in the game types the same code: it is how the server puts you together, and keeps others out. At least four characters.",
+                        @"type a code", @"code", ^NSString * { return wg.code; },
+                        ^{ [wl askText:@"Session code" info:@"Everyone in the game types the same code: it is how the server puts you together, and keeps others out. At least four characters." placeholder:@"a code" key:@"code"]; });
+    g.peerRow = textRow(@"Host's address", @"What the host gave you, like 81.2.3.4 or a name, with :port if theirs is not the port below. Type it, or ⌘V to paste.",
+                        @"type the host's address", @"peerAddr", ^NSString * { return wg.peerAddr; },
+                        ^{ [wl askText:@"Host's address" info:@"What the host gave you, like 81.2.3.4 or a name, with :port if theirs is not the port below." placeholder:@"192.168.1.20" key:@"peerAddr"]; });
+    g.portRow = textRow(@"Port", @"", @"27610", @"port", ^NSString * { return [wg.link.value hasPrefix:@"coop"] ? wg.coopPort : wg.sysPort; },
+                        ^{ [wl askPort]; });
+    g.joinCodeRow = textRow(@"Join code", @"Optional. Only consoles with the same code get in; empty lets in anyone who has the address. Not case-sensitive.",
+                            @"none", @"code", ^NSString * { return wg.code; },
+                            ^{ [wl askText:@"Join code" info:@"Optional. Only consoles with the same code get in; empty lets in anyone who has the address. Not case-sensitive." placeholder:@"none" key:@"code"]; });
+    NSString *upnp = c[@"syslink_upnp"] ? (off_word(c[@"syslink_upnp"]) ? @"0" : @"1") : stored[@"upnp"] ? ([stored[@"upnp"] boolValue] ? @"1" : @"0") : nil;
+    NSString *upnpNote = @"Ask the router to forward the port to this Mac (UPnP) while you host, so friends on the internet can join. Friends on your own network can join either way.";
+    g.router = row(@"Open the router", @[@{@"value": @"0", @"label": @"Off", @"note": upnpNote}, @{@"value": @"1", @"label": @"On", @"note": upnpNote}],
+                   g_legacy_first ? (stored[@"upnp"] ? upnp : @"1") : (upnp ?: @"1"), 1);
+    TSPanel *np = [TSPanel new]; np.title = @"PLAY TOGETHER"; g.netPanel = np;
+    np.linkTitle = @"SET UP A SERVER"; np.linkPanel = -2;               /* the online server's page */
+    [self netRows:g];
     g.panels = @[gp, cp, np, ap];
 
     /* the game's own save folder: UDATA/<its title id> */
@@ -997,6 +1133,124 @@ static NSUserDefaults *domain(NSString *bundleID)
     g.saves.choices = @[@{@"value": @"", @"label": @"Open", @"note": [@"Your profiles and story progress: " stringByAppendingString:[saves stringByAbbreviatingWithTildeInPath]]}];
     g.saves.activate = ^{ [[NSFileManager defaultManager] createDirectoryAtPath:saves withIntermediateDirectories:YES attributes:nil error:nil];
                           [[NSWorkspace sharedWorkspace] openURL:[NSURL fileURLWithPath:saves isDirectory:YES]]; };
+}
+/* The Play Together rows for what is chosen, as build_link_rows: through a server its address and the session code;
+ * directly the host's address (joining), the port, the join code (System Link) and the router (hosting). */
+- (void)netRows:(TSGame *)g
+{
+    NSString *m = g.link.value; BOOL off = [m isEqual:@"off"], server = !off && [g.via.value isEqual:@"server"];
+    BOOL coop = [m hasPrefix:@"coop"], hosts = [m hasSuffix:@"host"], joins = [m hasSuffix:@"join"];
+    NSMutableArray *rows = [NSMutableArray arrayWithObject:g.link];
+    if (!off) [rows addObject:g.via];
+    if (server) [rows addObjectsFromArray:@[g.serverRow, g.codeRow]];
+    else if (!off) {
+        if (joins) [rows addObject:g.peerRow];
+        g.portRow.placeholder = coop ? @"27620" : @"27610";
+        g.portRow.choices = @[@{@"value": @"", @"label": @"", @"note": hosts ? @"The UDP port friends join on. Change it only if something else on this Mac or your router already uses it."
+                                                                             : @"The host's port, when their address does not end in one."}];
+        [rows addObject:g.portRow];
+        if (!coop) [rows addObject:g.joinCodeRow];
+        if (hosts) [rows addObject:g.router];
+    }
+    g.netPanel.rows = rows;
+    if (self.view.open == 2 && self.view.rowFocus >= (NSInteger)rows.count) self.view.rowFocus = (NSInteger)rows.count - 1;
+    if (hosts && !server && [g.router.value isEqual:@"1"]) [self probeRouter];
+}
+- (void)askText:(NSString *)title info:(NSString *)info placeholder:(NSString *)ph key:(NSString *)key
+{
+    TSGame *g = self.game;
+    NSAlert *a = [NSAlert new]; a.messageText = title; a.informativeText = info;
+    NSTextField *f = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 260, 24)]; f.stringValue = [g valueForKey:key] ?: @""; f.placeholderString = ph;
+    a.accessoryView = f; [a addButtonWithTitle:@"OK"]; [a addButtonWithTitle:@"Cancel"];
+    [a.window setInitialFirstResponder:f];
+    if ([a runModal] != NSAlertFirstButtonReturn) return;
+    [g setValue:[f.stringValue stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] forKey:key];
+    [self save]; self.view.needsDisplay = YES;
+}
+- (void)askPort
+{
+    TSGame *g = self.game; BOOL coop = [g.link.value hasPrefix:@"coop"];
+    NSAlert *a = [NSAlert new]; a.messageText = @"Port"; a.informativeText = g.portRow.choices[0][@"note"];
+    NSTextField *f = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 120, 24)]; f.stringValue = coop ? g.coopPort : g.sysPort; f.placeholderString = coop ? @"27620" : @"27610";
+    a.accessoryView = f; [a addButtonWithTitle:@"OK"]; [a addButtonWithTitle:@"Cancel"];
+    [a.window setInitialFirstResponder:f];
+    if ([a runModal] != NSAlertFirstButtonReturn) return;
+    int p = f.stringValue.intValue; NSString *v = p >= 1 && p <= 65535 ? [NSString stringWithFormat:@"%d", p] : @"";   /* anything else: the default */
+    if (coop) g.coopPort = v; else g.sysPort = v;
+    [self save]; self.view.needsDisplay = YES;
+}
+/* The port in use: what was typed, else the mode's default. */
+- (int)portOf:(TSGame *)g { NSString *p = [g.link.value hasPrefix:@"coop"] ? g.coopPort : g.sysPort; return p.intValue > 0 ? p.intValue : [g.link.value hasPrefix:@"coop"] ? 27620 : 27610; }
+/* The router's internet address (recompose net_upnp.c, as the Windows launcher asks it), once, off the main thread. */
+- (void)probeRouter
+{
+    if (self.probeState) return;
+    self.probeState = 1;
+    if (getenv("TS2_LAUNCHER_SHOT")) { memset(&_probe, 0, sizeof _probe); net_upnp_probe(&_probe); self.probeState = 2; return; }   /* a picture waits for the answer */
+    __weak Launcher *ws = self;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        NetUpnpResult r; memset(&r, 0, sizeof r); net_upnp_probe(&r);
+        dispatch_async(dispatch_get_main_queue(), ^{ Launcher *s = ws; if (!s) return; s->_probe = r; s.probeState = 2; s.view.needsDisplay = YES; });
+    });
+}
+- (NSString *)lanAddress { char a[64]; return net_local_address(a, sizeof a) ? @(a) : lan_address(); }
+/* What a player gives their friends (link_share_address): through a server, the server and the session code; a
+ * host, the router's internet address when it gave one, else this Mac's on its network. */
+- (NSString *)shareText
+{
+    TSGame *g = self.game;
+    if (![g.link.value isEqual:@"off"] && [g.via.value isEqual:@"server"])
+        return [NSString stringWithFormat:@"Server %@   Session code %@", g.serverAddr, g.code.length ? g.code : @"(none yet)"];
+    if ([g.router.value isEqual:@"1"] && self.probeState == 2 && _probe.state == NET_UPNP_FOUND) return [NSString stringWithFormat:@"%s:%d", _probe.external, [self portOf:g]];
+    return [NSString stringWithFormat:@"%@:%d", self.lanAddress, [self portOf:g]];
+}
+- (BOOL)canShare
+{
+    TSGame *g = self.game; NSString *m = g.link.value;
+    if (![m isEqual:@"off"] && [g.via.value isEqual:@"server"]) return g.serverAddr.length > 0;
+    return [m hasSuffix:@"host"];
+}
+- (void)copyShare
+{
+    if (!self.canShare) return;
+    [NSPasteboard.generalPasteboard clearContents]; [NSPasteboard.generalPasteboard setString:self.shareText forType:NSPasteboardTypeString];
+    self.copiedAt = CACurrentMediaTime(); self.view.needsDisplay = YES;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ self.view.needsDisplay = YES; });
+}
+/* The box under the rows (draw_link): its heading, its lines (each [text, bright]), and what it says. */
+- (NSDictionary *)linkInfo
+{
+    TSGame *g = self.game; NSString *m = g.link.value; BOOL coop = [m hasPrefix:@"coop"], hosts = [m hasSuffix:@"host"];
+    BOOL copied = CACurrentMediaTime() - self.copiedAt < 1.5;
+    if (![m isEqual:@"off"] && [g.via.value isEqual:@"server"]) {
+        BOOL ok = g.code.length >= 4;
+        return @{@"heading": @"THROUGH AN ONLINE SERVER",
+                 @"lines": @[@[[@"Server         " stringByAppendingString:g.serverAddr.length ? g.serverAddr : @"not set: type its address above"], @(g.serverAddr.length > 0)],
+                             @[[@"Session code   " stringByAppendingString:ok ? g.code : @"at least four characters, the same for everyone"], @(ok)]],
+                 @"body": [NSString stringWithFormat:@"%@  Give your friends both; nobody opens a port. %@ No server yet? SET UP A SERVER, above the rows, shows how to run one on Fly.io.",
+                           copied ? @"Copied." : @"⌘C or a click here copies them.",
+                           coop ? @"The host starts their game first; you are controller 2 in their game." : @"Then host or join a game in the game's own System Link menu."],
+                 @"share": @YES};
+    }
+    if (hosts) {
+        int port = [self portOf:g]; NSString *net; BOOL bright = NO;
+        if (![g.router.value isEqual:@"1"]) net = [NSString stringWithFormat:@"On the internet      only with UDP port %d forwarded to this Mac by hand, or over a virtual network", port];
+        else if (self.probeState != 2) net = @"On the internet      asking the router...";
+        else if (_probe.state == NET_UPNP_FOUND) { net = [NSString stringWithFormat:@"On the internet      %s:%d   (the router is asked to open it when the game starts)", _probe.external, port]; bright = YES; }
+        else net = [@"On the internet      " stringByAppendingString:@(_probe.detail).length ? @(_probe.detail) : @"the router did not answer (UPnP is off, or there is none)"];
+        NSString *fw = @"macOS may ask to let the game accept incoming connections the first time: allow it.";
+        return @{@"heading": @"TELL YOUR FRIENDS",
+                 @"lines": @[@[[NSString stringWithFormat:@"On your network      %@:%d", self.lanAddress, port], @YES], @[net, @(bright)]],
+                 @"body": [NSString stringWithFormat:@"%@  %@ %@", copied ? @"Copied." : @"⌘C or a click here copies it.", fw,
+                           coop ? @"You are controller 1 and your friend controller 2 in one game, each seeing their own view: pick its two-player mode together, as on one console."
+                                : @"Then host or join a game in the game's own System Link menu."],
+                 @"share": @YES};
+    }
+    if ([m isEqual:@"coop-join"])
+        return @{@"heading": @"JOINING CO-OP", @"lines": @[], @"body": @"Ask the host for their address. Nothing needs opening on your router. Your game starts from the host's saves and you are controller 2 in their game, with your own controller 1. Both copies must be the same build with the same Widescreen setting; the log beside the game says why if the host turns you away."};
+    if ([m isEqual:@"join"])
+        return @{@"heading": @"JOINING", @"lines": @[], @"body": @"Ask the host for their address, and the join code if they set one. Nothing needs opening on your router. Start the game and open its System Link menu: games anyone in the session hosts appear there. If none does, the log beside the game says whether the host answered."};
+    return @{@"heading": @"PLAY OVER A NETWORK", @"lines": @[], @"body": @"Consoles linked together play in one game, as they did with a cable or a network switch. One player hosts the session, up to 15 more join it, from the same network or over the internet. Each needs their own copy of the game."};
 }
 /* The game the window shows: its key art (sliding in from the side it is on, `dir`), its logo and colours, its
  * panels; the other game's logo over the row's end. */
@@ -1044,6 +1298,8 @@ static NSUserDefaults *domain(NSString *bundleID)
     case IT_CONTROLS: return g.kbm ? @"KEYS & MOUSE" : @"CONTROLLER";
     case IT_ONLINE: {
         NSString *m = g.link.value;
+        if (![m isEqual:@"off"] && [g.via.value isEqual:@"server"])
+            return [NSString stringWithFormat:@"%@%@THROUGH %@", [m hasPrefix:@"coop"] ? @"CO-OP" : @"SYSTEM LINK", DOT, g.serverAddr.length ? g.serverAddr.uppercaseString : @"AN ONLINE SERVER"];
         return [m isEqual:@"coop-host"] ? @"CO-OP" DOT @"HOSTING" : [m isEqual:@"coop-join"] ? @"CO-OP" DOT @"JOINING"
              : [m isEqual:@"host"] ? @"SYSTEM LINK" DOT @"HOST" : [m isEqual:@"join"] ? @"SYSTEM LINK" DOT @"JOIN" : @"ONLINE CO-OP" DOT @"SYSTEM LINK";
     }
@@ -1200,6 +1456,10 @@ static void extras_in(NSString *dir, NSMutableArray<NSMutableDictionary *> *out)
     [root addSubview:self.hero];
     TSLaunchView *v = [[TSLaunchView alloc] initWithFrame:root.bounds]; self.view = v; [root addSubview:v];
     v.hover = v.pressed = HIT_NONE; v.focus = 0; v.open = -1;
+    /* the online server's files (recompose tools/online_server), which mac/install.sh puts in the app */
+    NSString *srv = [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"online_server"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:[srv stringByAppendingPathComponent:@"server.py"]]) v.serverFolder = srv;
+    if (getenv("TS2_LAUNCHER_SERVER_FOLDER")) v.serverFolder = @(getenv("TS2_LAUNCHER_SERVER_FOLDER"));
     [self setupUpdates];
     /* the game picked last time, if it is still here; else the first that is (a one-game app: its own) */
     NSInteger pick = -1; NSString *last = getenv("TS2_LAUNCHER_GAME") ? @(getenv("TS2_LAUNCHER_GAME")) : [[NSString stringWithContentsOfFile:self.lastPickPath encoding:NSUTF8StringEncoding error:nil]
@@ -1216,6 +1476,8 @@ static void extras_in(NSString *dir, NSMutableArray<NSMutableDictionary *> *out)
     v.onChange = ^{ [ws save]; };
     v.onOpenExtra = ^(NSDictionary *e) { [ws openExtra:e]; };
     v.onExtrasFolder = ^{ [ws openExtrasFolder]; };
+    v.linkInfo = ^NSDictionary * { return [ws linkInfo]; };
+    v.onCopyShare = ^{ [ws copyShare]; };
 
     const char *shot = getenv("TS2_LAUNCHER_SHOT");
     if (shot) {                                                          /* development: the window as an image */
@@ -1224,6 +1486,7 @@ static void extras_in(NSString *dir, NSMutableArray<NSMutableDictionary *> *out)
         if (getenv("TS2_LAUNCHER_PANEL")) [v openPanel:atoi(getenv("TS2_LAUNCHER_PANEL"))];
         if (getenv("TS2_LAUNCHER_ROWFOCUS")) v.rowFocus = atoi(getenv("TS2_LAUNCHER_ROWFOCUS"));
         if (getenv("TS2_LAUNCHER_EXTRAS")) [self item:IT_EXTRAS];
+        if (getenv("TS2_LAUNCHER_HELP")) { [v openPanel:2]; [v openPanel:-2]; }
         NSBitmapImageRep *rep = [root bitmapImageRepForCachingDisplayInRect:root.bounds]; [root cacheDisplayInRect:root.bounds toBitmapImageRep:rep];
         [[rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:@(shot) atomically:YES];
         exit(0);
@@ -1287,26 +1550,24 @@ static void extras_in(NSString *dir, NSMutableArray<NSMutableDictionary *> *out)
     conf_write(g.confPath, @{@"fullscreen": g.display.value, @"resolution_scale": g.resolution.value, @"widescreen": g.widescreen.value,
                              @"anisotropy": g.filtering.value, @"post_soften": g.soften.value, @"frame_cap": g.framerate.value,
                              @"frame_interp": g.interp.value, @"fps_overlay": g.fps.value, @"renderer": g.renderer.value,
-                             @"mouse_look": g.scheme.value, @"mouse_sensitivity": g.mouse.value, @"crosshair": g.crosshair.value});
+                             @"mouse_look": g.scheme.value, @"mouse_sensitivity": g.mouse.value, @"crosshair": g.crosshair.value,
+                             /* Play Together, under the names every launcher and the game use */
+                             @"syslink": [g.link.value hasPrefix:@"coop"] ? @"off" : g.link.value,
+                             @"coop": [g.link.value isEqual:@"coop-host"] ? @"host" : [g.link.value isEqual:@"coop-join"] ? @"join" : @"off",
+                             @"online_via": g.via.value, @"online_server": g.serverAddr ?: @"", @"syslink_code": g.code ?: @"",
+                             @"syslink_host": g.peerAddr ?: @"", @"syslink_upnp": g.router.value,
+                             @"syslink_port": g.sysPort.length ? g.sysPort : @"27610", @"coop_port": g.coopPort.length ? g.coopPort : @"27620"});
     [d removeObjectForKey:@"renderer"];                                 /* from when the Mac also had Vulkan */
     [d setBool:YES forKey:@"confSaved"];                                /* the file has this launcher's settings now: it comes first */
     [d setObject:g.kbm ? @"kbm" : @"pad" forKey:@"scheme"];
     [d setObject:g.link.value forKey:@"link"];
     [d setObject:g.peerAddr ?: @"" forKey:@"peer"];
-    [d setBool:[g.router.value boolValue] forKey:@"upnp"];
+    [d setBool:[g.router.value isEqual:@"1"] forKey:@"upnp"];
+    [d setObject:g.via.value forKey:@"via"];
+    [d setObject:g.serverAddr ?: @"" forKey:@"server"];
+    [d setObject:g.code ?: @"" forKey:@"code"];
     [d synchronize];
-}
-- (void)askPeer
-{
-    TSGame *g = self.game;
-    NSAlert *a = [NSAlert new]; a.messageText = @"The host's address";
-    a.informativeText = @"The address of the machine that is hosting (its launcher shows it under This Mac), with :port if it is not the usual one.";
-    NSTextField *f = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 260, 24)]; f.stringValue = g.peerAddr ?: @""; f.placeholderString = @"192.168.1.20";
-    a.accessoryView = f; [a addButtonWithTitle:@"OK"]; [a addButtonWithTitle:@"Cancel"];
-    [a.window setInitialFirstResponder:f];
-    if ([a runModal] != NSAlertFirstButtonReturn) return;
-    g.peerAddr = [f.stringValue stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    [self save]; self.view.needsDisplay = YES;
+    [self netRows:g];
 }
 - (void)play
 {
@@ -1317,21 +1578,39 @@ static void extras_in(NSString *dir, NSMutableArray<NSMutableDictionary *> *out)
     }
     [self save];
     NSString *mode = g.link.value;
-    if (([mode isEqual:@"join"] || [mode isEqual:@"coop-join"]) && !g.peerAddr.length) {
-        [self.view openPanel:2]; [self askPeer];
+    BOOL coop = [mode hasPrefix:@"coop-"], hosts = [mode hasSuffix:@"host"], joins = [mode hasSuffix:@"join"];
+    BOOL viaServer = ![mode isEqual:@"off"] && [g.via.value isEqual:@"server"];
+    if (viaServer && (!g.serverAddr.length || g.code.length < 4)) {    /* a server needs both: never a quiet fallback to direct */
+        [self.view openPanel:2];
+        if (!g.serverAddr.length) g.serverRow.activate();
+        if (g.serverAddr.length && g.code.length < 4) g.codeRow.activate();
+        if (!g.serverAddr.length || g.code.length < 4) return;
+    }
+    if (!viaServer && joins && !g.peerAddr.length) {                     /* directly, a joiner needs the host's address */
+        [self.view openPanel:2]; g.peerRow.activate();
         if (!g.peerAddr.length) return;
     }
     NSString *game = [g.dataPath stringByAppendingPathComponent:@"game"];
     setenv("RECOMP_GAME_DIR", game.fileSystemRepresentation, 1);
     /* the graphics come from the settings file, as the launcher just wrote it; a test's folder of them is the game's too */
     if (getenv("TS2_CONF_DIR")) setenv("RECOMP_DISPLAY_CONFIG", g.confPath.fileSystemRepresentation, 1);
-    /* Play Together: the launcher decides, so a setting left in the settings file does not */
-    BOOL coop = [mode hasPrefix:@"coop-"], hosts = [mode hasSuffix:@"host"], joins = [mode hasSuffix:@"join"];
+    /* Play Together: the launcher decides, so what an older settings file says does not */
     setenv("RECOMP_SYSLINK", coop || [mode isEqual:@"off"] ? "off" : mode.UTF8String, 1);
     setenv("RECOMP_LOCKSTEP_NET", coop ? (hosts ? "host" : "join") : "off", 1);
-    setenv("RECOMP_SYSLINK_UPNP", hosts && [g.router.value boolValue] ? "1" : "0", 1);
-    unsetenv("RECOMP_SYSLINK_HOST"); unsetenv("RECOMP_LOCKSTEP_PEER");
-    if (joins) setenv(coop ? "RECOMP_LOCKSTEP_PEER" : "RECOMP_SYSLINK_HOST", g.peerAddr.UTF8String, 1);
+    setenv("RECOMP_ONLINE_VIA", viaServer ? "server" : "direct", 1);
+    unsetenv("RECOMP_SYSLINK_HOST"); unsetenv("RECOMP_LOCKSTEP_PEER"); unsetenv("RECOMP_ONLINE_SERVER");
+    unsetenv("RECOMP_SYSLINK_CODE"); unsetenv("RECOMP_LOCKSTEP_CODE");
+    if (g.code.length) { setenv("RECOMP_SYSLINK_CODE", g.code.UTF8String, 1); setenv("RECOMP_LOCKSTEP_CODE", g.code.UTF8String, 1); }
+    NSString *port = [NSString stringWithFormat:@"%d", [self portOf:g]];
+    setenv(coop ? "RECOMP_LOCKSTEP_PORT" : "RECOMP_SYSLINK_PORT", port.UTF8String, 1);
+    if (viaServer) {                                                     /* everyone to the server; nothing asked of a router */
+        setenv("RECOMP_ONLINE_SERVER", g.serverAddr.UTF8String, 1);
+        setenv("RECOMP_SYSLINK_UPNP", "0", 1); setenv("RECOMP_LOCKSTEP_UPNP", "0", 1);
+    } else {
+        const char *up = hosts && [g.router.value isEqual:@"1"] ? "1" : "0";
+        setenv("RECOMP_SYSLINK_UPNP", up, 1); setenv("RECOMP_LOCKSTEP_UPNP", up, 1);
+        if (joins) setenv(coop ? "RECOMP_LOCKSTEP_PEER" : "RECOMP_SYSLINK_HOST", g.peerAddr.UTF8String, 1);
+    }
     [self.window orderOut:nil];
     NSString *exe = [NSBundle.mainBundle.executablePath.stringByDeletingLastPathComponent stringByAppendingPathComponent:g.exe];
     char *const av[] = {(char *)exe.fileSystemRepresentation, NULL};
