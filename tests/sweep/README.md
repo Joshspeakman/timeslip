@@ -109,3 +109,54 @@ For breaks while moving, a test that compares each in-between frame with the
 game frames either side is the better judge (Fable's `novel.py`, the Mac's
 walking run); the runner here clears any `RECOMP_LOCKSTEP_REPLAY` and the
 like an earlier run in the same shell left set.
+
+## The corridor walk
+
+Made 28 November 2026 for Josh's report of corridors that blinked darker for
+a moment while walking back and forth through them. The same menus to the
+same match as the sweep, then twelve legs of 3 seconds forward and 3 back
+through Mexican Mission's cloister and corridors, turning right after every
+second leg; the bots fight around the player.
+
+| File | What it is |
+| --- | --- |
+| `walk.seq` | The controller script (`RECOMP_INPUT_SEQ`): `corridor.seq`'s menus, then the walk, by frame, to tick 9060 |
+| `walk.sweep` | The test's own script (`RECOMP_TS2_SWEEP`): health kept from the match's start |
+| `blinks.py` | A part of the picture (a 12 by 9 grid) much brighter or darker in one frame than in both frames either side while those two agree, in in-between and game frames |
+
+Record it with frame interpolation on, then replay the recording with every
+frame of a stretch dumped:
+
+```bash
+RECOMP_GAME_DIR=<game> RECOMP_SAVE_DIR=<empty folder> RECOMP_MUTE=1 RECOMP_WINDOW_BACKGROUND=1 \
+RECOMP_WINDOW_SIZE=1280x720 RECOMP_DISPLAY_CONFIG=<settings copy, frame_interp = 3> \
+RECOMP_LOCKSTEP=1 RECOMP_LOCKSTEP_END=9200 RECOMP_LOCKSTEP_TRACE=<out>/walk.trace \
+RECOMP_INPUT_SEQ="$(cat tests/sweep/walk.seq)" RECOMP_TS2_SWEEP=tests/sweep/walk.sweep \
+./timeslip
+RECOMP_GAME_DIR=... (the same) RECOMP_LOCKSTEP_END=9100 RECOMP_LOCKSTEP_REPLAY=<out>/walk.trace \
+RECOMP_TS2_SWEEP=tests/sweep/walk.sweep RECOMP_PRESENT_DUMP=<out>/w_ \
+RECOMP_PRESENT_DUMP_TICKS=8300-9060 RECOMP_PRESENT_DUMP_FRAMES=3 RECOMP_PRESENT_DUMP_MAX=6000 \
+./timeslip
+python3 tests/sweep/blinks.py <out> w_ 10
+```
+
+`RECOMP_INTERP_ACCOUNT=4420-9200` on a replay prints, for each frame, what
+the frame before drew that the in-between frames fill in and how much of it
+the newer frame draws too; "its mesh drawn here unpaired" above 0 is the
+fault below. The game's own fire and the Plasma Autorifle's beam change from
+frame to frame, so `blinks.py` flags them too: look at what it flags.
+
+What it found (recompose `docs/technical/frame-interpolation.md`, "Matching,
+tier 4"): the game moves a room's pieces from one vertex program to another
+as the player walks between rooms; interpolation paired them with nothing,
+and the in-between frames drew the room twice, alpha blended, so darker and
+sharper for one frame. Windows, D3D11, interpolation 3, the same recordings
+replayed before and after the fix:
+
+| Run | Before | After |
+| --- | --- | --- |
+| 4:3, FOV 0, ticks 8300-9060: in-between frames that blinked (`blinks.py`, 18) | 3, the corridor at 8563, 8725 and 8922 | 0 |
+| 4:3, FOV 0, ticks 5290-5920 (`blinks.py`, 10), largest change | 44.8 | 13.2, the game's fire |
+| 16:9, FOV 80, ticks 4420-9200: pieces drawn twice (`RECOMP_INTERP_ACCOUNT`) | 311 in 38 frames | 0 |
+
+The corridor sweep at 16:9, FOV 80 gave the same counts before and after.
