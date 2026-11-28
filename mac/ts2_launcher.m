@@ -1229,7 +1229,9 @@ static NSUserDefaults *domain(NSString *bundleID)
                              @[[@"Session code   " stringByAppendingString:ok ? g.code : @"at least four characters, the same for everyone"], @(ok)]],
                  @"body": [NSString stringWithFormat:@"%@  Give your friends both; nobody opens a port. %@ No server yet? SET UP A SERVER, above the rows, shows how to run one on Fly.io.",
                            copied ? @"Copied." : @"⌘C or a click here copies them.",
-                           coop ? @"The host starts their game first; you are controller 2 in their game." : @"Then host or join a game in the game's own System Link menu."],
+                           coop ? ([m hasSuffix:@"host"] ? @"Start your game first: you are controller 1, your friend controller 2."
+                                                         : @"The host starts their game first; you are controller 2 in their game.")
+                                : @"Then host or join a game in the game's own System Link menu."],
                  @"share": @YES};
     }
     if (hosts) {
